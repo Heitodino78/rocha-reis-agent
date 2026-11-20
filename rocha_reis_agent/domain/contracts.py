@@ -19,6 +19,13 @@ class StorageError(SimulationError):
     """Falha controlada; nunca inclui SQL, caminho ou conteúdo armazenado."""
 
 
+class CapacityExhausted(StorageError):
+    """Limite de conversas ativas atingido sem conversa elegível para arquivamento.
+
+    Transitório: não é recusa permanente do cliente; o canal reprocessa com backoff.
+    """
+
+
 class ConcurrentUpdate(StorageError):
     """Snapshot vencido; somente operações locais sem efeitos externos podem repetir."""
 

@@ -268,3 +268,33 @@ durável") para o canal WhatsApp.
 | ADR-040 | Banco local durável no `$HOME` (ext4, diretório 0700); volume vfat recusado antes de criar arquivos; `/tmp` (tmpfs) não é durável | Diagnóstico por `findmnt`; teste simula vfat |
 | ADR-041 | Canal desligado por padrão; rotas montadas só com configuração validada (SQLite, número, três segredos fortes e distintos) | Erros sem valores; `SecretStr` |
 | ADR-042 | Ordem por conversa: item da inbox/outbox não é reivindicado enquanto houver item anterior da mesma conversa pendente | FIFO de chegada por conversa; entre conversas não há ordem |
+
+
+## Adaptador HTTP, ciclo de vida e autorização de envio — Fase 5
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-043 | `GraphAPITransport` com `httpx2` (já travado), base `https://graph.facebook.com` constante, sem redirecionamento, sem proxies do ambiente, TLS verificado | Testado só com `MockTransport`; compatibilidade real não confirmada |
+| ADR-044 | Transporte real bloqueado por constante de código `GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED=False`, além da configuração; CLI local só aceita fake; importação tardia | Variáveis de ambiente sozinhas nunca ativam envio |
+| ADR-045 | Classificação por `error.code`: retry só onde a Meta indica tentativa recusada/"failed to send"; códigos de indisponibilidade ambígua e 5xx → UNKNOWN; falha de conexão antes de transmitir → retry | Tabela em `INTEGRACAO_META_FASE4.md` §7; códigos reais pendentes de ensaio |
+| ADR-046 | Nomenclatura: IN_PROGRESS=SENDING, CANCELLED=SUPPRESSED; DELIVERED/READ em `delivery_status` separado; transições só para frente; anomalias contadas | Sem estados redundantes nem migração destrutiva |
+| ADR-047 | Correlação de status por ID do provedor ou callback restrito a SENDING/UNKNOWN | Status forjado/atrasado não reabre envio rejeitado |
+| ADR-048 | Autorização de envio em `send_policy.py`, pura e reavaliada antes de cada tentativa; falta de evidência bloqueia | Janela conservadora pela mensagem de origem |
+| ADR-049 | Limite de eventos vira janela do snapshot; idempotência antiga por consulta durável (`lookup_event`) | Sem bloqueio permanente por volume; chaves nunca apagadas |
+| ADR-050 | Limite de conversas aplica-se às ATIVAS; ao atingir, arquiva a mais ociosa elegível (não humana ativa, sem envio pendente/incerto, ociosa ≥ `STORAGE_ARCHIVE_IDLE_HOURS`); sem elegível → erro transitório com retry/alerta | Arquivar não apaga dados nem muda estado; nova mensagem reativa |
+| ADR-051 | Retenção (`/purge`) anonimiza e arquiva sem bloquear; preserva chaves, estado e auditoria; não toca humano ativo nem envio pendente/incerto | Exclusão explícita (`retire`) continua bloqueando o identificador: decisão do controlador pendente |
+| ADR-052 | `OperatorAssurance.SIMULATED_LOCAL` explicita que `operador-local` não é autenticação | Nenhuma rota HTTP administrativa; interface operacional futura exigirá nível verificado |
+
+
+## Homologação controlada — Fase 6A
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-053 | Ambiente `APP_ENV=homologation` exige banco `*.homolog.synthetic.sqlite3` e arquivo de autorização; ambos proibidos fora dele | Isolamento testado |
+| ADR-054 | Autorização em arquivo privado (0600, sem symlink, esquema, frase de confirmação, período ≤72h, tetos rígidos de limites), não em variável de ambiente | Inválida → aplicação não inicia |
+| ADR-055 | Trava separada `HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED=False`; trava de produção intacta; uma não abre a outra | Testado com monkeypatch |
+| ADR-056 | Guarda no claim: período/operação/limites → aguardar sem mexer na outbox; número/allowlist → SUPPRESSED; tentativas (inclusive retries) registradas em `channel_send_ledger` com hash do destinatário | Limites persistentes entre processos |
+| ADR-057 | Em homologação, remetentes fora da allowlist são descartados no webhook sem persistir | Minimiza dados de terceiros |
+| ADR-058 | Interrupção emergencial persistida (`channel_control`), auditada, válida em todos os ambientes; `CHANNEL_DISPATCH_HALTED` só interrompe | Retomada exige `RESUME_DISPATCH` |
+| ADR-059 | Métricas em `channel_metrics` + agregados derivados; rastreamento por IDs técnicos; log privado 0600 com campos permitidos | Sem PII (testado) |
+| ADR-060 | Graph API v26.0 mantida; v27.0 citada no guia sem changelog acessível → reavaliar na 6B | Página de versões consultada em 19/11/2026 |

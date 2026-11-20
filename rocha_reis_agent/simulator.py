@@ -33,7 +33,7 @@ HELP_TEXT = """Comandos locais (use somente clientes e mensagens fictícios):
 /help                      exibir comandos
 /storage-audit             consultar auditoria técnica persistente
 /delete CONFIRMAÇÃO        excluir conteúdo sintético; DELETE_SYNTHETIC:CLIENTE
-/purge PURGE_SYNTHETIC      aplicar retenção configurada de conteúdo sintético
+/purge PURGE_SYNTHETIC      anonimizar conversas inativas (retenção); não bloqueia o cliente
 /quit                      sair; memória é descartada, SQLite permanece"""
 
 
@@ -99,7 +99,7 @@ class Simulator:
                     self.emit("Conteúdo sintético excluído; identificador e chaves de eventos permanecem bloqueados contra reprocessamento.")
                 else:
                     count = repository.purge_expired(confirmation=argument)
-                    self.emit(f"Retenção aplicada: {count} conversas sintéticas desativadas.")
+                    self.emit(f"Retenção aplicada: {count} conversas sintéticas anonimizadas e arquivadas; podem ser retomadas.")
             elif command in {"/close", "/reset"}:
                 self.agent.handoff.authorize(self.operator_id)
                 manager = self.agent.conversations

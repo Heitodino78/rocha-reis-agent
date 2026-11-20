@@ -1,8 +1,10 @@
-# Integração Meta WhatsApp Cloud API — preparação offline (Fase 4)
+# Integração Meta WhatsApp Cloud API — preparação offline (Fases 4 e 5)
 
-**Estado:** IMPLEMENTADO e TESTADO LOCALMENTE com payloads sintéticos e transporte
-fake. **Não** conectado à Meta, **não** validado com o cliente, **não** implantado.
+**Estado:** IMPLEMENTADO e TESTADO LOCALMENTE com payloads sintéticos, transporte
+fake e, na Fase 5, adaptador HTTP Graph API exercitado só com `httpx2.MockTransport`.
+**Não** conectado à Meta, **não** validado com o cliente, **não** implantado.
 Nenhuma mensagem real foi enviada e nenhuma credencial real existe no projeto.
+Testes simulados **não** confirmam compatibilidade real com a Meta.
 
 ## 1. Fluxo implementado
 
@@ -122,7 +124,17 @@ provedor, status de entrega e datas.
 | FAILED | rejeição definitiva ou tentativas esgotadas |
 | SUPPRESSED | não enviada: estado/sessão mudou, conversa excluída ou janela vencida |
 
-`delivery_status` (sent/delivered/read/failed) vem dos webhooks de status e só avança.
+Mapeamento para a nomenclatura da Fase 5 (sem estados redundantes): IN_PROGRESS =
+`SENDING`; CANCELLED = `SUPPRESSED`; DELIVERED/READ = `delivery_status`, campo
+separado do estado da requisição, porque aceitar (ACCEPTED) não é entregar.
+
+`delivery_status` vem dos webhooks de status e só avança: `∅→{sent,delivered,read,
+failed}`, `sent→{delivered,read,failed}`, `delivered→read`; `read` e `failed` são
+finais. Regressões e contradições (ex.: `failed` após `read`) são ignoradas e
+contadas em `status_anomalies`; `failed` guarda `delivery_error_code`. Correlação
+somente por (1) ID do provedor já registrado ou (2) `biz_opaque_callback_data` igual
+ao ID da operação **e** linha em SENDING/UNKNOWN. Nunca por horário ou conteúdo.
+Status sem correlação → `status_unmatched`, sem efeito.
 
 ### Cenários do intervalo entre commit e envio
 
@@ -159,9 +171,17 @@ adaptador é tratada como incerta. Falha ao registrar o resultado deixa SENDING
 
 ## 6. Regras da plataforma
 
-- **Janela de atendimento:** só se responde a mensagens do cliente, com prazo
-  `CHANNEL_SERVICE_WINDOW_HOURS` (23h, margem sob 24h) contado do menor entre o
-  timestamp da Meta e o recebimento. Vencida → SUPPRESSED `outside_service_window`.
+- **Janela de atendimento** (`channels/send_policy.py`, independente do transporte
+  e da IA, reavaliada no claim antes de CADA tentativa, inclusive RETRY): só
+  respostas a mensagem do cliente, até `CHANNEL_SERVICE_WINDOW_HOURS` (23h, margem
+  sob 24h) contadas do menor entre o timestamp da Meta e o recebimento local.
+  Vencida → SUPPRESSED `outside_service_window`. Sem evidência (timestamp ausente,
+  no futuro além de 5 min de tolerância, sem fuso, destinatário ou corpo ausentes,
+  janela configurada > 24h) → SUPPRESSED `insufficient_evidence`.
+  Limitações: usa a mensagem de ORIGEM da resposta (conservador; uma mensagem
+  posterior do cliente não estende a janela dessa resposta); depende do relógio
+  local e do timestamp da Meta; webhooks entregues com atraso usam o timestamp
+  original da Meta (mais antigo), o que pode suprimir respostas tardias.
 - **Templates, campanhas, mensagens iniciadas pela empresa, broadcast:** não
   implementados; não há caminho de código para enviar sem mensagem de origem.
 - Consentimento/opt-in, limites de taxa por número/par e qualidade da conta
@@ -176,10 +196,39 @@ adaptador é tratada como incerta. Falha ao registrar o resultado deixa SENDING
 `WhatsAppTransport.send_text(OutboundText, timeout_seconds) -> SendOutcome`.
 `FakeWhatsAppTransport` simula `accept`, `reject`, `throttle`, `not_sent`, `timeout`,
 `ambiguous` e `crash`, registra as entregas simuladas e nunca abre socket.
-`meta.build_text_payload` monta o corpo da futura chamada
-`POST /{versão}/{phone_number_id}/messages` (`preview_url=false`,
-`biz_opaque_callback_data=<operação>`, `to` ou `recipient` para BSUID). **Não existe**
-adaptador HTTP real; `WHATSAPP_TRANSPORT` aceita somente `fake`.
+`meta.build_text_payload` monta o corpo de
+`POST https://graph.facebook.com/{versão}/{phone_number_id}/messages`
+(`preview_url=false`, `biz_opaque_callback_data=<operação>`, `to` para telefone ou
+`recipient` para BSUID; se ambos existem, só `to` é enviado, regra documentada pela Meta).
+
+**Fase 5 — `channels/graph_transport.py` (GraphAPITransport):** cliente `httpx2` já
+travado no lock; base fixa `https://graph.facebook.com` (constante, não configurável);
+versão (`vNN.N`) e número (dígitos) validados; `follow_redirects=False`,
+`trust_env=False` (ignora proxies/variáveis do ambiente), TLS verificado; recusa cliente
+inseguro; `Authorization: Bearer` só no cabeçalho da requisição, nunca em log/repr;
+timeouts separados de conexão e leitura; resposta limitada a 64 KiB. Classificação:
+
+| Situação | Resultado |
+|---|---|
+| 2xx com `messages[0].id` válido | ACCEPTED (requisição aceita; não é entrega) |
+| 2xx sem ID utilizável / JSON inválido | UNKNOWN |
+| 3xx (não seguido) | UNKNOWN |
+| código 4, 80007, 130429, 131056 (limite) e 131000 ("failed to send… try again"), 2494100 | REJECTED com retry |
+| 0/190 (auth), 3/10/200–299/131005 (permissão), 131026/131021/130403/131050/133010 (destinatário), 131047 (janela), 368/130497/131031/130472/131048/131049 (política), 100/131008/131009/131051/135000/131037/131045 (parâmetro), 131057 | REJECTED sem retry |
+| código 1, 2, 131016; 5xx sem código conhecido | UNKNOWN |
+| 4xx sem código conhecido; 401/403 sem JSON | REJECTED sem retry; 429 sem JSON → retry |
+| ConnectTimeout/ConnectError/PoolTimeout (não transmitido) | REJECTED com retry |
+| ReadTimeout/WriteTimeout/erro de protocolo após conectar | UNKNOWN |
+
+**Ativação bloqueada:** `WHATSAPP_TRANSPORT=graph` é recusado pela configuração
+enquanto a constante de código `GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED` for `False`
+(variáveis de ambiente sozinhas nunca ativam envio). Mesmo destravado, exige canal
+habilitado, versão explícita e token exclusivo; `WHATSAPP_ACCESS_TOKEN` sem
+transporte real é recusado. A CLI local recusa qualquer transporte que não seja o fake.
+O módulo só é importado de forma tardia pelo `bootstrap.build_transport`.
+Versão: v26.0 (29/07/2026) era a mais recente na página oficial de versões em
+19/11/2026; exemplos da página de texto citam v27.0, não confirmada. Escolha final
+na ativação; v20.0 e anteriores já expiraram.
 
 ## 8. Armazenamento: diagnóstico e decisão
 
@@ -226,7 +275,7 @@ precisam ser confirmados com uma conta de teste autorizada.
 
 1. Conta Meta Business, app, número de teste e contatos autorizados definidos pelo responsável.
 2. Segredos em gerenciador de segredos; App Secret e Verify Token reais nunca em arquivo versionado.
-3. Implementar `GraphAPITransport` com timeout real, mapeamento de erros e testes de contrato; token de acesso com escopo mínimo.
+3. ~~Implementar `GraphAPITransport`~~ (Fase 5, testado só com mock). Falta: ensaio de contrato com número de teste, confirmar códigos de erro reais, token de sistema com escopo mínimo e trocar a trava de código mediante revisão.
 4. Capturar e versionar payloads reais anonimizados para testes de contrato do parser.
 5. Endpoint HTTPS público atrás de proxy com limite de taxa; logs de acesso sem query string.
 6. Worker contínuo supervisionado (hoje há apenas a CLI de execução única) e alerta para UNKNOWN/FAILED.

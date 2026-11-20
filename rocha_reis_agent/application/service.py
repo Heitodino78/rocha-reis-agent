@@ -58,10 +58,15 @@ class AgentService:
         digest = sha256(message.text.encode("utf-8")).hexdigest()
         with self.conversations.edit(message.conversation_id, create=True) as conversation:
             previous = conversation.processed_events.get(message.event_id)
+            original = conversation.event_results.get(message.event_id)
+            if previous is None:
+                # Evento antigo fora da janela do snapshot: consulta durável, sem mutar a conversa.
+                known = self.conversations.known_event(message.conversation_id, message.event_id)
+                if known is not None:
+                    previous, original = known[0], known[1]  # type: ignore[assignment]
             if previous is not None:
                 if previous != digest:
                     raise SimulationError("ID de evento reutilizado com conteúdo diferente.")
-                original = conversation.event_results.get(message.event_id)
                 duplicate = (
                     replace(original, reply=None, duplicate=True) if original is not None else
                     AgentResult(message.conversation_id, message.event_id, conversation.state, duplicate=True)
@@ -71,7 +76,8 @@ class AgentService:
                 return duplicate
             if conversation.closed:
                 raise SimulationError("Sessão encerrada; use /reset para iniciar outra.")
-            if len(conversation.processed_events) >= self.conversations.limits.max_events_per_session:
+            if (not getattr(self.conversations.repository, "rolling_event_window", False)
+                    and len(conversation.processed_events) >= self.conversations.limits.max_events_per_session):
                 raise SimulationError("Limite de eventos da sessão atingido; use /reset.")
             conversation.history.append(HistoryEntry(
                 "client", message.text, message.received_at, message.event_id

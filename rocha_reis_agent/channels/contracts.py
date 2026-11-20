@@ -106,6 +106,8 @@ class SendAccepted:
     """A Meta ACEITOU a requisição. Não significa entrega ao cliente."""
 
     provider_message_id: str
+    # message_status devolvido pela Meta quando presente (ex.: "accepted"); informativo.
+    detail: str = "accepted"
 
 
 @dataclass(frozen=True, slots=True)

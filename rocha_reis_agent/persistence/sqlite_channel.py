@@ -21,6 +21,8 @@ from rocha_reis_agent.channels.contracts import (
     InboundEvent, InboundKind, InboundTextMessage, InboundUnsupported, IngestReport,
     SendAccepted, SendOutcome, SendRejected, Sender, StatusUpdate,
 )
+from rocha_reis_agent.channels.homologation import GuardCounts, HomologationGuard
+from rocha_reis_agent.channels.send_policy import SendContext, authorize_free_text
 from rocha_reis_agent.domain.contracts import ConversationState, StorageError
 from rocha_reis_agent.domain.conversations import utc_now
 from rocha_reis_agent.persistence.sqlite import SQLiteConversationRepository
@@ -106,6 +108,10 @@ class SQLiteChannelStore:
                      conversation_id, now, iso(event.source_timestamp), now, now),
                 )
                 accepted += 1
+            for name, value in (("webhook_events_accepted", accepted), ("webhook_events_duplicate", duplicates),
+                                ("webhook_events_conflict", conflicts)):
+                if value:
+                    self._bump(connection, name, value)
         return IngestReport(accepted, duplicates, conflicts)
 
     @staticmethod
@@ -221,41 +227,72 @@ class SQLiteChannelStore:
                 raise LeaseLost("Item reivindicado por outro processador.")
             return True
 
+    # Transições válidas do status de ENTREGA (diferente do estado da requisição).
+    DELIVERY_NEXT = {
+        None: {"sent", "delivered", "read", "failed"},
+        "sent": {"delivered", "read", "failed"},
+        "delivered": {"read"},
+        "read": set(),
+        "failed": set(),
+    }
+
     def apply_status(self, item: ClaimedInbound, worker: str) -> str:
-        """Status atualiza a outbox; nunca gera resposta. Também reconcilia UNKNOWN."""
+        """Status atualiza a outbox; nunca gera resposta.
+
+        Correlação confiável apenas: (1) ID do provedor já registrado; ou (2) nosso
+        identificador de operação em biz_opaque_callback_data, e somente para linhas
+        que podem ter chegado à Meta (SENDING/UNKNOWN). Nunca por horário ou conteúdo.
+        """
         now = iso(self.clock())
         payload = item.payload
         provider_id = str(payload["provider_message_id"])
         status = str(payload["status"])
         callback = payload.get("callback")
+        errors = payload.get("errors") or []
         with self.repository.write_transaction() as connection:
             row = connection.execute("SELECT * FROM channel_outbox WHERE provider_message_id=?", (provider_id,)).fetchone()
             if row is None and isinstance(callback, str):
                 row = connection.execute(
-                    "SELECT * FROM channel_outbox WHERE id=? AND provider_message_id IS NULL", (callback,)
+                    "SELECT * FROM channel_outbox WHERE id=? AND provider_message_id IS NULL "
+                    "AND status IN ('SENDING','UNKNOWN')", (callback,),
                 ).fetchone()
             if row is None:
                 outcome = "status_unmatched"
             else:
                 if row["status"] in ("SENDING", "UNKNOWN"):
-                    # A Meta tem a mensagem: o ID no status prova aceitação da requisição.
+                    # O ID no status prova que a Meta aceitou a requisição.
                     connection.execute(
                         "UPDATE channel_outbox SET status='ACCEPTED',outcome='reconciled_by_status',"
                         "provider_message_id=?,lease_owner=NULL,lease_expires_at=NULL,body='',recipient='{}',"
                         "updated_at=? WHERE id=?", (provider_id, now, row["id"]),
                     )
-                rank = {None: 0, "sent": 1, "delivered": 2, "read": 3, "failed": 4}
-                if rank[status] > rank[row["delivery_status"]]:
-                    connection.execute("UPDATE channel_outbox SET delivery_status=?,updated_at=? WHERE id=?",
-                                       (status, now, row["id"]))
-                outcome = f"status_{status}"
+                current = row["delivery_status"]
+                if status in self.DELIVERY_NEXT[current]:
+                    code = errors[0] if status == "failed" and errors and type(errors[0]) is int else None
+                    connection.execute(
+                        "UPDATE channel_outbox SET delivery_status=?,delivery_error_code=?,delivery_updated_at=?,"
+                        "updated_at=? WHERE id=?", (status, code, now, now, row["id"]),
+                    )
+                    outcome = f"status_{status}"
+                elif status == current:
+                    outcome = "status_repeated"
+                else:
+                    # Regressão (fora de ordem) ou contradição: não sobrescreve o estado mais avançado.
+                    connection.execute("UPDATE channel_outbox SET status_anomalies=status_anomalies+1,updated_at=? "
+                                       "WHERE id=?", (now, row["id"]))
+                    outcome = "status_out_of_order_ignored"
             self._complete(connection, item.id, worker, "DONE", outcome, now, redact=False)
         return outcome
 
     # ------------------------------------------------------------------ envio
-    def claim_outbound(self, worker: str, *, lease_seconds: float, window_seconds: float) -> ClaimedOutbound | None:
+    def claim_outbound(self, worker: str, *, lease_seconds: float, window_seconds: float,
+                       guard: HomologationGuard | None = None) -> ClaimedOutbound | None:
         now = self.clock()
         with self.repository.write_transaction() as connection:
+            # Interrupção emergencial: nenhuma tentativa nova nem retry; outbox preservada.
+            if connection.execute("SELECT 1 FROM channel_control WHERE key='dispatch_halt'").fetchone():
+                self._bump(connection, "dispatch_blocked_halt")
+                return None
             # Cenário D/B: processo morreu durante o envio → resultado incerto, nunca reenviar.
             connection.execute(
                 "UPDATE channel_outbox SET status='UNKNOWN',outcome='lease_expired_during_send',lease_owner=NULL,"
@@ -265,7 +302,7 @@ class SQLiteChannelStore:
             while True:
                 row = connection.execute(
                     "SELECT o.*, c.state AS current_state, c.session_id AS current_session, c.retired "
-                    "FROM channel_outbox AS o JOIN conversations AS c ON c.id=o.conversation_id "
+                    "FROM channel_outbox AS o LEFT JOIN conversations AS c ON c.id=o.conversation_id "
                     "WHERE o.status IN ('PENDING','RETRY') AND o.next_attempt_at<=? AND NOT EXISTS ("
                     "SELECT 1 FROM channel_outbox AS p WHERE p.conversation_id=o.conversation_id "
                     "AND p.rowid<o.rowid AND p.status IN ('PENDING','RETRY','SENDING')) "
@@ -273,14 +310,37 @@ class SQLiteChannelStore:
                 ).fetchone()
                 if row is None:
                     return None
-                reason = None
-                if row["retired"] or row["current_state"] != row["required_state"] or row["current_session"] != row["session_id"]:
-                    # Corrida com operador/reset: resposta pertence a um estado que não vale mais.
-                    reason = "conversation_state_changed"
-                elif now - parse_iso(row["window_opened_at"]) > timedelta(seconds=window_seconds):
-                    # Fora da janela de atendimento exige template aprovado (não implementado).
-                    reason = "outside_service_window"
+                recipient = json.loads(row["recipient"])
+                try:
+                    opened: datetime | None = parse_iso(row["window_opened_at"])
+                except ValueError:
+                    opened = None
+                # Reavaliada a CADA tentativa, imediatamente antes do envio (inclusive RETRY).
+                decision = authorize_free_text(SendContext(
+                    now=now, window_opened_at=opened, window_seconds=window_seconds,
+                    required_state=row["required_state"], current_state=row["current_state"],
+                    required_session=row["session_id"], current_session=row["current_session"],
+                    retired=bool(row["retired"]),
+                    has_recipient=bool(recipient.get("wa_id") or recipient.get("user_id")),
+                    has_body=bool(row["body"]),
+                ))
+                reason = None if decision.allowed else decision.reason
+                ledger_hash = None
+                if reason is None and guard is not None:
+                    sender = Sender(wa_id=recipient.get("wa_id"), user_id=recipient.get("user_id"))
+                    ledger_hash = guard.recipient_hash(sender)
+                    verdict = guard.evaluate(
+                        now=now, business_number_id=row["business_number_id"], recipient=sender,
+                        counts=self._ledger_counts(connection, guard, ledger_hash, now),
+                    )
+                    if verdict.action == "wait":
+                        # Sem efeito na outbox: aguarda nova autorização, janela de taxa ou nova execução.
+                        self._bump(connection, f"dispatch_blocked_{verdict.reason}")
+                        return None
+                    if verdict.action == "suppress":
+                        reason = verdict.reason
                 if reason is not None:
+                    self._bump(connection, f"send_suppressed_{reason}")
                     connection.execute(
                         "UPDATE channel_outbox SET status='SUPPRESSED',outcome=?,body='',recipient='{}',updated_at=? "
                         "WHERE id=?", (reason, iso(now), row["id"]),
@@ -291,7 +351,14 @@ class SQLiteChannelStore:
                     "updated_at=? WHERE id=?",
                     (worker, iso(now + timedelta(seconds=lease_seconds)), iso(now), row["id"]),
                 )
-                recipient = json.loads(row["recipient"])
+                if guard is not None and ledger_hash is not None:
+                    # Tentativa reservada ANTES do transporte: conta para os limites mesmo se o processo cair.
+                    connection.execute(
+                        "INSERT INTO channel_send_ledger(outbox_id,authorization_id,run_id,recipient_hash,attempted_at) "
+                        "VALUES(?,?,?,?,?)",
+                        (row["id"], guard.authorization.authorization_id, guard.run_id, ledger_hash, iso(now)),
+                    )
+                self._bump(connection, "send_attempts")
                 return ClaimedOutbound(
                     row["id"], row["business_number_id"], row["conversation_id"],
                     Sender(wa_id=recipient.get("wa_id"), user_id=recipient.get("user_id")),
@@ -347,6 +414,107 @@ class SQLiteChannelStore:
             )
             if cursor.rowcount != 1:
                 raise StorageError("Operação não está em estado incerto.")
+
+    @staticmethod
+    def _ledger_counts(connection: sqlite3.Connection, guard: HomologationGuard, recipient_hash: str,
+                       now: datetime) -> GuardCounts:
+        auth = guard.authorization.authorization_id
+
+        def count(sql: str, *params: object) -> int:
+            return int(connection.execute(sql, (auth, *params)).fetchone()[0])
+
+        base = "SELECT count(*) FROM channel_send_ledger WHERE authorization_id=?"
+        return GuardCounts(
+            total=count(base),
+            per_recipient=count(base + " AND recipient_hash=?", recipient_hash),
+            per_run=count(base + " AND run_id=?", guard.run_id),
+            last_minute=count(base + " AND attempted_at>=?", iso(now - timedelta(minutes=1))),
+        )
+
+    # ------------------------------------------------- métricas e interrupção
+    @staticmethod
+    def _bump(connection: sqlite3.Connection, name: str, amount: int = 1) -> None:
+        connection.execute(
+            "INSERT INTO channel_metrics(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=value+excluded.value",
+            (name[:64], amount),
+        )
+
+    def bump(self, *names: str) -> None:
+        """Contadores sem dados pessoais; falha de gravação nunca interrompe o fluxo."""
+        try:
+            with self.repository.write_transaction() as connection:
+                for name in names:
+                    self._bump(connection, name)
+        except StorageError:
+            pass
+
+    def halt(self, reason: str, *, set_by: str) -> None:
+        """Interrupção emergencial: bloqueia novas tentativas e retries; não altera a outbox."""
+        reason = " ".join(str(reason).split())[:200]
+        if not reason or not set_by:
+            raise StorageError("Interrupção exige motivo e responsável.")
+        with self.repository.write_transaction() as connection:
+            connection.execute(
+                "INSERT INTO channel_control(key,reason,set_by,set_at) VALUES('dispatch_halt',?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET reason=excluded.reason,set_by=excluded.set_by,set_at=excluded.set_at",
+                (reason, set_by[:64], iso(self.clock())),
+            )
+            self.repository._audit(connection, "dispatch_halted", "channel", "operator", "committed")
+            self._bump(connection, "dispatch_halts")
+
+    def resume_dispatch(self, *, confirmation: str, set_by: str) -> None:
+        if confirmation != "RESUME_DISPATCH":
+            raise StorageError("Retomada de envios exige confirmação RESUME_DISPATCH.")
+        with self.repository.write_transaction() as connection:
+            if connection.execute("DELETE FROM channel_control WHERE key='dispatch_halt'").rowcount != 1:
+                raise StorageError("Envios não estão interrompidos.")
+            self.repository._audit(connection, "dispatch_resumed", "channel", "operator", "committed")
+
+    def halt_status(self) -> dict[str, str] | None:
+        with self.repository.write_transaction() as connection:
+            row = connection.execute("SELECT reason,set_by,set_at FROM channel_control WHERE key='dispatch_halt'").fetchone()
+            return dict(row) if row else None
+
+    def metrics(self) -> dict[str, object]:
+        """Contadores + agregados derivados. Nenhum telefone, texto ou ID externo."""
+        with self.repository.write_transaction() as connection:
+            counters = {row["name"]: row["value"] for row in connection.execute("SELECT name,value FROM channel_metrics")}
+            def grouped(sql: str) -> dict[str, int]:
+                return {str(row[0]): row[1] for row in connection.execute(sql)}
+            return {
+                "counters": counters,
+                "inbox_status": grouped("SELECT status,count(*) FROM channel_inbox GROUP BY status"),
+                "inbox_outcome": grouped("SELECT coalesce(outcome,'none'),count(*) FROM channel_inbox GROUP BY 1"),
+                "outbox_status": grouped("SELECT status,count(*) FROM channel_outbox GROUP BY status"),
+                "outbox_outcome": grouped("SELECT coalesce(outcome,'none'),count(*) FROM channel_outbox GROUP BY 1"),
+                "delivery_status": grouped("SELECT coalesce(delivery_status,'none'),count(*) FROM channel_outbox GROUP BY 1"),
+                "status_anomalies": connection.execute("SELECT coalesce(sum(status_anomalies),0) FROM channel_outbox").fetchone()[0],
+                "human_transitions": grouped("SELECT operation,count(*) FROM audit WHERE operation LIKE 'state_%' GROUP BY 1"),
+                "dispatch_halted": connection.execute("SELECT count(*) FROM channel_control").fetchone()[0] == 1,
+            }
+
+    def trace(self, inbox_id: int) -> dict[str, object]:
+        """Fluxo de um evento por IDs técnicos (inbox → outbox → status), sem conteúdo."""
+        with self.repository.write_transaction() as connection:
+            inbox = connection.execute(
+                "SELECT id,kind,status,outcome,attempts,received_at,updated_at FROM channel_inbox WHERE id=?", (inbox_id,),
+            ).fetchone()
+            if inbox is None:
+                raise StorageError("Evento não encontrado.")
+            outbox = [dict(row) for row in connection.execute(
+                "SELECT id,status,outcome,attempts,delivery_status,status_anomalies,created_at,updated_at,"
+                "provider_message_id IS NOT NULL AS has_provider_id FROM channel_outbox WHERE source_inbox_id=?", (inbox_id,))]
+            statuses = []
+            for item in outbox:
+                provider = connection.execute("SELECT provider_message_id FROM channel_outbox WHERE id=?", (item["id"],)).fetchone()[0]
+                if provider:
+                    statuses += [dict(row) for row in connection.execute(
+                        "SELECT id,status,outcome,received_at FROM channel_inbox WHERE kind='status' "
+                        "AND json_extract(payload,'$.provider_message_id')=? ORDER BY id", (provider,))]
+            ledger = [dict(row) for row in connection.execute(
+                "SELECT authorization_id,run_id,attempted_at FROM channel_send_ledger WHERE outbox_id IN "
+                "(SELECT id FROM channel_outbox WHERE source_inbox_id=?) ORDER BY id", (inbox_id,))]
+            return {"inbox": dict(inbox), "outbox": outbox, "statuses": statuses, "send_ledger": ledger}
 
     # ------------------------------------------------------------- inspeção
     def counts(self) -> dict[str, dict[str, int]]:

@@ -23,7 +23,7 @@ from uuid import uuid4
 from pydantic import TypeAdapter
 
 from rocha_reis_agent.domain.contracts import (
-    AgentResult, ConcurrentUpdate, ConversationState, SimulationError, StorageError, validate_identifier,
+    AgentResult, CapacityExhausted, ConcurrentUpdate, ConversationState, SimulationError, StorageError, validate_identifier,
 )
 from rocha_reis_agent.domain.conversations import (
     Conversation, HistoryEntry, SimulationLimits, StateChange, utc_now,
@@ -31,7 +31,7 @@ from rocha_reis_agent.domain.conversations import (
 
 logger = logging.getLogger("rocha_reis_agent")
 APPLICATION_ID = 1381126963
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 MIGRATIONS = Path(__file__).parent / "migrations"
 RESULT = TypeAdapter(AgentResult)
 
@@ -61,11 +61,17 @@ class SQLiteConversationRepository:
     """
 
     durable = True
+    # Idempotência por conversa sem limite permanente: só os eventos recentes entram
+    # no snapshot; eventos antigos são consultados diretamente (lookup_event).
+    rolling_event_window = True
+    # Ao atingir o limite de conversas ATIVAS, arquiva a mais ociosa elegível.
+    archives_inactive = True
 
     def __init__(
         self, path: Path, *, limits: SimulationLimits | None = None,
         busy_timeout_ms: int = 1000, max_bytes: int = 64 * 1024 * 1024,
         retention_days: int = 7, audit_days: int = 30, audit_limit: int = 10000,
+        archive_idle_hours: float = 24.0,
         fault_hook: Callable[[str], None] | None = None,
     ) -> None:
         self.path = Path(path).absolute()
@@ -81,6 +87,9 @@ class SQLiteConversationRepository:
         self.retention_days = retention_days
         self.audit_days = audit_days
         self.audit_limit = audit_limit
+        if not isinstance(archive_idle_hours, (int, float)) or not 1 <= archive_idle_hours <= 24 * 365:
+            raise StorageError("Configuração do armazenamento sintético inválida.")
+        self.archive_idle_hours = float(archive_idle_hours)
         self.fault_hook = fault_hook or (lambda stage: None)
         self._ready = False
         self._work: ContextVar[_Work | None] = ContextVar(f"rr-work-{id(self)}", default=None)
@@ -250,7 +259,10 @@ class SQLiteConversationRepository:
         context = connection.execute("SELECT * FROM context WHERE conversation_id=?", (key,)).fetchone()
         if context is None:
             raise StorageError("Armazenamento inconsistente; recuperação manual necessária.")
-        events = connection.execute("SELECT * FROM events WHERE conversation_id=? ORDER BY processed_at,event_id", (key,)).fetchall()
+        events = connection.execute(
+            "SELECT * FROM (SELECT * FROM events WHERE conversation_id=? ORDER BY processed_at DESC, event_id DESC LIMIT ?) "
+            "ORDER BY processed_at, event_id", (key, self.limits.max_events_per_session),
+        ).fetchall()
         history = [HistoryEntry(
             entry["role"], entry["content"], datetime.fromisoformat(entry["recorded_at"]), entry["event_id"],
             tuple(json.loads(entry["fact_references"])), entry["prompt_version"],
@@ -264,6 +276,7 @@ class SQLiteConversationRepository:
             key, row["session_id"], ConversationState(row["state"]), bool(row["closed"]),
             history, changes, tuple(json.loads(context["services"])), context["age"],
             {event["event_id"]: event["digest"] for event in events}, results,
+            archived=bool(row["archived"]),
         )
         self._validate(value)
         return value
@@ -312,7 +325,7 @@ class SQLiteConversationRepository:
         if (not isinstance(value.state, ConversationState) or type(value.closed) is not bool
             or type(value.context_age) is not int or value.context_age < 0
             or len(value.service_context) > 20
-            or len(value.processed_events) > self.limits.max_events_per_session
+            or type(value.archived) is not bool
             or set(value.processed_events) != set(value.event_results)):
             raise StorageError("Registro de conversa inválido ou limite persistente atingido.")
         for service in value.service_context:
@@ -326,8 +339,7 @@ class SQLiteConversationRepository:
                 raise StorageError("Resultado não corresponde ao evento.")
         for entry in value.history:
             if (entry.role not in ("client", "assistant", "operator") or not entry.text
-                or len(entry.text) > 8192 or entry.timestamp.utcoffset() is None
-                or (entry.event_id is not None and entry.event_id not in value.processed_events)):
+                or len(entry.text) > 8192 or entry.timestamp.utcoffset() is None):
                 raise StorageError("Registro de mensagem inválido.")
         for change in value.transitions:
             if (not isinstance(change.previous, ConversationState)
@@ -337,7 +349,7 @@ class SQLiteConversationRepository:
     def count(self) -> int:
         try:
             with self._connection() as connection:
-                return connection.execute("SELECT count(*) FROM conversations").fetchone()[0]
+                return connection.execute("SELECT count(*) FROM conversations WHERE retired=0 AND archived=0").fetchone()[0]
         except (sqlite3.Error, OSError) as error:
             raise self._translate(error) from None
 
@@ -372,22 +384,22 @@ class SQLiteConversationRepository:
         key = value.conversation_id
         now = utc_now().isoformat()
         if original is None:
-            if connection.execute("SELECT count(*) FROM conversations").fetchone()[0] >= self.limits.max_conversations:
-                raise StorageError("Limite persistente de conversas atingido.")
-            connection.execute("INSERT INTO conversations(id,session_id,client_id,state,closed,version,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)",
-                               (key, value.session_id, key, value.state.value, int(value.closed), now, now))
+            self._ensure_capacity(connection, key)
+            connection.execute("INSERT INTO conversations(id,session_id,client_id,state,closed,archived,version,created_at,updated_at) VALUES(?,?,?,?,?,?,1,?,?)",
+                               (key, value.session_id, key, value.state.value, int(value.closed), int(value.archived), now, now))
             self._audit(connection, "conversation_created", key, "client", "committed")
         else:
             # Reset elimina conteúdo, mas conserva idempotência no adaptador durável.
             if value.session_id != original.session_id:
                 value.processed_events = {**original.processed_events, **value.processed_events}
                 value.event_results = {**original.event_results, **value.event_results}
-            if len(value.processed_events) > self.limits.max_events_per_session:
-                raise StorageError("Limite persistente de eventos atingido.")
             if not original.processed_events.keys() <= value.processed_events.keys():
                 raise StorageError("Eventos duráveis não podem ser descartados por edição.")
-            connection.execute("UPDATE conversations SET session_id=?,state=?,closed=?,version=?,updated_at=? WHERE id=?",
-                               (value.session_id, value.state.value, int(value.closed), version + 1, now, key))
+            if original.archived and not value.archived:
+                self._ensure_capacity(connection, key)
+                self._audit(connection, "conversation_reactivated", key, "client", "committed")
+            connection.execute("UPDATE conversations SET session_id=?,state=?,closed=?,archived=?,version=?,updated_at=? WHERE id=?",
+                               (value.session_id, value.state.value, int(value.closed), int(value.archived), version + 1, now, key))
         self.fault_hook("after_conversation")
         connection.execute("INSERT INTO context VALUES(?,?,?) ON CONFLICT(conversation_id) DO UPDATE SET services=excluded.services,age=excluded.age",
                            (key, _json(value.service_context), value.context_age))
@@ -420,6 +432,42 @@ class SQLiteConversationRepository:
             connection.execute("INSERT INTO transitions(conversation_id,ordinal,previous,current,action,operator_id,recorded_at) VALUES(?,?,?,?,?,?,?)",
                                (key, ordinal, change.previous.value, change.current.value, change.action, change.operator_id, change.timestamp.isoformat()))
         self.fault_hook("after_history")
+
+    def _ensure_capacity(self, connection: sqlite3.Connection, key: str) -> None:
+        """Limite de conversas ATIVAS. Se cheio, arquiva a mais ociosa elegível no mesmo commit.
+
+        Elegível: não excluída, não arquivada, ociosa há archive_idle_hours, sem atendimento
+        humano em andamento (WAITING_HUMAN/HUMAN_ACTIVE abertos) e sem item pendente,
+        em envio ou incerto no canal. Arquivar não apaga dados nem muda estado.
+        """
+        active = connection.execute("SELECT count(*) FROM conversations WHERE retired=0 AND archived=0").fetchone()[0]
+        if active < self.limits.max_conversations:
+            return
+        cutoff = (utc_now() - timedelta(hours=self.archive_idle_hours)).isoformat()
+        row = connection.execute(
+            "SELECT c.id FROM conversations AS c WHERE c.retired=0 AND c.archived=0 AND c.id<>? AND c.updated_at<? "
+            "AND NOT (c.closed=0 AND c.state IN ('WAITING_HUMAN','HUMAN_ACTIVE')) "
+            "AND NOT EXISTS (SELECT 1 FROM channel_outbox AS o WHERE o.conversation_id=c.id "
+            "AND o.status IN ('PENDING','RETRY','SENDING','UNKNOWN')) "
+            "AND NOT EXISTS (SELECT 1 FROM channel_inbox AS i WHERE i.conversation_id=c.id "
+            "AND i.status IN ('PENDING','PROCESSING')) ORDER BY c.updated_at LIMIT 1", (key, cutoff),
+        ).fetchone()
+        if row is None:
+            raise CapacityExhausted("Limite de conversas ativas atingido; nenhuma conversa ociosa elegível para arquivamento.")
+        # Versão incrementada: snapshot concorrente dessa conversa será invalidado e relido.
+        connection.execute("UPDATE conversations SET archived=1,version=version+1 WHERE id=?", (row["id"],))
+        self._audit(connection, "conversation_archived", row["id"], "storage", "committed")
+
+    def lookup_event(self, conversation_id: str, event_id: str) -> tuple[str, AgentResult] | None:
+        """Idempotência além da janela do snapshot: consulta direta, dentro da unidade de trabalho."""
+        validate_identifier(conversation_id)
+        validate_identifier(event_id)
+        if self._work.get() is None:
+            raise StorageError("Leitura exige unidade de trabalho.")
+        with self._connection() as connection:
+            row = connection.execute("SELECT digest,result FROM events WHERE conversation_id=? AND event_id=?",
+                                     (conversation_id, event_id)).fetchone()
+        return (row["digest"], RESULT.validate_json(row["result"])) if row else None
 
     def _audit(self, connection: sqlite3.Connection, operation: str, entity: str,
                origin: str, outcome: str) -> None:
@@ -461,9 +509,56 @@ class SQLiteConversationRepository:
         self._retire_keys((conversation_id,))
 
     def purge_expired(self, *, confirmation: str) -> int:
+        """Retenção: anonimiza conteúdo de conversas inativas SEM bloquear o cliente.
+
+        Preserva chaves de idempotência (eventos/inbox), estado da conversa e auditoria.
+        Não toca conversas com atendimento humano em andamento nem com envio pendente,
+        em curso ou incerto. A conversa fica arquivada e é reativada por nova mensagem.
+        Exclusão definitiva por pedido explícito continua em retire().
+        """
         if confirmation != "PURGE_SYNTHETIC":
             raise StorageError("Retenção exige confirmação PURGE_SYNTHETIC.")
-        return self._retire_keys(None)
+        try:
+            with self._connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    cutoff = (utc_now() - timedelta(days=self.retention_days)).isoformat()
+                    rows = connection.execute(
+                        "SELECT c.id FROM conversations AS c WHERE c.retired=0 AND c.updated_at<? "
+                        "AND (c.anonymized_at IS NULL OR c.updated_at>c.anonymized_at) "
+                        "AND NOT (c.closed=0 AND c.state IN ('WAITING_HUMAN','HUMAN_ACTIVE')) "
+                        "AND NOT EXISTS (SELECT 1 FROM channel_outbox AS o WHERE o.conversation_id=c.id "
+                        "AND o.status IN ('PENDING','RETRY','SENDING','UNKNOWN')) "
+                        "AND NOT EXISTS (SELECT 1 FROM channel_inbox AS i WHERE i.conversation_id=c.id "
+                        "AND i.status IN ('PENDING','PROCESSING')) ORDER BY c.id", (cutoff,),
+                    ).fetchall()
+                    now = utc_now().isoformat()
+                    for row in rows:
+                        key = row["id"]
+                        connection.execute("DELETE FROM messages WHERE conversation_id=?", (key,))
+                        connection.execute("DELETE FROM transitions WHERE conversation_id=?", (key,))
+                        connection.execute("UPDATE context SET services='[]',age=0 WHERE conversation_id=?", (key,))
+                        for event in connection.execute("SELECT event_id,result FROM events WHERE conversation_id=?", (key,)).fetchall():
+                            result = RESULT.validate_json(event["result"])
+                            minimal = AgentResult(key, result.event_id, result.state)
+                            connection.execute("UPDATE events SET result=? WHERE conversation_id=? AND event_id=?",
+                                               (RESULT.dump_json(minimal).decode(), key, event["event_id"]))
+                        connection.execute("UPDATE channel_inbox SET payload='{}' WHERE conversation_id=? AND status IN ('DONE','FAILED')", (key,))
+                        connection.execute("UPDATE channel_outbox SET body='',recipient='{}' WHERE conversation_id=?", (key,))
+                        # updated_at preservado (não é atividade do cliente); anonymized_at marca o ciclo.
+                        connection.execute("UPDATE conversations SET archived=1,anonymized_at=?,version=version+1 WHERE id=?", (now, key))
+                        self._audit(connection, "retention_anonymized", key, "operator", "committed")
+                    self.fault_hook("before_retention_commit")
+                    connection.commit()
+                    return len(rows)
+                except BaseException:
+                    connection.rollback()
+                    raise
+        except StorageError:
+            raise
+        except (sqlite3.Error, OSError, ValueError) as error:
+            self._failure()
+            raise self._translate(error) from None
 
     def _retire_keys(self, keys: tuple[str, ...] | None) -> int:
         try:

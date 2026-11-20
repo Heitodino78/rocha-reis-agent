@@ -7,6 +7,7 @@ Logs: somente nomes estáticos; nunca token, assinatura, corpo, telefone ou text
 
 import json
 import logging
+from collections.abc import Callable
 
 from fastapi import APIRouter, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -21,15 +22,16 @@ logger = logging.getLogger("rocha_reis_agent")
 PATH = "/webhooks/whatsapp"
 
 
-def _reject(status: int, detail: str, event: str) -> JSONResponse:
-    logger.warning(event)
-    return JSONResponse(status_code=status, content={"detail": detail})
-
-
 def build_router(
     *, ingestor: WebhookIngestor, verify_token: str, app_secret: bytes, max_body_bytes: int,
+    count: Callable[..., None] = lambda *names: None,
 ) -> APIRouter:
     router = APIRouter()
+
+    def _reject(status: int, detail: str, event: str) -> JSONResponse:
+        logger.warning(event)
+        count(event)  # contador técnico, sem conteúdo
+        return JSONResponse(status_code=status, content={"detail": detail})
 
     @router.get(PATH, include_in_schema=False)
     async def verify(request: Request) -> Response:
@@ -66,6 +68,7 @@ def build_router(
         except StorageError:
             # Sem 200: a Meta reentrega e a deduplicação absorve repetições.
             return _reject(503, "Indisponível; tente novamente.", "whatsapp_webhook_storage_unavailable")
+        count("whatsapp_webhook_received")
         logger.info("whatsapp_webhook_received", extra={
             "accepted": report.accepted, "duplicates": report.duplicates,
             "conflicts": report.conflicts, "ignored": report.ignored,

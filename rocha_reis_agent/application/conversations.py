@@ -20,7 +20,8 @@ class ConversationManager:
         self.limits = limits or SimulationLimits()
 
     def _new(self, conversation_id: str) -> Conversation:
-        if self.repository.count() >= self.limits.max_conversations:
+        # Repositório durável aplica o limite de conversas ATIVAS no commit (com arquivamento).
+        if not getattr(self.repository, "archives_inactive", False) and self.repository.count() >= self.limits.max_conversations:
             raise SimulationError("Limite de conversas atingido; reinicie o simulador.")
         return Conversation(conversation_id, uuid4().hex)
 
@@ -33,6 +34,9 @@ class ConversationManager:
                 if not create:
                     raise SimulationError("Conversa não encontrada; inicie uma sessão.")
                 conversation = self._new(conversation_id)
+            elif conversation.archived:
+                # Nova mensagem do cliente reativa a conversa arquivada (estado preservado).
+                conversation.archived = False
             # O adaptador devolve cópia; falhas não salvam alterações parciais.
             yield conversation
             del conversation.history[:-self.limits.max_history_entries]
@@ -48,6 +52,11 @@ class ConversationManager:
             conversation = self._new(conversation_id)
             self.repository.save(conversation)
             return conversation
+
+    def known_event(self, conversation_id: str, event_id: str) -> tuple[str, object] | None:
+        """Consulta de idempotência fora do snapshot (somente adaptadores com janela deslizante)."""
+        lookup = getattr(self.repository, "lookup_event", None)
+        return lookup(conversation_id, event_id) if lookup is not None else None
 
     def snapshot(self, conversation_id: str) -> Conversation:
         validate_identifier(conversation_id)

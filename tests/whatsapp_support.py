@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 import time
 
-from rocha_reis_agent.bootstrap import build_agent, configured_channel, queue_policy
+from rocha_reis_agent.bootstrap import build_agent, configured_channel, configured_limits, configured_repository, queue_policy
 from rocha_reis_agent.catalog_io import load_synthetic_catalog
 from rocha_reis_agent.channels.fake_transport import FakeWhatsAppTransport
 from rocha_reis_agent.channels.meta import sign
@@ -121,11 +121,11 @@ def catalog():
 def stack(tmp_path: Path, *, transport: FakeWhatsAppTransport | None = None, clock: Clock | None = None,
           path: Path | None = None, **changes: object) -> Stack:
     config = settings(tmp_path, **({"storage_path": path} if path else {}), **changes)
-    repository = SQLiteConversationRepository(config.storage_path)
+    repository = configured_repository(config)
     store, ingestor = configured_channel(config, repository)
     if clock is not None:
         store.clock = clock
-    agent = build_agent(catalog(), conversation_repository=repository)
+    agent = build_agent(catalog(), configured_limits(config), conversation_repository=repository)
     policy = queue_policy(config)
     transport = transport or FakeWhatsAppTransport()
     return Stack(repository, store, ingestor, InboundProcessor(store, agent, policy),

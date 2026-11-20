@@ -59,3 +59,6 @@ class Conversation:
     # Hashes de conteúdo detectam reutilização conflitante de um ID de evento.
     processed_events: dict[str, str] = field(default_factory=dict, repr=False)
     event_results: dict[str, AgentResult] = field(default_factory=dict, repr=False)
+    # Arquivada: fora do limite de conversas ativas; estado e conteúdo preservados.
+    # Uma nova mensagem do cliente reativa a conversa (ConversationManager.edit).
+    archived: bool = False

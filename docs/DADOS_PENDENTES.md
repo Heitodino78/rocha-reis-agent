@@ -34,12 +34,23 @@
 
 - [ ] Autorização para ensaio real: app Meta, WABA, número de teste e lista de contatos permitidos.
 - [ ] Onde guardar App Secret, Verify Token, token de acesso e chave de pseudonimização (gerenciador de segredos).
-- [ ] Versão da Graph API a adotar e confirmação, com conta de teste, do formato real de `from_user_id`/BSUID, `biz_opaque_callback_data` em status e envio para BSUID.
+- [ ] Versão da Graph API a adotar (v26.0 era a mais recente confirmada em 19/11/2026) e confirmação, com conta de teste, do formato real de `from_user_id`/BSUID, `biz_opaque_callback_data` em status e envio para BSUID.
 - [ ] Textos aprovados para respostas reais (hoje todas carregam rótulo de simulação).
 - [ ] Comportamento desejado para áudio/imagem/outros tipos (hoje: registrados sem resposta).
 - [ ] Política operacional para envios UNKNOWN/FAILED (quem verifica, em quanto tempo).
-- [ ] Limites de capacidade e retenção para clientes reais (hoje 1000 eventos por conversa e 100 conversas, valores sintéticos).
+- [ ] Limites e retenção para clientes reais: nº de conversas ativas, horas até arquivar, dias até anonimizar (Fase 5 removeu o bloqueio permanente; valores atuais são sintéticos).
+- [ ] Decisão do controlador: cliente cujos dados foram excluídos a pedido (`retire`) pode voltar a conversar? Hoje o identificador permanece bloqueado.
+- [ ] Prazo de guarda das chaves de idempotência (hoje mantidas indefinidamente, sem conteúdo) e plano de backup/restauração/cifragem.
+- [ ] Modelo de autenticação/autorização dos operadores para a futura interface (hoje só `operador-local` simulado).
+- [ ] Validação real dos códigos de erro da Graph API e da troca da trava `GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED`.
 - [ ] Hospedagem do banco durável com cifragem e backup (o volume de 1 TB é vfat e não serve para dados).
+
+## Homologação (Fase 6B)
+
+- [ ] Autorização escrita do responsável: conta/app de teste, número de teste (não o do salão), destinatários da equipe, executor, limites, período, recursos a criar/expor.
+- [ ] Mecanismo seguro para o token de teste (nunca chat ou repositório).
+- [ ] Túnel/infraestrutura HTTPS aprovados para expor o webhook temporariamente.
+- [ ] Confirmar v27.0 vs v26.0 e a tabela de preços vigente.
 
 ## Booksy
 

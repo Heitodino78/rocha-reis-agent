@@ -5,20 +5,34 @@ post   FIXTURE  assina com o App Secret configurado e entrega ao webhook em proc
 work            processa inbox e outbox até esvaziar, com FakeWhatsAppTransport
 status          contagem por estado (sem conteúdo)
 resend-uncertain OPERACAO RESEND_UNCERTAIN:OPERACAO   decisão humana de reenvio incerto
+halt "MOTIVO"   interrupção emergencial de envios (preserva a outbox)
+resume-dispatch RESUME_DISPATCH   retomada explícita dos envios
+metrics         contadores e agregados técnicos (sem dados pessoais)
+trace INBOX_ID  fluxo de um evento por identificadores técnicos
+homolog-check   verificação de prontidão da homologação (sem exibir allowlist ou segredos)
 """
 
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
 import sys
 import time
 from typing import Any
 
-from rocha_reis_agent.bootstrap import build_agent, configured_channel, configured_repository, configured_limits, queue_policy
+from uuid import uuid4
+
+from rocha_reis_agent import config as config_module
+from rocha_reis_agent.bootstrap import (
+    build_agent, configured_channel, configured_dispatcher, configured_limits, configured_repository,
+    homologation_authorization, queue_policy,
+)
+from rocha_reis_agent.channels.contracts import ChannelError
+from rocha_reis_agent.observability import configure_private_log
 from rocha_reis_agent.catalog_io import load_synthetic_catalog
 from rocha_reis_agent.channels.fake_transport import FakeWhatsAppTransport
 from rocha_reis_agent.channels.meta import sign
-from rocha_reis_agent.channels.service import InboundProcessor, OutboxDispatcher, drain
+from rocha_reis_agent.channels.service import InboundProcessor, drain
 from rocha_reis_agent.config import ConfigurationError, load_settings
 from rocha_reis_agent.domain.contracts import SimulationError
 from rocha_reis_agent.knowledge import KnowledgeBase
@@ -46,11 +60,24 @@ def main(argv: list[str] | None = None) -> int:
     resend = sub.add_parser("resend-uncertain")
     resend.add_argument("operation")
     resend.add_argument("confirmation")
+    halt = sub.add_parser("halt")
+    halt.add_argument("reason")
+    resume = sub.add_parser("resume-dispatch")
+    resume.add_argument("confirmation")
+    sub.add_parser("metrics")
+    trace = sub.add_parser("trace")
+    trace.add_argument("inbox_id", type=int)
+    sub.add_parser("homolog-check")
     args = parser.parse_args(argv)
     try:
         settings = load_settings()
         if not settings.whatsapp_enabled:
             raise SimulationError("Defina WHATSAPP_ENABLED=true com segredos locais (veja .env.example).")
+        if settings.whatsapp_transport != "fake":
+            # A CLI de simulação NUNCA usa o transporte real, mesmo se configurado.
+            raise SimulationError("A CLI local só opera com WHATSAPP_TRANSPORT=fake.")
+        if settings.channel_log_path is not None:
+            configure_private_log(settings.channel_log_path)
         repository = configured_repository(settings)
         store, _ = configured_channel(settings, repository)
         if args.command == "post":
@@ -74,17 +101,48 @@ def main(argv: list[str] | None = None) -> int:
                                 ai_timeout_seconds=settings.ai_timeout_seconds, conversation_repository=repository)
             transport = FakeWhatsAppTransport(args.behavior)
             policy = queue_policy(settings)
-            steps = drain(InboundProcessor(store, agent, policy), OutboxDispatcher(store, transport, policy), "local-cli")
+            # Em homologação, a guarda (allowlist, limites, período) é obrigatória mesmo no fake.
+            dispatcher = configured_dispatcher(settings, store, transport, run_id=uuid4().hex)
+            steps = drain(InboundProcessor(store, agent, policy), dispatcher, "local-cli")
             print("etapas: " + (", ".join(steps) or "nada pendente"))
             for delivery in transport.deliveries:
                 print(f"[ENVIO SIMULADO — nada saiu desta máquina] comportamento={delivery.behavior}: {delivery.body}")
         elif args.command == "status":
             print(json.dumps(store.counts(), sort_keys=True))
+        elif args.command == "halt":
+            store.halt(args.reason, set_by="operador-local")
+            print("Envios interrompidos. Outbox preservada; nenhuma tentativa ou retry até resume-dispatch.")
+        elif args.command == "resume-dispatch":
+            store.resume_dispatch(confirmation=args.confirmation, set_by="operador-local")
+            print("Envios retomados por decisão humana local.")
+        elif args.command == "metrics":
+            print(json.dumps(store.metrics(), sort_keys=True, ensure_ascii=False))
+        elif args.command == "trace":
+            print(json.dumps(store.trace(args.inbox_id), sort_keys=True, ensure_ascii=False))
+        elif args.command == "homolog-check":
+            authorization = homologation_authorization(settings)
+            if authorization is None:
+                raise SimulationError("Defina APP_ENV=homologation e HOMOLOG_AUTHORIZATION_FILE.")
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            print(json.dumps({
+                "authorization_id": authorization.authorization_id,
+                "active_now": authorization.active(now),
+                "valid_from": authorization.valid_from.isoformat(), "valid_until": authorization.valid_until.isoformat(),
+                "allowlist_size": len(authorization.allowed_recipients),
+                "operations": sorted(authorization.operations),
+                "limits": asdict(authorization.limits),
+                "transport": settings.whatsapp_transport,
+                "real_transport_code_lock": config_module.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
+                "dispatch_halted": store.halt_status() is not None or settings.channel_dispatch_halted,
+                # Esta CLI nunca envia de verdade; o real depende da Fase 6B e da trava acima.
+                "real_send_possible_from_this_cli": False,
+            }, sort_keys=True, ensure_ascii=False))
         else:
             store.requeue_unknown(args.operation, confirmation=args.confirmation)
             print("Reenvio incerto reagendado por decisão humana local.")
     except (SimulationError, ConfigurationError, OSError, ValueError) as error:
-        message = str(error) if isinstance(error, (SimulationError, ConfigurationError)) else "entrada inválida."
+        message = str(error) if isinstance(error, (SimulationError, ConfigurationError, ChannelError)) else "entrada inválida."
         print(f"Erro: {message}", file=sys.stderr)
         return 2
     return 0

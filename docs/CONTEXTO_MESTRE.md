@@ -2,7 +2,7 @@
 
 **Versão:** 0.1 (19/11/2026)  
 **Classificação:** documento de planejamento; sujeito a validação com o salão  
-**Status:** Fases 0 a 4 implementadas e testadas localmente: fundação, simulador, FakeAIProvider, conhecimento versionado/validação, persistência SQLite sintética e preparação **offline** da integração Meta WhatsApp (webhook assinado, inbox/outbox, transporte fake). Nenhuma conexão real com a Meta, IA generativa real, validação com o salão ou implantação. Evidências nos relatórios `STATUS_FASE_0.md` a `STATUS_FASE_4.md`.
+**Status:** Fases 0 a 5 implementadas e testadas localmente: fundação, simulador, FakeAIProvider, conhecimento versionado/validação, persistência SQLite sintética, integração Meta WhatsApp **offline** (webhook assinado, inbox/outbox, transporte fake) e adaptador HTTP Graph API **bloqueado** por trava de código, com classificação de erros, janela de atendimento e retenção sem bloqueio permanente; Fase 6A: estrutura de homologação controlada (offline). Homologação real (6B) não executada. Nenhuma conexão real com a Meta, IA generativa real, validação com o salão ou implantação. Evidências em `STATUS_FASE_0.md` a `STATUS_FASE_6.md`.
 
 ## 1. Identidade do projeto
 

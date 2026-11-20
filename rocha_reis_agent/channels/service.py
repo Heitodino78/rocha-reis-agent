@@ -8,16 +8,18 @@ from dataclasses import dataclass, replace
 from hashlib import sha256
 import hmac
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from rocha_reis_agent.application.service import AgentService
 from rocha_reis_agent.channels.contracts import (
-    InboundEvent, InboundKind, IngestReport, OutboundText, SendOutcome, SendUncertain,
+    InboundEvent, InboundKind, IngestReport, OutboundText, Sender, SendOutcome, SendUncertain,
     StatusUpdate, WhatsAppTransport,
 )
+from rocha_reis_agent.channels.homologation import HomologationGuard
 from rocha_reis_agent.channels.meta import parse_webhook
 from rocha_reis_agent.domain.contracts import (
-    AgentResult, ConcurrentUpdate, InboundMessage, InvalidInput, SimulationError, StorageError,
+    AgentResult, CapacityExhausted, ConcurrentUpdate, InboundMessage, InvalidInput, SimulationError, StorageError,
 )
 from rocha_reis_agent.persistence.sqlite_channel import (
     ClaimedInbound, ClaimedOutbound, LeaseLost, SQLiteChannelStore,
@@ -57,8 +59,11 @@ class QueuePolicy:
 
 class WebhookIngestor:
     def __init__(self, store: SQLiteChannelStore, *, phone_number_id: str,
-                 business_account_id: str | None, conversation_key: bytes) -> None:
+                 business_account_id: str | None, conversation_key: bytes,
+                 sender_filter: Callable[[Sender], bool] | None = None) -> None:
         self.store = store
+        # Homologação: remetentes fora da allowlist são descartados sem persistir conteúdo.
+        self.sender_filter = sender_filter
         self.phone_number_id = phone_number_id
         self.business_account_id = business_account_id
         self.conversation_key = conversation_key
@@ -67,9 +72,16 @@ class WebhookIngestor:
         """Chamada SOMENTE após verificar a assinatura. Nenhuma IA é executada aqui."""
         batch = parse_webhook(payload, phone_number_id=self.phone_number_id,
                               business_account_id=self.business_account_id)
-        entries = [(event, conversation_id_for(event, self.conversation_key)) for event in batch.events]
+        events = batch.events
+        filtered = 0
+        if self.sender_filter is not None:
+            kept = tuple(e for e in events if isinstance(e, StatusUpdate) or self.sender_filter(e.sender))
+            filtered, events = len(events) - len(kept), kept
+            if filtered:
+                self.store.bump(*["webhook_ignored_not_allowlisted"] * filtered)
+        entries = [(event, conversation_id_for(event, self.conversation_key)) for event in events]
         report = self.store.ingest(entries) if entries else IngestReport()
-        return replace(report, ignored=batch.ignored)
+        return replace(report, ignored=batch.ignored + filtered)
 
 
 class InboundProcessor:
@@ -119,6 +131,14 @@ class InboundProcessor:
             self.agent.handle(message, effects=effects)
         except LeaseLost:
             raise
+        except CapacityExhausted:
+            # Não é recusa do cliente: aguarda arquivamento/capacidade com backoff e alerta operacional.
+            logger.warning("channel_capacity_exhausted")
+            retried = self.store.retry_inbound(
+                item, worker, outcome="capacity_exhausted",
+                delay_seconds=self.policy.backoff(item.attempts), max_attempts=self.policy.inbox_max_attempts,
+            )
+            return "capacity_retry_scheduled" if retried else "capacity_exhausted"
         except (ConcurrentUpdate, StorageError):
             # Transitório: nada desta tentativa foi confirmado; repetir com backoff limitado.
             retried = self.store.retry_inbound(
@@ -134,15 +154,22 @@ class InboundProcessor:
 
 
 class OutboxDispatcher:
-    def __init__(self, store: SQLiteChannelStore, transport: WhatsAppTransport, policy: QueuePolicy) -> None:
+    def __init__(self, store: SQLiteChannelStore, transport: WhatsAppTransport, policy: QueuePolicy, *,
+                 guard: HomologationGuard | None = None, halted_by_config: bool = False) -> None:
         self.store = store
         self.transport = transport
         self.policy = policy
+        self.guard = guard
+        # CHANNEL_DISPATCH_HALTED=true só pode interromper; nunca reativa um halt do banco.
+        self.halted_by_config = halted_by_config
 
     def dispatch_one(self, worker: str) -> str | None:
+        if self.halted_by_config:
+            self.store.bump("dispatch_blocked_config_halt")
+            return None
         claimed = self.store.claim_outbound(
             worker, lease_seconds=self.policy.outbox_lease_seconds,
-            window_seconds=self.policy.service_window_seconds,
+            window_seconds=self.policy.service_window_seconds, guard=self.guard,
         )
         if claimed is None:
             return None

@@ -1,12 +1,13 @@
 # Rocha Reis Agent
 
 Fundação e simulador local de atendimento em português para o **Salão de Beleza
-Rocha Reis**, projeto da agência de **Heitor e Renan**. Fases 0 a 4 implementadas
-e testadas localmente: API com `GET /health`, núcleo de conversas por CLI,
+Rocha Reis**, projeto da agência de **Heitor e Renan**. Fases 0 a 5 e 6A
+implementadas e testadas localmente: API com `GET /health`, núcleo de conversas por CLI,
 conhecimento versionado, arquitetura de IA com **FakeAIProvider determinístico**,
 persistência SQLite sintética e **preparação offline do webhook oficial Meta
-WhatsApp Cloud API** com inbox/outbox duráveis e transporte **fake**.
-Nenhum modelo generativo real, conta Meta ou envio real está conectado.
+WhatsApp Cloud API** com inbox/outbox duráveis e transporte **fake**, e o
+**adaptador HTTP Graph API** (Fase 5) implementado porém **bloqueado** por trava de
+código. Nenhum modelo generativo real, conta Meta ou envio real está conectado.
 
 **Booksy:** somente orientação por link configurado, sem consultar disponibilidade
 ou realizar operações sobre reservas. O link oficial e os dados do salão continuam
@@ -263,6 +264,23 @@ $CLI status                                            # contagens por estado, s
 Para servir o webhook localmente, use somente `--host 127.0.0.1` e
 `--no-access-log`; não exponha a porta publicamente nesta fase.
 
+**Fase 5:** `channels/graph_transport.py` implementa o envio real pela Graph API
+(versão explícita, Bearer, classificação de erros), mas `WHATSAPP_TRANSPORT=graph` é
+recusado enquanto `GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED=False` em `config.py`; a CLI
+local nunca usa o transporte real. A janela de atendimento é reavaliada antes de
+cada tentativa (`channels/send_policy.py`). O limite de conversas vale para as
+**ativas**: ao atingi-lo, a conversa ociosa elegível é arquivada (sem apagar dados), e
+`/purge PURGE_SYNTHETIC` anonimiza conversas inativas sem bloquear o cliente.
+Detalhes em [`STATUS_FASE_5.md`](docs/STATUS_FASE_5.md).
+
+**Fase 6A (homologação controlada, offline):** `APP_ENV=homologation` com banco e
+autorização próprios, allowlist, limites, interrupção emergencial (`local_cli halt`,
+`resume-dispatch`), `metrics`, `trace` e `homolog-check`. Guia e runbook da 6B em
+[`HOMOLOGACAO_META_FASE6.md`](docs/HOMOLOGACAO_META_FASE6.md). Requisitos da operação
+humana em [`OPERACAO_HUMANA_REQUISITOS.md`](docs/OPERACAO_HUMANA_REQUISITOS.md) e
+pendências de produção em [`CHECKLIST_PRODUCAO.md`](docs/CHECKLIST_PRODUCAO.md).
+**Nenhum teste real com a Meta foi feito (Fase 6B bloqueada).**
+
 ## Conhecimento e limites determinísticos
 
 O formato atual está em [salon.versioned.synthetic.json](fixtures/salon.versioned.synthetic.json):
@@ -413,7 +431,10 @@ nas respostas e logs de falha. A Fase 3 testa arquivos SQLite reais, migrações
 processos independentes, interrupção abrupta, concorrência sincronizada, rollback,
 retenção, isolamento e composição FastAPI. A Fase 4 (`tests/test_whatsapp_*.py`)
 testa webhook assinado, normalização, inbox/outbox, incerteza de envio, leases,
-concorrência, rollback e reinício real de processos, sempre com transporte fake. Os testes da Fase 1 também cobrem atendimento,
+concorrência, rollback e reinício real de processos, sempre com transporte fake.
+A Fase 5 (`test_graph_transport.py`, `test_delivery_status_and_policy.py`,
+`test_lifecycle_and_admin.py`) valida a requisição HTTP com `httpx2.MockTransport`,
+classificação de erros, status de entrega, janela, retenção e controles administrativos. Os testes da Fase 1 também cobrem atendimento,
 contexto, duas conversas, estados humanos, deduplicação concorrente, limites,
 carga de fixtures e CLI. A Fase 2 cobre aprovação, versões, contratos, prompts,
 saídas sem suporte factual, ataques, privacidade e falhas do fake. Evidências em
@@ -466,13 +487,18 @@ saídas sem suporte factual, ataques, privacidade e falhas do fake. Evidências 
 │   │   └── migrations/
 │   │       ├── 001_initial.sql
 │   │       ├── 002_audit_correlation.sql
-│   │       └── 003_whatsapp_channel.sql
+│   │       ├── 003_whatsapp_channel.sql
+│   │       ├── 004_lifecycle_delivery.sql
+│   │       └── 005_homologation_controls.sql
 │   ├── channels/                    # Meta WhatsApp offline (Fase 4)
 │   │   ├── __init__.py
 │   │   ├── contracts.py
 │   │   ├── meta.py
 │   │   ├── service.py
 │   │   ├── fake_transport.py
+│   │   ├── graph_transport.py       # Graph API HTTP, bloqueado (Fase 5)
+│   │   ├── send_policy.py           # janela de atendimento (Fase 5)
+│   │   ├── homologation.py          # autorização, allowlist, limites (Fase 6A)
 │   │   └── local_cli.py
 │   ├── ai/
 │   │   ├── __init__.py
@@ -573,6 +599,7 @@ nenhum commit foi criado. Inicializar/versionar o projeto é uma pendência.
 A Fase 3 foi autorizada exclusivamente para persistência/estabilidade local e
 está documentada em [STATUS_FASE_3.md](docs/STATUS_FASE_3.md).
 A Fase 4 foi executada somente offline (auditoria + preparação da integração
-Meta), conforme [STATUS_FASE_4.md](docs/STATUS_FASE_4.md). A Fase 5 não foi
-iniciada. Conexão real com a Meta, validação com o salão, dados reais e
+Meta), conforme [STATUS_FASE_4.md](docs/STATUS_FASE_4.md). A Fase 5 (adaptador HTTP
+bloqueado, erros, status, janela, retenção) está em [STATUS_FASE_5.md](docs/STATUS_FASE_5.md).
+A Fase 6A está em [STATUS_FASE_6.md](docs/STATUS_FASE_6.md); a 6B não foi executada. Conexão real com a Meta, validação com o salão, dados reais e
 implantação permanecem pendentes e exigem autorização específica.

@@ -4,6 +4,7 @@ pydantic>=2.9,<3
 pydantic-settings>=2.6,<3
 uvicorn>=0.32,<1
 
-# Testes locais (httpx2 é o transporte atual do TestClient do Starlette).
+# httpx2: transporte do TestClient do Starlette e cliente do adaptador Graph API
+# (channels/graph_transport.py, desativado). Mesma versão travada; nenhum pacote novo.
 pytest>=8.3,<10
 httpx2>=2,<3

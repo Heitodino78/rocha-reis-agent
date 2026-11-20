@@ -78,11 +78,25 @@ def test_env_example_keeps_channel_disabled_and_has_no_values(tmp_path, monkeypa
     assert load_settings().whatsapp_enabled is False
 
 
-def test_package_has_no_network_client_or_real_transport():
-    source = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "rocha_reis_agent").rglob("*.py"))
-    for forbidden in ("import httpx", "import requests", "urllib.request", "http.client", "graph.facebook.com",
-                      "import aiohttp", "socket.create_connection"):
-        assert forbidden not in source
+def test_network_client_is_confined_to_the_disabled_graph_adapter():
+    """Fase 5: só channels/graph_transport.py usa cliente HTTP, e ele não é carregado
+    pela aplicação, pela CLI ou pelo worker enquanto a trava de ativação for falsa."""
+    allowed = ROOT / "rocha_reis_agent" / "channels" / "graph_transport.py"
+    for path in (ROOT / "rocha_reis_agent").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for forbidden in ("import httpx2", "import httpx\n", "import requests", "urllib.request", "http.client",
+                          "import aiohttp", "socket.create_connection"):
+            if path != allowed:
+                assert forbidden not in source, (path.name, forbidden)
+        if path != allowed:
+            assert "graph.facebook.com" not in source
+        if "import graph_transport" in source or "channels.graph_transport import" in source:
+            assert path.name == "bootstrap.py"  # importação tardia, atrás da trava
+    import subprocess, sys
+    probe = ("import sys; import rocha_reis_agent.main, rocha_reis_agent.channels.local_cli, "
+             "rocha_reis_agent.simulator; print('graph_transport' in ' '.join(sys.modules), 'httpx2' in sys.modules)")
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, cwd=ROOT, timeout=60)
+    assert result.stdout.split()[0] == "False"
 
 
 def test_enabled_channel_exposes_only_health_and_webhook_without_admin_routes(tmp_path):

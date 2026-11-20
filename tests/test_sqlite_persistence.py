@@ -137,17 +137,23 @@ def test_reset_preserves_durable_keys_and_requires_new_event_ids(tmp_path, knowl
     assert deliver(agent, "new-event").reply
 
 
-def test_persistent_event_and_conversation_capacity_are_not_evicted(tmp_path, knowledge):
+def test_event_window_never_blocks_and_idempotency_survives_beyond_window(tmp_path, knowledge):
+    """Fase 5: o limite de eventos é janela do snapshot, não bloqueio permanente."""
     limits = SimulationLimits(max_events_per_session=1, max_conversations=1)
     repository = SQLiteConversationRepository(tmp_path / "test.synthetic.sqlite3", limits=limits)
     agent = build_agent(knowledge, limits, conversation_repository=repository)
     deliver(agent)
     agent.conversations.reset("cliente-a")
-    with pytest.raises(SimulationError, match="Limite de eventos"):
-        deliver(agent, "e2")
-    with pytest.raises(SimulationError, match="Limite de conversas"):
+    for index in range(2, 6):
+        assert deliver(agent, f"e{index}").reply  # nenhum bloqueio permanente
+    assert len(agent.conversations.snapshot("cliente-a").processed_events) == 1  # janela
+    assert deliver(agent).duplicate  # e1, fora da janela, continua deduplicado
+    with pytest.raises(SimulationError, match="conteúdo diferente"):
+        deliver(agent, "e2", "Quero um humano")
+    assert len(query(repository, "SELECT * FROM events")) == 5
+    # Limite de conversas ATIVAS: sem conversa ociosa elegível, erro transitório explícito.
+    with pytest.raises(SimulationError, match="conversas ativas"):
         agent.conversations.start("cliente-b")
-    assert deliver(agent).duplicate
 
 
 def test_context_is_isolated_and_private_text_never_enters_audit_or_logs(tmp_path, knowledge, caplog):

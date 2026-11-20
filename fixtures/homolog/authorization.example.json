@@ -1,0 +1,19 @@
+{
+  "schema": "rocha-reis-homolog-authorization-v1",
+  "authorization_id": "HML-EXEMPLO-000",
+  "environment": "homologation",
+  "authorized_by": "PREENCHER: responsável legalmente habilitado",
+  "executor": "PREENCHER: pessoa que executa o ensaio",
+  "phone_number_id": "100000000000001",
+  "allowed_recipients": ["5511900000001"],
+  "valid_from": "2026-11-20T13:00:00-03:00",
+  "valid_until": "2026-11-20T17:00:00-03:00",
+  "limits": {
+    "max_messages_total": 10,
+    "max_messages_per_recipient": 5,
+    "max_messages_per_run": 3,
+    "max_messages_per_minute": 2
+  },
+  "operations": ["receive_webhook", "send_text_reply"],
+  "confirmation": "AUTORIZO HOMOLOGACAO HML-EXEMPLO-000"
+}

@@ -33,3 +33,8 @@ dist/
 .vscode/
 .DS_Store
 *~
+
+# Homologação: autorizações reais e dados de ensaio nunca são versionados
+autorizacao*.json
+homolog-authorization*.json
+*.homolog.synthetic.sqlite3*

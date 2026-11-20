@@ -73,7 +73,39 @@ registrada. O critério de aceite acima (mensagens reais em número autorizado)
 **continua não atendido** e depende de autorização futura. Evidências em
 `STATUS_FASE_4.md`. Fase 5 não iniciada.
 
-## Fase 5 — Atendimento humano operacional
+## Fase 5 (executada em 19/11/2026) — Adaptador HTTP Meta e segurança operacional
+
+**Conflito de numeração registrado:** o pedido do usuário de 19/11/2026 definiu a
+Fase 5 como adaptador HTTP oficial (desativado), classificação de erros, status,
+janela de atendimento, retenção sem bloqueio e controle administrativo local. Pela
+precedência de `AGENTS.md`, o pedido atual prevalece. O "atendimento humano
+operacional" planejado abaixo continua **não executado** e passa a depender de nova
+numeração/pedido. Nenhuma mensagem real, conta Meta, IA real ou implantação.
+Evidências em `STATUS_FASE_5.md`.
+
+## Fase 6 — Homologação Meta (6A executada em 19/11/2026; 6B bloqueada)
+
+**6A (offline):** ambiente `homologation` isolado, autorização em arquivo privado,
+trava de código própria (`False`), allowlist de entrada/saída, limites com registro
+de tentativas, interrupção emergencial, métricas/rastreamento sem PII, log privado,
+ensaio ponta a ponta com reinícios. Evidências em `STATUS_FASE_6.md` e
+`HOMOLOGACAO_META_FASE6.md`. **6B:** não executada; exige autorização específica.
+
+## Roadmap atualizado (após Fase 6A)
+
+| Etapa | Conteúdo | Estado |
+|---|---|---|
+| 6B | Ensaio real com número de teste, allowlist, limites e evidências | Bloqueada até autorização |
+| 7 (proposta) | Operação humana real: inbox, autenticação de funcionários, notificação, resposta pela outbox | Planejado (requisitos em `OPERACAO_HUMANA_REQUISITOS.md`) |
+| 8 (proposta) | Dados oficiais e textos aprovados pelo salão; avaliação de IA generativa real | Planejado |
+| 9 (proposta) | Infraestrutura de produção: banco cifrado, backup/restauração, worker supervisionado, alertas, LGPD | Planejado (`CHECKLIST_PRODUCAO.md`) |
+
+Já existe no núcleo: máquina de estados humana, pausa e retomada explícita,
+cancelamento de respostas obsoletas. Existe só como simulação: ações de operador
+via CLI local (`operador-local`). Falta: interface, autenticação, notificação e envio
+das respostas humanas. Nenhuma etapa avança sem pedido explícito.
+
+## Atendimento humano operacional (antes "Fase 5"; não executado — ver etapa 7 proposta)
 
 **Entregas:** integração com inbox/processo humano efetivamente disponível; transições de estado autorizadas e auditáveis; notificação aos responsáveis; recuperação após falha.
 

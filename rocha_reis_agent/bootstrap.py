@@ -14,7 +14,11 @@ from rocha_reis_agent.knowledge_projection import legacy_synthetic_catalog
 from rocha_reis_agent.memory import InMemoryConversationRepository, InMemoryKnowledgeRepository, VersionedKnowledgeRepository
 from rocha_reis_agent.persistence.sqlite import SQLiteConversationRepository
 from rocha_reis_agent.persistence.sqlite_channel import SQLiteChannelStore
-from rocha_reis_agent.channels.service import QueuePolicy, WebhookIngestor
+from rocha_reis_agent.channels.service import OutboxDispatcher, QueuePolicy, WebhookIngestor
+from rocha_reis_agent.channels.homologation import HomologationAuthorization, HomologationGuard, load_authorization
+from rocha_reis_agent.channels.contracts import WhatsAppTransport
+from rocha_reis_agent.channels.fake_transport import FakeWhatsAppTransport
+from rocha_reis_agent import config as config_module
 from rocha_reis_agent.responses import ResponseGenerator
 
 
@@ -38,6 +42,7 @@ def configured_repository(settings: Settings) -> ConversationRepository:
         retention_days=settings.storage_retention_days,
         audit_days=settings.storage_audit_days,
         audit_limit=settings.storage_audit_limit,
+        archive_idle_hours=settings.storage_archive_idle_hours,
     )
 
 
@@ -79,9 +84,61 @@ def configured_channel(settings: Settings, repository: ConversationRepository) -
         raise ValueError("Canal WhatsApp não habilitado ou sem armazenamento durável.")
     assert settings.whatsapp_conversation_key is not None and settings.whatsapp_phone_number_id is not None
     store = SQLiteChannelStore(repository)
+    authorization = homologation_authorization(settings)
     ingestor = WebhookIngestor(
         store, phone_number_id=settings.whatsapp_phone_number_id,
         business_account_id=settings.whatsapp_business_account_id,
         conversation_key=settings.whatsapp_conversation_key.get_secret_value().encode("utf-8"),
+        sender_filter=authorization.accepts_inbound if authorization is not None else None,
     )
     return store, ingestor
+
+
+def homologation_authorization(settings: Settings) -> HomologationAuthorization | None:
+    """Em homologação, a autorização é obrigatória e validada inteira; fora dela, inexistente."""
+    if settings.app_env != "homologation":
+        return None
+    assert settings.homolog_authorization_file is not None and settings.whatsapp_phone_number_id is not None
+    return load_authorization(settings.homolog_authorization_file,
+                              expected_phone_number_id=settings.whatsapp_phone_number_id)
+
+
+def configured_dispatcher(settings: Settings, store: SQLiteChannelStore, transport: WhatsAppTransport,
+                          *, run_id: str) -> OutboxDispatcher:
+    """Despachante com interrupção por configuração e, em homologação, guarda obrigatória."""
+    guard = None
+    authorization = homologation_authorization(settings)
+    if authorization is not None:
+        assert settings.whatsapp_conversation_key is not None
+        guard = HomologationGuard(
+            authorization, run_id=run_id,
+            recipient_key=settings.whatsapp_conversation_key.get_secret_value().encode("utf-8"),
+        )
+    return OutboxDispatcher(store, transport, queue_policy(settings), guard=guard,
+                            halted_by_config=settings.channel_dispatch_halted)
+
+
+def build_transport(settings: Settings, *, http_transport: object | None = None) -> WhatsAppTransport:
+    """Seleciona o transporte. O real exige a trava de código E configuração validada.
+
+    `http_transport` (httpx2.BaseTransport) existe só para testes com MockTransport.
+    """
+    if settings.whatsapp_transport == "fake":
+        return FakeWhatsAppTransport()
+    unlocked = (config_module.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED if settings.app_env == "homologation"
+                else config_module.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED)
+    if not unlocked:
+        raise ValueError("Transporte real não autorizado nesta fase.")
+    # Importação tardia: o cliente HTTP só é carregado quando o real é autorizado.
+    from rocha_reis_agent.channels.graph_transport import GraphAPITransport, GraphTransportConfig, build_client
+
+    assert settings.whatsapp_access_token is not None and settings.whatsapp_phone_number_id is not None
+    assert settings.whatsapp_graph_api_version is not None
+    config = GraphTransportConfig(
+        access_token=settings.whatsapp_access_token.get_secret_value(),
+        phone_number_id=settings.whatsapp_phone_number_id,
+        api_version=settings.whatsapp_graph_api_version,
+        connect_timeout_seconds=settings.whatsapp_connect_timeout_seconds,
+        read_timeout_seconds=settings.whatsapp_send_timeout_seconds,
+    )
+    return GraphAPITransport(config, build_client(http_transport))  # type: ignore[arg-type]
