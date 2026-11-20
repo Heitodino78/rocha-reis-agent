@@ -1,0 +1,39 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000002",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550000000",
+              "phone_number_id": "100000000000001"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Cliente Fictício"
+                },
+                "wa_id": "5511900000001"
+              }
+            ],
+            "messages": [
+              {
+                "from": "5511900000001",
+                "id": "wamid.SINTETICO.0002",
+                "timestamp": "NOW",
+                "type": "text",
+                "text": {
+                  "body": "E quanto custa?"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

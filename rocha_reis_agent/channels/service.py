@@ -1,0 +1,177 @@
+"""Orquestração do canal: webhook → inbox → núcleo existente → outbox → transporte.
+
+Regras de negócio permanecem no AgentService; este módulo só traduz eventos do
+canal e controla filas. Logs contêm apenas nomes estáticos e códigos de resultado.
+"""
+
+from dataclasses import dataclass, replace
+from hashlib import sha256
+import hmac
+import logging
+from typing import Any
+
+from rocha_reis_agent.application.service import AgentService
+from rocha_reis_agent.channels.contracts import (
+    InboundEvent, InboundKind, IngestReport, OutboundText, SendOutcome, SendUncertain,
+    StatusUpdate, WhatsAppTransport,
+)
+from rocha_reis_agent.channels.meta import parse_webhook
+from rocha_reis_agent.domain.contracts import (
+    AgentResult, ConcurrentUpdate, InboundMessage, InvalidInput, SimulationError, StorageError,
+)
+from rocha_reis_agent.persistence.sqlite_channel import (
+    ClaimedInbound, ClaimedOutbound, LeaseLost, SQLiteChannelStore,
+)
+
+logger = logging.getLogger("rocha_reis_agent")
+
+
+def conversation_id_for(event: InboundEvent, key: bytes) -> str | None:
+    """Pseudônimo estável por número comercial + remetente (HMAC; sem telefone em claro)."""
+    if isinstance(event, StatusUpdate):
+        return None
+    material = f"whatsapp:{event.business_number_id}:{event.sender.identity_key}".encode("utf-8")
+    return "wa-" + hmac.new(key, material, sha256).hexdigest()[:40]
+
+
+def event_id_for(provider_message_id: str) -> str:
+    """ID externo (wamid) contém caracteres fora do formato interno; usar hash estável."""
+    return "wa-" + sha256(provider_message_id.encode("utf-8")).hexdigest()[:40]
+
+
+@dataclass(frozen=True, slots=True)
+class QueuePolicy:
+    inbox_lease_seconds: float = 60.0
+    inbox_max_attempts: int = 5
+    outbox_lease_seconds: float = 30.0
+    outbox_max_attempts: int = 3
+    backoff_base_seconds: float = 2.0
+    backoff_max_seconds: float = 300.0
+    send_timeout_seconds: float = 10.0
+    # Janela de atendimento de 24h com margem de segurança (padrão 23h).
+    service_window_seconds: float = 23 * 3600
+
+    def backoff(self, attempt: int) -> float:
+        return min(self.backoff_max_seconds, self.backoff_base_seconds * 2 ** max(0, attempt - 1))
+
+
+class WebhookIngestor:
+    def __init__(self, store: SQLiteChannelStore, *, phone_number_id: str,
+                 business_account_id: str | None, conversation_key: bytes) -> None:
+        self.store = store
+        self.phone_number_id = phone_number_id
+        self.business_account_id = business_account_id
+        self.conversation_key = conversation_key
+
+    def ingest(self, payload: Any) -> IngestReport:
+        """Chamada SOMENTE após verificar a assinatura. Nenhuma IA é executada aqui."""
+        batch = parse_webhook(payload, phone_number_id=self.phone_number_id,
+                              business_account_id=self.business_account_id)
+        entries = [(event, conversation_id_for(event, self.conversation_key)) for event in batch.events]
+        report = self.store.ingest(entries) if entries else IngestReport()
+        return replace(report, ignored=batch.ignored)
+
+
+class InboundProcessor:
+    def __init__(self, store: SQLiteChannelStore, agent: AgentService, policy: QueuePolicy) -> None:
+        self.store = store
+        self.agent = agent
+        self.policy = policy
+
+    def process_one(self, worker: str) -> str | None:
+        item = self.store.claim_inbound(
+            worker, lease_seconds=self.policy.inbox_lease_seconds, max_attempts=self.policy.inbox_max_attempts,
+        )
+        if item is None:
+            return None
+        try:
+            outcome = self._process(item, worker)
+        except LeaseLost:
+            outcome = "lease_lost"
+        logger.info("channel_inbound_processed", extra={"outcome": outcome})
+        return outcome
+
+    def _process(self, item: ClaimedInbound, worker: str) -> str:
+        if item.kind == InboundKind.STATUS:
+            return self.store.apply_status(item, worker)
+        if item.kind == InboundKind.UNSUPPORTED or item.conversation_id is None:
+            # Tipos não suportados nunca são interpretados nem respondidos automaticamente.
+            self.store.finish_inbound(item, worker, outcome="unsupported_type_ignored")
+            return "unsupported_type_ignored"
+        event_id = event_id_for(str(item.payload["provider_message_id"]))
+        try:
+            message = InboundMessage(event_id, item.conversation_id, str(item.payload["text"]), item.source_timestamp)
+        except InvalidInput:
+            self.store.finish_inbound(item, worker, outcome="invalid_input", failed=True)
+            return "invalid_input"
+        conversation_id = item.conversation_id
+        outcomes: list[str] = []
+
+        def effects(result: AgentResult, session_id: str) -> None:
+            outcome = "duplicate" if result.duplicate else "replied" if result.reply else "recorded_without_reply"
+            outcomes[:] = [outcome]
+            self.store.stage_conversation_effects(
+                item, worker, outcome=outcome, reply=None if result.duplicate else result.reply,
+                conversation_id=conversation_id, session_id=session_id, state=result.state, event_id=event_id,
+            )
+
+        try:
+            self.agent.handle(message, effects=effects)
+        except LeaseLost:
+            raise
+        except (ConcurrentUpdate, StorageError):
+            # Transitório: nada desta tentativa foi confirmado; repetir com backoff limitado.
+            retried = self.store.retry_inbound(
+                item, worker, outcome="storage_retry",
+                delay_seconds=self.policy.backoff(item.attempts), max_attempts=self.policy.inbox_max_attempts,
+            )
+            return "retry_scheduled" if retried else "failed_after_retries"
+        except SimulationError:
+            # Recusa determinística do núcleo (sessão encerrada, limite, ID com conteúdo diferente).
+            self.store.finish_inbound(item, worker, outcome="rejected_by_core", failed=True)
+            return "rejected_by_core"
+        return outcomes[0]
+
+
+class OutboxDispatcher:
+    def __init__(self, store: SQLiteChannelStore, transport: WhatsAppTransport, policy: QueuePolicy) -> None:
+        self.store = store
+        self.transport = transport
+        self.policy = policy
+
+    def dispatch_one(self, worker: str) -> str | None:
+        claimed = self.store.claim_outbound(
+            worker, lease_seconds=self.policy.outbox_lease_seconds,
+            window_seconds=self.policy.service_window_seconds,
+        )
+        if claimed is None:
+            return None
+        outcome = self._send(claimed)
+        try:
+            status = self.store.finish_outbound(
+                claimed, worker, outcome, max_attempts=self.policy.outbox_max_attempts, backoff=self.policy.backoff,
+            )
+        except StorageError:
+            # Permanece SENDING; ao vencer o lease vira UNKNOWN (nunca reenvio cego).
+            status = "UNRECORDED"
+        logger.info("channel_outbound_dispatched", extra={"outcome": status})
+        return status
+
+    def _send(self, claimed: ClaimedOutbound) -> SendOutcome:
+        message = OutboundText(claimed.id, claimed.business_number_id, claimed.recipient, claimed.body)
+        try:
+            return self.transport.send_text(message, timeout_seconds=self.policy.send_timeout_seconds)
+        except Exception:
+            # Exceção do adaptador: não sabemos se houve transmissão → incerto.
+            return SendUncertain("adapter_exception")
+
+
+def drain(inbound: InboundProcessor, outbound: OutboxDispatcher, worker: str, *, limit: int = 1000) -> list[str]:
+    """Processa até esvaziar (ou atingir o limite), para demonstração e testes."""
+    results: list[str] = []
+    for _ in range(limit):
+        step = inbound.process_one(worker) or outbound.dispatch_one(worker)
+        if step is None:
+            break
+        results.append(step)
+    return results

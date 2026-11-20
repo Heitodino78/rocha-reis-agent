@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-config --strict-markers"
+filterwarnings = ["error"]

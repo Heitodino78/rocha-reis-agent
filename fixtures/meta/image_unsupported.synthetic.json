@@ -1,0 +1,32 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000002",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550000000",
+              "phone_number_id": "100000000000001"
+            },
+            "messages": [
+              {
+                "from": "5511900000002",
+                "id": "wamid.SINTETICO.0006",
+                "timestamp": "NOW",
+                "type": "image",
+                "image": {
+                  "id": "midia-sintetica",
+                  "mime_type": "image/jpeg"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

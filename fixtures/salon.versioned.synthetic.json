@@ -1,0 +1,177 @@
+{
+  "schema_version": 2,
+  "scope": "SYNTHETIC",
+  "revisions": [
+    {
+      "id": "identity",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "identity",
+        "text": "Salão Exemplo — DADOS FICTÍCIOS"
+      }
+    },
+    {
+      "id": "location",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "location",
+        "text": "Rua de Teste, 123 — endereço fictício"
+      }
+    },
+    {
+      "id": "hours",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "hours",
+        "text": "Segunda a sexta, 09h às 18h — horário fictício"
+      }
+    },
+    {
+      "id": "service:corte",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "service",
+        "service": {
+          "id": "corte",
+          "name": "Corte de teste",
+          "aliases": [
+            "corte",
+            "corte de cabelo"
+          ],
+          "description": "Serviço fictício para validar o simulador.",
+          "price": null,
+          "price_note": null
+        }
+      }
+    },
+    {
+      "id": "price:corte",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "price",
+        "service_id": "corte",
+        "amount": "45.00",
+        "note": "Valor fictício, exclusivo desta demonstração."
+      }
+    },
+    {
+      "id": "service:escova",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "service",
+        "service": {
+          "id": "escova",
+          "name": "Escova de teste",
+          "aliases": [
+            "escova"
+          ],
+          "description": "Serviço fictício sem preço cadastrado.",
+          "price": null,
+          "price_note": null
+        }
+      }
+    },
+    {
+      "id": "professionals",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "professionals",
+        "items": [
+          "Profissional de Teste A — pessoa fictícia"
+        ]
+      }
+    },
+    {
+      "id": "policy",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "policy",
+        "items": [
+          "Para dúvidas sobre políticas reais, consulte a equipe responsável."
+        ]
+      }
+    },
+    {
+      "id": "booksy",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "booksy",
+        "url": "https://example.invalid/booksy-sintetico"
+      }
+    },
+    {
+      "id": "faq:0",
+      "version": 1,
+      "replaces": null,
+      "scope": "SYNTHETIC",
+      "status": "APPROVED",
+      "source": "Fixture sintética v1; adaptação local para compatibilidade",
+      "updated_at": "2026-11-19T00:00:00Z",
+      "reviewed_by": "revisão fictícia da fixture; não é aprovação do salão",
+      "data": {
+        "kind": "faq",
+        "faq": {
+          "questions": [
+            "Preciso levar algo para o teste?",
+            "O que levar para o teste?"
+          ],
+          "answer": "Nesta demonstração fictícia, nenhum item é necessário."
+        }
+      }
+    }
+  ]
+}

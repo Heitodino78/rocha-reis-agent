@@ -1,0 +1,6 @@
+/start cliente-a
+/send servico Informações sobre corte
+/send humano Quero um humano
+/state
+/history
+/quit

@@ -1,0 +1,29 @@
+/start cliente-a
+/send a1 Olá!
+/send a2 Quero informações sobre corte.
+/send a3 E quanto custa?
+/send a4 Quero agendar um corte para sábado.
+/start cliente-b
+/send b1 E quanto custa?
+/use cliente-a
+/send a5 Quero falar com uma pessoa.
+/state
+/send a6 Quanto custa?
+/operator assume
+/operator reply Esta é uma resposta humana fictícia, registrada apenas no simulador.
+/send a7 Olá, você está aí?
+/operator resolve
+/send a8 Pode retomar?
+/operator resume
+/send a9 E quanto custa?
+/send a9 E quanto custa?
+/state
+/audit
+/use cliente-b
+/send b2 Vocês fazem escova?
+/send b3 E quanto custa?
+/history
+/close
+/reset CONFIRM_SYNTHETIC_RESET
+/state
+/quit

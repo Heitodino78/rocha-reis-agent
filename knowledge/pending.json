@@ -1,0 +1,15 @@
+{
+  "notice": "Pendências sem valores factuais; não são conhecimento autorizado para respostas.",
+  "pending_categories": [
+    "identity",
+    "location",
+    "hours",
+    "service",
+    "price",
+    "professionals",
+    "policy",
+    "cancellation",
+    "faq",
+    "booksy"
+  ]
+}
