@@ -2,6 +2,49 @@
 
 > **Regra:** campos em branco são desconhecidos, não devem ser preenchidos por suposição. Não usar dados sintéticos como se fossem reais.
 
+## Prioridades (Fase 11) — nada abaixo foi recebido
+
+Coleta pelo formulário [`COLETA_DADOS_OFICIAIS.md`](COLETA_DADOS_OFICIAIS.md) (o salão não
+edita arquivos técnicos). Cada item só vale depois de aprovado no painel por quem o salão
+indicar. As seções detalhadas mais abaixo continuam válidas.
+
+### 1. Obrigatórios para o funcionamento básico
+
+- [ ] Nome comercial e identificação do salão.
+- [ ] Endereço completo e referências.
+- [ ] Horário de funcionamento, horários especiais e feriados.
+- [ ] Link **oficial** do Booksy.
+- [ ] Serviços efetivamente oferecidos (nomes e apelidos usados pelos clientes).
+- [ ] Regras básicas de atendimento (o que sempre vai para uma pessoa; horário com atendente).
+- [ ] Responsável pelas aprovações no painel (e substituto).
+
+### 2. Importantes para respostas comerciais completas
+
+- [ ] Preços (fixos ou "a partir de" + condição) — nunca estimados.
+- [ ] Variações de preço e casos que exigem avaliação presencial.
+- [ ] Formas de pagamento e parcelamento.
+- [ ] Profissionais que podem ser divulgados.
+- [ ] Durações aprovadas para divulgar (Fase 12: campo próprio — valor aproximado ou faixa).
+- [ ] Categorias de serviço e quais profissionais realizam cada serviço (Fase 12: cadastro estruturado).
+- [ ] Políticas: cancelamento, atrasos, remarcação, encaixe, reclamações.
+- [ ] Promoções e pacotes, com datas de validade.
+
+### 3. Decisões operacionais e de segurança (responsável pelo salão / pelos dados)
+
+Opções, vantagens, riscos e recomendação de cada uma em [`DECISOES_PENDENTES_SALAO.md`](DECISOES_PENDENTES_SALAO.md).
+
+- [ ] Papéis dos funcionários (quem é administrador, quem atende).
+- [ ] Encaminhamento humano: quem assume, transfere e retoma a automação; horários.
+- [ ] Contato que pediu exclusão e volta a escrever (opções em `STATUS_FASE_11.md` §E).
+- [ ] Retenção de conversas e da auditoria (com apoio jurídico).
+- [ ] Backups: frequência, retenção, local, responsável, custódia da chave, teste de restauração.
+- [ ] Gestão de chaves e segredos em produção.
+- [ ] Tempo para considerar um atendimento urgente.
+- [ ] Notificações da equipe (só no painel ou também fora dele).
+- [ ] Política para assuntos de saúde (hoje: sempre encaminhar para pessoa, sem orientar).
+- [ ] RPO/RTO (perda de dados e tempo de parada aceitáveis) — propostas iniciais em `SEGURANCA_ARMAZENAMENTO.md` §5, não acordadas.
+- [ ] Hospedagem: escolha entre as opções de `ARQUITETURA_PRE_PRODUCAO.md` §3 após cotação.
+
 ## Dados do salão (solicitar com aprovação)
 
 - [ ] Link **oficial e exato** do perfil Booksy do Salão Rocha Reis.
@@ -39,7 +82,7 @@
 - [ ] Comportamento desejado para áudio/imagem/outros tipos (hoje: registrados sem resposta).
 - [ ] Política operacional para envios UNKNOWN/FAILED (quem verifica, em quanto tempo).
 - [ ] Limites e retenção para clientes reais: nº de conversas ativas, horas até arquivar, dias até anonimizar (Fase 5 removeu o bloqueio permanente; valores atuais são sintéticos).
-- [ ] Decisão do controlador: cliente cujos dados foram excluídos a pedido (`retire`) pode voltar a conversar? Hoje o identificador permanece bloqueado.
+- [ ] Decisão do controlador: cliente cujos dados foram excluídos a pedido (`retire`) pode voltar a conversar? *(Fase 10: padrão continua "bloquear", agora visível à administração e reversível; a opção "permitir nova conversa" existe, mas **não foi escolhida por ninguém**.)*
 - [ ] Prazo de guarda das chaves de idempotência (hoje mantidas indefinidamente, sem conteúdo) e plano de backup/restauração/cifragem.
 - [ ] Modelo de autenticação/autorização dos operadores para a futura interface (hoje só `operador-local` simulado).
 - [ ] Validação real dos códigos de erro da Graph API e da troca da trava `GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED`.
@@ -58,7 +101,10 @@
 - [ ] Atendentes devem ver conversas automáticas? Podem retomar a automação? (hoje: não e não).
 - [ ] Como avisar a equipe de um novo pedido de atendimento (som, push, e-mail) e em quais horários.
 - [ ] Retenção da auditoria do painel e de quem pode consultá-la.
-- [ ] Validação de usabilidade com funcionários reais (sem dados reais de clientes).
+- [ ] Validação de usabilidade com funcionários reais (sem dados reais de clientes). *(Fase 10: manual `MANUAL_PAINEL.md` e demonstração isolada prontos para essa sessão.)*
+- [ ] Tempo de espera que deve ser tratado como **urgente** (Fase 10: configurável, padrão sintético 15 min).
+- [ ] Onde guardar a chave dos backups, quem pode restaurar, frequência e retenção das cópias.
+- [ ] Se avisos fora do painel (som no celular, push, e-mail) serão necessários — hoje só dentro do painel.
 
 ## Booksy
 

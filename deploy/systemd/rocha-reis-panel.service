@@ -1,0 +1,25 @@
+# REFERÊNCIA (Fase 13) — não instalado. Painel só em 127.0.0.1; o proxy (Caddy) faz o HTTPS na VPN.
+# X-Forwarded-For é aceito SOMENTE do proxy local (127.0.0.1): sem isso todos pareceriam o mesmo IP e o
+# limitador de login por IP bloquearia a equipe inteira; com confiança ampla, o IP poderia ser forjado.
+[Unit]
+Description=Rocha Reis — painel da equipe (somente rede interna)
+After=network-online.target
+
+[Service]
+Type=simple
+User=rocha-reis
+WorkingDirectory=/opt/rocha-reis-agent
+# Configuração e segredos em arquivo 0600 fora do repositório (nunca na linha de comando).
+EnvironmentFile=/etc/rocha-reis/painel.env
+ExecStart=/opt/rocha-reis-agent/.venv/bin/python -m uvicorn rocha_reis_agent.panel.app:create_panel_app --factory --host 127.0.0.1 --port 8000 --no-access-log --timeout-graceful-shutdown 5 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rocha-reis
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

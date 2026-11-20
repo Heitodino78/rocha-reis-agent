@@ -9,6 +9,9 @@ argon2-cffi>=25.1,<26
 # trava de código. Versão fixa: o README do SDK alerta para mudanças entre versões principais.
 # Usa httpx2 (o mesmo cliente HTTP já travado). O SDK Anthropic (Fase 8) foi removido.
 google-genai==3.6.1
+# Fase 10: criptografia AUTENTICADA dos backups (AES-256-GCM + scrypt) com biblioteca
+# consolidada; já era dependência transitiva (google-auth), agora direta na mesma versão travada.
+cryptography>=50,<51
 
 # httpx2: transporte do TestClient do Starlette e cliente do adaptador Graph API
 # (channels/graph_transport.py, desativado). Mesma versão travada; nenhum pacote novo.

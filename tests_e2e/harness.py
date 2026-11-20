@@ -26,9 +26,10 @@ class PanelServer:
         self.directory = directory
         self.port = free_port()
         self.origin = f"http://127.0.0.1:{self.port}"
-        values: dict[str, object] = {"panel_sse_poll_seconds": 0.3, "panel_sse_max_seconds": 60.0}
+        values: dict[str, object] = {"panel_sse_poll_seconds": 0.3, "panel_sse_max_seconds": 60.0,
+                                     "panel_embedded_worker": True}
         values.update(changes)
-        self.settings = panel_settings(directory, panel_origin=self.origin, panel_embedded_worker=True, **values)
+        self.settings = panel_settings(directory, panel_origin=self.origin, **values)
         self.app = create_panel_app(self.settings)
         self.server = uvicorn.Server(uvicorn.Config(self.app, host="127.0.0.1", port=self.port, log_level="warning",
                                                     access_log=False, lifespan="on"))

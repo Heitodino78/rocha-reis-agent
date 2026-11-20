@@ -15,11 +15,12 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from rocha_reis_agent.domain.contracts import Detection, StorageError
+from rocha_reis_agent.domain.contracts import Detection, StorageError, normalize_for_matching
 from rocha_reis_agent.intents import RuleIntentDetector
-from rocha_reis_agent.knowledge import FAQ, KnowledgeBase, Service
+from rocha_reis_agent.knowledge import FAQ, Category, Duration, KnowledgeBase, Professional, Service
 from rocha_reis_agent.knowledge_catalog import (
-    Approval, BooksyFact, FAQFact, KnowledgeScope, ListFact, PriceFact, ServiceFact, TextFact,
+    Approval, BooksyFact, CategoryFact, FAQFact, KnowledgeScope, ListFact, PriceFact, ProfessionalFact, ServiceFact,
+    TextFact,
 )
 from rocha_reis_agent.knowledge_projection import authorize_knowledge
 from rocha_reis_agent.panel.security import PanelError
@@ -28,12 +29,15 @@ from rocha_reis_agent.persistence.sqlite_knowledge import KnowledgeConflict, SQL
 from rocha_reis_agent.responses import ResponseGenerator
 
 SINGLETONS = ("identity", "location", "hours", "professionals", "policy", "cancellation", "booksy")
-KINDS = (*SINGLETONS, "service", "price", "faq")
+KINDS = (*SINGLETONS, "category", "professional", "service", "price", "faq")
+PRICINGS = {"fixed": "Preço fixo", "starting": "A partir de", "range": "Faixa de preço",
+            "on_evaluation": "Mediante avaliação presencial"}
 KEY = re.compile(r"[a-z][a-z0-9_-]{0,63}")
 LABELS = {
     "identity": "Identidade do salão", "location": "Endereço", "hours": "Horário de funcionamento",
     "service": "Serviço", "price": "Preço", "professionals": "Profissionais", "policy": "Políticas de atendimento",
     "cancellation": "Política de cancelamento", "faq": "Pergunta frequente", "booksy": "Link Booksy",
+    "category": "Categoria de serviço", "professional": "Profissional (quem realiza serviços)",
 }
 
 
@@ -54,6 +58,36 @@ def _lines(fields: dict[str, Any], name: str) -> tuple[str, ...]:
     return result
 
 
+def _minutes(fields: dict[str, Any], name: str) -> int | None:
+    raw = fields.get(name)
+    raw = raw.strip() if isinstance(raw, str) else ""
+    if not raw:
+        return None
+    if not raw.isdigit():
+        raise PanelError(422, "Duração em minutos inteiros (ex.: 45).")
+    return int(raw)
+
+
+def _flag(fields: dict[str, Any], name: str) -> bool:
+    value = fields.get(name, "true")
+    if value not in ("true", "false", True, False):
+        raise PanelError(422, f"Valor inválido em '{name}'.")
+    return value in ("true", True)
+
+
+def _terms(data: Any) -> tuple[str, set[str]] | None:
+    """Termos que o atendimento usa para reconhecer o registro (nome/apelidos ou perguntas)."""
+    if isinstance(data, CategoryFact):
+        return "category", {normalize_for_matching(data.category.name)}
+    if isinstance(data, ProfessionalFact):
+        return "professional", {normalize_for_matching(data.professional.name)}
+    if isinstance(data, ServiceFact):
+        return "service", {normalize_for_matching(t) for t in (data.service.name, *data.service.aliases)}
+    if isinstance(data, FAQFact):
+        return "faq", {normalize_for_matching(q) for q in data.faq.questions}
+    return None
+
+
 class KnowledgeService:
     def __init__(self, repository: SQLiteKnowledgeRepository, audit: SQLitePanelStore, *,
                  require_distinct_approver: bool = False) -> None:
@@ -66,9 +100,10 @@ class KnowledgeService:
         self._admin(user)
         scope = self.repository.scope()
         if scope is None:
-            raise PanelError(409, "Base de conhecimento não inicializada (admin_cli knowledge-init).")
+            raise PanelError(409, "A base de informações do salão ainda não foi preparada. Peça ao suporte técnico "
+                                 "para inicializá-la (comando knowledge-init).")
         return {"scope": scope.value, "records": self.repository.records(), "pending": self.pending(),
-                "labels": LABELS, "kinds": list(KINDS)}
+                "labels": LABELS, "kinds": list(KINDS), "pricings": PRICINGS}
 
     def pending(self) -> list[dict[str, str]]:
         """Categorias sem dado aprovado em uso — o que ainda precisa ser coletado/aprovado."""
@@ -78,8 +113,54 @@ class KnowledgeService:
                    for kind in ("identity", "location", "hours", "service", "professionals", "policy",
                                 "cancellation", "booksy", "faq") if kind not in kinds]
         missing += [{"kind": "price", "label": LABELS["price"], "detail": f"Sem preço aprovado: {service.name}."}
-                    for service in active.base.services if service.price is None]
+                    for service in active.base.services if service.price is None and service.price_kind is None]
+        categories = {c.id: c for c in active.base.categories}
+        team = {p.id: p for p in active.base.team}
+        for fact in active.facts:
+            if not isinstance(fact.data, ServiceFact):
+                continue
+            service = fact.data.service
+            if service.category_id and not (service.category_id in categories and categories[service.category_id].active):
+                missing.append({"kind": "category", "label": LABELS["category"],
+                                "detail": f"{service.name}: categoria '{service.category_id}' inativa ou não aprovada (não é exibida)."})
+            for member in service.professional_ids:
+                if not (member in team and team[member].active):
+                    missing.append({"kind": "professional", "label": LABELS["professional"],
+                                    "detail": f"{service.name}: profissional '{member}' inativo ou não aprovado (não é exibido)."})
+        seen: dict[tuple[str, str], str] = {}
+        for fact in active.facts:
+            found = _terms(fact.data)
+            for term in (found[1] if found else ()):
+                other = seen.setdefault((found[0], term), fact.id)  # type: ignore[index]
+                if other != fact.id:
+                    missing.append({"kind": found[0], "label": LABELS[found[0]],  # type: ignore[index]
+                                    "detail": f"Conflito: '{term}' aparece em {other} e {fact.id}."})
         return missing
+
+    def _unresolved(self, data: Any) -> str | None:
+        """Serviço só é aprovado com categoria e profissionais APROVADOS e ATIVOS."""
+        if not isinstance(data, ServiceFact):
+            return None
+        base = authorize_knowledge(self.repository.get()).base
+        service = data.service
+        if service.category_id and not any(c.id == service.category_id and c.active for c in base.categories):
+            return f"a categoria '{service.category_id}' não está aprovada e ativa"
+        active = {p.id for p in base.team if p.active}
+        missing = [p for p in service.professional_ids if p not in active]
+        if missing:
+            return f"profissional não aprovado ou inativo: {', '.join(missing)}"
+        return None
+
+    def _conflict(self, fact_id: str, data: Any) -> str | None:
+        """Nome/apelido de serviço ou pergunta frequente já usados por OUTRO registro aprovado."""
+        mine = _terms(data)
+        if mine is None:
+            return None
+        for fact in authorize_knowledge(self.repository.get()).facts:
+            other = _terms(fact.data)
+            if fact.id != fact_id and other and other[0] == mine[0] and mine[1] & other[1]:
+                return f"'{sorted(mine[1] & other[1])[0]}' já é usado por {fact.id}"
+        return None
 
     def history(self, user: PanelUser, fact_id: str) -> list[dict[str, Any]]:
         self._admin(user)
@@ -110,6 +191,12 @@ class KnowledgeService:
         if self.require_distinct_approver and self.repository.author_of(fact_id, latest.version) == user.id:
             self.audit.audit(user.id, "knowledge_approved", "knowledge", fact_id, "denied")
             raise PanelError(403, "A aprovação exige um administrador diferente de quem escreveu o rascunho.")
+        conflict = self._conflict(fact_id, latest.data) or self._unresolved(latest.data)
+        if conflict:
+            # Dois registros respondendo ao mesmo termo deixariam a resposta ambígua.
+            self.audit.audit(user.id, "knowledge_approved", "knowledge", fact_id, "denied")
+            prefix = "Pendência" if conflict.startswith(("a categoria", "profissional")) else "Conflito"
+            raise PanelError(409, f"{prefix}: {conflict}. Ajuste o rascunho ou resolva o outro registro antes.")
         revision = self._append(user, "knowledge_approved", fact_id=fact_id, expected=latest.version,
                                 status=Approval.APPROVED, data=latest.data, source=latest.source,
                                 reviewed_by=f"{user.display_name} (painel)")
@@ -134,7 +221,7 @@ class KnowledgeService:
             raise PanelError(422, "Escreva uma pergunta de até 500 caracteres.")
         knowledge = authorize_knowledge(self.repository.get())
         detection: Detection = RuleIntentDetector().detect(question, knowledge.base)
-        return {"intents": [i.value for i in detection.intents],
+        return {"intents": [i.value for i in detection.intents], "simulated": True,
                 "reply": ResponseGenerator().render(detection, knowledge.base),
                 "fact_references": [ref.key for ref in knowledge.references_for(detection)]}
 
@@ -181,21 +268,59 @@ class KnowledgeService:
             slug = key.strip().lower() if isinstance(key, str) else ""
             if KEY.fullmatch(slug) is None:
                 raise PanelError(422, "Identificador inválido: letras minúsculas, números, hífen ou sublinhado.")
+            if kind == "category":
+                return f"category:{slug}", CategoryFact(category=Category(
+                    id=slug, name=_text(fields, "name"), active=_flag(fields, "active")))  # type: ignore[arg-type]
+            if kind == "professional":
+                return f"professional:{slug}", ProfessionalFact(professional=Professional(
+                    id=slug, name=_text(fields, "name"), active=_flag(fields, "active")))  # type: ignore[arg-type]
             if kind == "service":
                 aliases = tuple(a.strip() for a in (fields.get("aliases") or "").split(",") if a.strip())
+                category = (fields.get("category") or "").strip() or None
+                if category and self.repository.latest(f"category:{category}") is None:
+                    raise PanelError(422, "Categoria inexistente: cadastre a categoria antes.")
+                team = tuple(dict.fromkeys(p.strip() for p in (fields.get("professionals") or "").split(",") if p.strip()))
+                unknown = [p for p in team if self.repository.latest(f"professional:{p}") is None]
+                if unknown:
+                    raise PanelError(422, f"Profissional inexistente: {', '.join(unknown)}.")
+                low, high = _minutes(fields, "duration_min"), _minutes(fields, "duration_max")
+                if high is not None and low is None:
+                    raise PanelError(422, "Informe a duração mínima (ou só ela, para duração aproximada).")
+                try:
+                    duration = Duration(min_minutes=low, max_minutes=high) if low is not None else None
+                except ValidationError:
+                    raise PanelError(422, "Duração inválida: use de 5 a 720 minutos; o máximo deve ser maior "
+                                          "que o mínimo.") from None
                 service = Service(id=slug, name=_text(fields, "name"), aliases=aliases,  # type: ignore[arg-type]
-                                  description=_text(fields, "description", required=False))
+                                  description=_text(fields, "description", required=False),
+                                  category_id=category, duration=duration, professional_ids=team)
                 return f"service:{slug}", ServiceFact(service=service)
             if kind == "price":
                 if self.repository.latest(f"service:{slug}") is None:
                     raise PanelError(422, "Cadastre o serviço antes do preço.")
-                raw = _text(fields, "amount").replace("R$", "").replace(" ", "").replace(",", ".")  # type: ignore[union-attr]
+                pricing = fields.get("pricing") or "fixed"
+                if pricing not in PRICINGS:
+                    raise PanelError(422, "Tipo de preço inválido.")
+
+                def money(name: str, required: bool) -> Decimal | None:
+                    raw = _text(fields, name, required=required)
+                    if raw is None:
+                        return None
+                    try:
+                        return Decimal(raw.replace("R$", "").replace(" ", "").replace(",", "."))
+                    except InvalidOperation:
+                        raise PanelError(422, "Valor inválido.") from None
+
+                evaluation = pricing == "on_evaluation"
                 try:
-                    amount = Decimal(raw)
-                except InvalidOperation:
-                    raise PanelError(422, "Valor inválido.") from None
-                return f"price:{slug}", PriceFact(service_id=slug, amount=amount,
-                                                  note=_text(fields, "note", required=False))
+                    fact = PriceFact(service_id=slug, pricing=pricing,  # type: ignore[arg-type]
+                                     amount=None if evaluation else money("amount", True),
+                                     amount_max=money("amount_max", True) if pricing == "range" else None,
+                                     note=_text(fields, "note", required=False))
+                except ValidationError:
+                    raise PanelError(422, "Preço inconsistente: na faixa o máximo deve ser maior que o mínimo; "
+                                          "valores de até 999.999,99.") from None
+                return f"price:{slug}", fact
             return f"faq:{slug}", FAQFact(faq=FAQ(questions=_lines(fields, "questions"), answer=_text(fields, "answer")))  # type: ignore[arg-type]
         except ValidationError:
             raise PanelError(422, "Dados inválidos para este tipo de informação (tamanho ou formato).") from None

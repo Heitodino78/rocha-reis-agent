@@ -107,7 +107,9 @@ def test_full_operator_flow_with_live_updates(browser, server):
     admin.locator("#confirm-ok").click()
     expect(admin.locator("#detail-state")).to_have_text("Automático")
     expect(admin.locator("#detail-automation")).to_have_text("· Automação ativa")
-    assert ana.errors == [] and admin.errors == []
+    # Após a retomada a conversa sai do escopo da Ana; se a atualização ao vivo dela chegar antes do
+    # fim do teste, o navegador registra o 404 ESPERADO ("conversa não está mais disponível").
+    assert [e for e in ana.errors if "404" not in e] == [] and admin.errors == []
 
 
 def test_transfer_moves_conversation_between_browsers(browser, server):

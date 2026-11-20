@@ -143,6 +143,65 @@ Fases 8/9A passa a ser histórica. Conflito de numeração registrado: a "9B" pr
 com Gemini passa a ser proposta como 9C e continua bloqueada. Nenhuma chamada externa,
 nenhum dado real. Evidências em `STATUS_FASE_9.md` (parte B).
 
+## Fase 10 — Consolidação operacional offline (executada localmente em 20/11/2026)
+
+Painel reorganizado (visão geral com "precisa de atenção", automáticas, com outros
+funcionários, sistema), avisos internos sem conteúdo e sem duplicatas, urgência
+configurável, histórico paginado, recuperação de sessão com rascunho, configurações
+tipadas e auditadas, política configurável (padrão: bloquear com aviso) para contato
+excluído que volta a escrever, backup criptografado/verificado e restauração isolada,
+demonstração isolada e iniciador local. Tudo com dados fictícios, transporte e IA
+simulados, travas reais fechadas. Evidências em `STATUS_FASE_10.md`; manual da equipe em
+`MANUAL_PAINEL.md`. **Não validado com a equipe do salão; nada implantado.**
+Próximas etapas (não iniciadas, dependem de autorização): validação do painel com a
+equipe; coleta e aprovação dos dados oficiais; decisões do controlador (exclusão e
+retenção); infraestrutura de produção (HTTPS, segredos, volume cifrado, backup agendado).
+
+## Fase 11 — Finalização funcional e preparação da validação (11A executada localmente em 20/11/2026)
+
+**11A concluída localmente; 11B aguardando validação pelo salão.** Auditoria de ponta a ponta
+com 10 cenários, correções (conflito de conhecimento, erros compreensíveis, contraste, textos
+contextuais, ajuda no painel), comandos de demonstração para a sessão de validação,
+formulário de coleta de dados oficiais, plano UAT e análise de pré-produção. Evidências em
+`STATUS_FASE_11.md`. Próximo passo depende do salão: sessão UAT (`PLANO_VALIDACAO_SALAO.md`)
+e entrega do formulário (`COLETA_DADOS_OFICIAIS.md`). Gemini e Meta reais continuam para
+etapas finais, com autorização expressa.
+
+## Fase 12 — Preparação de pré-produção (executada localmente em 20/11/2026)
+
+Dados estruturados do salão (categorias, duração estimada, profissionais, tipos de preço) no
+fluxo de aprovação existente; perfis de ambiente gravados no banco; pré-produção **sintética**
+com volume cifrado verificado; quarta trava (dados reais) fechada; backup sem temporários em
+claro, retenção configurável; métricas locais; análise de hospedagem e plano de implantação.
+Evidências em `STATUS_FASE_12.md`, `ARQUITETURA_PRE_PRODUCAO.md` e
+`SEGURANCA_ARMAZENAMENTO.md`. **Nada implantado; Fase 11B continua pendente.**
+
+## Fase 13 — Segurança avançada e preparação final de implantação (executada localmente em 20/11/2026)
+
+Segundo fator TOTP (cadastro, login em duas etapas, recuperação, redefinição auditada,
+obrigatório em pré-produção), rotação de sessão, HSTS e confiança explícita em proxies, HTTPS
+local com certificado de desenvolvimento, configurações de referência (Caddy/systemd), backup
+automático com cópia secundária simulada, teste de restauração, ensaio de desastre e rotação da
+chave do segundo fator. Evidências em `STATUS_FASE_13.md`. **Nada implantado; 11B pendente.**
+
+## Fase 14 — Consolidação e RC1 Offline (executada localmente em 20/11/2026)
+
+Fases 10–13 revisadas em conjunto; versão candidata **Rocha Reis Agent — RC1 Offline (0.14.0rc1)**
+identificada (`ops versao`), **não versionada no Git**; demonstração corrigida e roteiro guiado
+automático (`ops roteiro`, 13 jornadas); materiais da 11B (apresentação, treinamento, cenários
+estruturados, registro de problemas, checklist da sessão) e decisões pendentes organizadas.
+Evidências em `STATUS_FASE_14.md` e `RELEASE_CANDIDATE_RC1.md`. **Próximo passo depende do salão:
+sessão 11B e formulário de dados.**
+
+## Fase 15 — Preparação da homologação com o salão (executada localmente em 20/11/2026)
+
+RC1 congelada de forma verificável (`ops congelar-rc` / `ops verificar-rc`, revisão `0.14.0rc1.post1`);
+iniciador anuncia "PRONTO" só com o servidor no ar; planilha de registro da 11B gerada a partir do
+plano e conferida sem aprovar nada (`ops registro-11b` / `ops conferir-registro`); cenários AT-09 e
+AT-16 cobrindo recuperação de erro e sessão encerrada; critérios de aceitação propostos para o
+salão confirmar; pacote de homologação para a agência. Evidências em `STATUS_FASE_15.md` e
+`RELATORIO_PRONTIDAO_RC1.md`. **A 11B continua pendente até a participação real da equipe.**
+
 ## Atendimento humano operacional — planejamento original (histórico)
 
 **Entregas:** integração com inbox/processo humano efetivamente disponível; transições de estado autorizadas e auditáveis; notificação aos responsáveis; recuperação após falha.

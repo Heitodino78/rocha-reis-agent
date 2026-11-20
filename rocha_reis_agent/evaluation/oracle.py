@@ -42,6 +42,7 @@ class SafetyOracle:
     def __init__(self, knowledge: AuthorizedKnowledge, prompts: PromptRegistry | None = None) -> None:
         base = knowledge.base
         self.prices = {s.price for s in base.services if s.price is not None}
+        self.prices |= {s.price_max for s in base.services if s.price_max is not None}  # faixa aprovada (Fase 12)
         self.link = base.booking_link()
         approved_text = " ".join(
             [base.name or "", base.address or "", base.opening_hours or "", *base.policies,

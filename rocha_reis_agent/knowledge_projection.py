@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from rocha_reis_agent.domain.contracts import Detection, Intent, SimulationError
 from rocha_reis_agent.knowledge import KnowledgeBase
 from rocha_reis_agent.knowledge_catalog import (
-    Approval, BooksyFact, FAQFact, FactReference, FactRevision, KnowledgeCatalog,
-    KnowledgeScope, ListFact, PriceFact, ServiceFact, TextFact,
+    Approval, BooksyFact, CategoryFact, FAQFact, FactReference, FactRevision, KnowledgeCatalog,
+    KnowledgeScope, ListFact, PriceFact, ProfessionalFact, ServiceFact, TextFact,
 )
 
 
@@ -41,6 +41,19 @@ class AuthorizedKnowledge:
                 if detection.faq_index is None or fact.data.faq != self.base.faqs[detection.faq_index]:
                     continue
             references.append(fact.reference)
+        # Fase 12: categoria e profissionais citados junto do serviço também são proveniência.
+        mentioned = [s for s in self.base.services if s.id in detection.service_ids]
+        wanted: set[tuple[str, str]] = set()
+        if kinds & {"service", "professionals"}:
+            wanted |= {("category", s.category_id) for s in mentioned if s.category_id}
+            wanted |= {("professional", p) for s in mentioned for p in s.professional_ids}
+        if "professionals" in kinds and not mentioned:
+            wanted |= {("professional", p.id) for p in self.base.team if p.active}
+        for fact in self.facts:
+            if isinstance(fact.data, CategoryFact) and ("category", fact.data.category.id) in wanted:
+                references.append(fact.reference)
+            elif isinstance(fact.data, ProfessionalFact) and ("professional", fact.data.professional.id) in wanted:
+                references.append(fact.reference)
         return tuple(references)
 
 
@@ -60,6 +73,8 @@ def project_active_facts(
     prices = {}
     faqs = []
     policies = []
+    categories = []
+    team = []
     for fact in facts:
         data = fact.data
         if isinstance(data, TextFact):
@@ -79,10 +94,33 @@ def project_active_facts(
             faqs.append(data.faq)
         elif isinstance(data, BooksyFact):
             values["booksy_url"] = data.url
-    values["services"] = tuple(
-        service.model_copy(update={"price": prices[key].amount, "price_note": prices[key].note})
-        if key in prices else service for key, service in services.items()
-    )
+        elif isinstance(data, CategoryFact):
+            categories.append(data.category)
+        elif isinstance(data, ProfessionalFact):
+            team.append(data.professional)
+    active_team = {p.id for p in team if p.active}
+    active_categories = {c.id for c in categories if c.active}
+
+    def visible(service):  # type: ignore[no-untyped-def]
+        # Referências a categoria/profissional inativo ou não aprovado não chegam ao atendimento.
+        update: dict[str, object] = {
+            "category_id": service.category_id if service.category_id in active_categories else None,
+            "professional_ids": tuple(p for p in service.professional_ids if p in active_team),
+        }
+        if service.id in prices:
+            price = prices[service.id]
+            update.update(price=price.amount, price_note=price.note, price_kind=price.pricing,
+                          price_max=price.amount_max)
+        return service.model_copy(update=update)
+
+    values["services"] = tuple(visible(service) for service in services.values())
+    values["categories"] = tuple(categories)
+    values["team"] = tuple(team)
+    # Nomes de profissionais ATIVOS também entram na lista simples (usada pela validação da IA
+    # para impedir que o modelo cite pessoas, e pelo oráculo de avaliação).
+    names = list(values.get("professionals", ()))  # type: ignore[arg-type]
+    names += [p.name for p in team if p.active and p.name not in names]
+    values["professionals"] = tuple(names)
     values["policies"] = tuple(policies)
     values["faqs"] = tuple(faqs)
     return AuthorizedKnowledge(KnowledgeBase.model_validate(values), facts)

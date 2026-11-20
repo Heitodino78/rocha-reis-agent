@@ -14,6 +14,9 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -66,6 +69,13 @@ def create_panel_app(settings: Settings | None = None) -> FastAPI:
     configured = settings if settings is not None else load_settings()
     if not configured.panel_enabled:
         raise ConfigurationError("Painel desabilitado. Defina PANEL_ENABLED=true (somente local).")
+    mfa_cipher = None
+    if configured.panel_mfa_key_file is not None:
+        from rocha_reis_agent.panel.mfa import MfaCipher, MfaKeyError
+        try:
+            mfa_cipher = MfaCipher.from_file(configured.panel_mfa_key_file)
+        except MfaKeyError as error:
+            raise ConfigurationError(str(error)) from None
     repository = configured_repository(configured)
     channel = SQLiteChannelStore(repository)
     store = SQLitePanelStore(repository)
@@ -109,6 +119,9 @@ def create_panel_app(settings: Settings | None = None) -> FastAPI:
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        if configured.panel_origin.startswith("https://"):
+            # Fase 13: navegador só volta por HTTPS (sem includeSubDomains/preload: domínio ainda não definido).
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -118,6 +131,20 @@ def create_panel_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(PanelError)
     async def panel_error(request: Request, error: PanelError) -> JSONResponse:
         return JSONResponse(status_code=error.status, content={"detail": error.message})
+
+    # Fase 11: erros do próprio framework também em português e sem ecoar a entrada.
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": "Dados da requisição inválidos."})
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, error: StarletteHTTPException) -> Response:
+        if not request.url.path.startswith("/api/"):
+            return await http_exception_handler(request, error)
+        messages = {404: "Recurso não encontrado.", 405: "Operação não permitida."}
+        return JSONResponse(status_code=error.status_code,
+                            content={"detail": messages.get(error.status_code, "Não foi possível concluir a ação.")},
+                            headers=getattr(error, "headers", None))
 
     app.include_router(health_router)
     knowledge_repository = configured_knowledge(configured, repository)
@@ -129,7 +156,8 @@ def create_panel_app(settings: Settings | None = None) -> FastAPI:
     from rocha_reis_agent.persistence.sqlite_ai import SQLiteUsageLedger
     app.state.knowledge_service = knowledge
     app.include_router(build_panel_router(PanelContext(configured, store, service, channel, knowledge,
-                                                       SQLiteUsageLedger(repository))))
+                                                       SQLiteUsageLedger(repository), mfa_cipher)))
+    app.state.mfa_cipher = mfa_cipher
     app.mount("/panel", StaticFiles(directory=STATIC, html=True), name="panel")
 
     @app.get("/", include_in_schema=False)

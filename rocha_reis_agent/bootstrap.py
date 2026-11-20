@@ -43,6 +43,8 @@ def configured_repository(settings: Settings) -> ConversationRepository:
         audit_days=settings.storage_audit_days,
         audit_limit=settings.storage_audit_limit,
         archive_idle_hours=settings.storage_archive_idle_hours,
+        environment=settings.environment_profile,
+        require_encrypted_volume=settings.requires_encrypted_volume,
     )
 
 

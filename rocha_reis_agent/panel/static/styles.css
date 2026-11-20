@@ -10,6 +10,7 @@
   --accent-ink: #ffffff;
   --accent-soft: #f3e7ee;
   --gold: #a57f3f;
+  --gold-text: #7a5a22; /* Fase 11: dourado legível para TEXTO (contraste AA ≥ 4,5:1 em fundo claro) */
   --waiting: #9a5b00;
   --waiting-bg: #fdf1dc;
   --active: #6b2d4f;
@@ -34,7 +35,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #18141a; --surface: #211b23; --surface-2: #1c171e; --ink: #f1e9ef; --muted: #b3a6ae; --line: #352c37;
-    --accent: #d39bbb; --accent-ink: #261a22; --accent-soft: #3a2633; --gold: #d2b07a;
+    --accent: #d39bbb; --accent-ink: #261a22; --accent-soft: #3a2633; --gold: #d2b07a; --gold-text: #d2b07a;
     --waiting: #f0b65a; --waiting-bg: #3b2c14; --active: #e3a9c8; --active-bg: #3a2633;
     --auto: #7fcfc4; --auto-bg: #17332f; --done: #c4bcc8; --done-bg: #2b262e;
     --danger: #ff8f84; --danger-bg: #3d1d1a; --focus: #8ab4ff;
@@ -87,7 +88,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .brand { display: inline-flex; align-items: center; gap: .55rem; font-family: var(--serif); font-weight: 600; font-size: 1.1rem; }
 
 /* Estrutura */
-.shell { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: 1fr; height: 100vh; height: 100dvh; }
+.shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: 1fr; height: 100vh; height: 100dvh; }
 .topbar { display: none; }
 .sidebar { grid-row: 1; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line); padding: 18px 14px; }
 .sidebar-head { padding: 4px 8px 18px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
@@ -100,7 +101,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .count:empty { display: none; }
 .sidebar-foot { border-top: 1px solid var(--line); padding-top: 12px; }
 .user-chip { display: flex; justify-content: space-between; gap: .5rem; margin: 0; font-weight: 600; }
-.role-tag { font-size: .75rem; color: var(--gold); text-transform: uppercase; letter-spacing: .06em; }
+.role-tag { font-size: .75rem; color: var(--gold-text); text-transform: uppercase; letter-spacing: .06em; }
 .main { overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
 .page { overflow: auto; padding: 28px clamp(16px, 3vw, 40px); }
 .connection { font-size: .8rem; padding: 4px 10px; border-radius: 999px; background: var(--done-bg); color: var(--done); }
@@ -166,7 +167,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .card-label { margin: 0; color: var(--muted); font-size: .9rem; }
 .panel-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin: 1rem 0; max-width: 720px; }
 .form-grid .btn { margin-top: 1rem; }
-.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+/* position: relative — rótulos .visually-hidden (absolutos) nos cabeçalhos ficam presos ao quadro
+   rolável; sem isso alargavam a página inteira no celular (Fase 12). */
+.table-wrap { position: relative; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .data-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .data-table th, .data-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .data-table th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
@@ -181,7 +184,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 
 /* Tablet */
 @media (max-width: 1100px) {
-  .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  /* minmax(0,1fr): tabelas largas rolam dentro do próprio quadro em vez de alargar a página (Fase 12). */
+  .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .topbar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
   .topbar .brand { flex: 1; }
   .sidebar { position: fixed; inset: 0 auto 0 0; width: min(300px, 85vw); z-index: 40; transform: translateX(-105%); transition: transform .2s; box-shadow: var(--shadow); }
@@ -216,3 +220,65 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .plain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .preview-box { background: var(--bg, transparent); border: 1px dashed var(--line); border-radius: var(--radius); padding: 10px; min-height: 1.5em; }
 [data-fields][hidden] { display: none; }
+
+/* Fase 10 — avisos, urgência, atenção, sistema */
+.env-banner { margin: 0; padding: 6px 16px; background: var(--waiting-bg); color: var(--waiting); font-size: .82rem; font-weight: 700;
+  text-align: center; letter-spacing: .02em; border-bottom: 1px solid var(--line); }
+.sidebar-status { display: flex; align-items: center; gap: 8px; }
+.icon-btn.notif-toggle { position: relative; border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
+  min-width: 40px; min-height: 40px; cursor: pointer; font-size: 1rem; color: var(--ink); }
+.notif-count { position: absolute; top: -6px; right: -6px; min-width: 20px; padding: 0 5px; border-radius: 999px; background: var(--accent);
+  color: var(--accent-ink); font-size: .72rem; font-weight: 700; line-height: 20px; text-align: center; }
+.notif-count:empty { display: none; }
+.notif-count.critical { background: var(--danger); color: #fff; }
+.notif-panel { position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(380px, calc(100% - 24px)); z-index: 45; display: flex;
+  flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.notif-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.notif-head h2 { margin: 0; }
+.notif-list { list-style: none; margin: 0; padding: 8px; overflow: auto; flex: 1; display: grid; gap: 6px; align-content: start; }
+.notif { width: 100%; text-align: left; font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line);
+  border-left: 4px solid var(--done); border-radius: 10px; padding: 10px 12px; cursor: pointer; display: grid; gap: 2px; }
+.notif.attention { border-left-color: var(--waiting); }
+.notif.critical { border-left-color: var(--danger); }
+.notif.warning { border-left-color: var(--gold); }
+.notif.unread-notif .notif-text { font-weight: 700; }
+.notif-prefs { border-top: 1px solid var(--line); padding: 10px 16px 14px; }
+.notif-prefs fieldset { border: 0; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.urgent-badge { background: var(--danger-bg); color: var(--danger); border-radius: 999px; padding: 2px 10px; font-size: .75rem; font-weight: 700; }
+.send-alert { background: var(--danger-bg); color: var(--danger); border-radius: 999px; padding: 2px 10px; font-size: .75rem; font-weight: 700; }
+.wait-time { align-self: center; }
+.conv.urgent { border-left: 4px solid var(--danger); }
+.count.danger { background: var(--danger-bg); color: var(--danger); }
+.attention { margin-bottom: 0; }
+.attention-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px;
+  border-left: 4px solid var(--gold); background: var(--surface-2); margin-bottom: 6px; }
+.attention-item.critical { border-left-color: var(--danger); }
+.attention-item.info { border-left-color: var(--done); }
+.card-link { text-align: left; font: inherit; color: var(--ink); cursor: pointer; display: grid; gap: 2px; }
+.card-link:hover { border-color: var(--accent); }
+.card-link .card-value { font-family: var(--serif); font-size: 2rem; }
+.card-link .card-label { color: var(--muted); font-size: .9rem; }
+.detail-alert { margin: 0; padding: 10px 16px; background: var(--danger-bg); color: var(--danger); font-weight: 600; font-size: .9rem; }
+.messages li.older { list-style: none; display: flex; justify-content: center; }
+.lock-off { color: var(--auto); }
+.lock-on { color: var(--danger); font-weight: 700; }
+@media (max-width: 720px) {
+  .notif-panel { inset: 0; width: 100%; border-radius: 0; }
+  .attention-item { flex-wrap: wrap; }
+}
+/* Avisos nunca bloqueiam cliques (ex.: botão Enviar no celular). */
+.toasts { pointer-events: none; }
+.help ol, .help ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; }
+/* Fase 12 — campos estruturados do conhecimento */
+.inline-fields, .team-fields { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; display: grid; gap: 6px; }
+.inline-fields legend, .team-fields legend { font-weight: 600; padding: 0 4px; }
+#knowledge-team { display: grid; gap: 4px; }
+.dialog { max-height: calc(100dvh - 32px); overflow: auto; overflow-wrap: anywhere; }
+.dialog .row-actions { flex-wrap: wrap; }
+/* Fase 13 — segundo fator */
+.mfa-setup { display: grid; gap: 10px; margin-top: 10px; }
+.mfa-step { display: grid; gap: 8px; }
+.mfa-secret, .mfa-uri { font-size: .95rem; overflow-wrap: anywhere; user-select: all; }
+.recovery-codes { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.recovery-codes li { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; text-align: center; }

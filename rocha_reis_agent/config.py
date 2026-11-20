@@ -26,6 +26,13 @@ class ConfigurationError(RuntimeError):
     """Configuração inválida que impede inicializar a aplicação."""
 
 
+# Fase 12 — trava de DADOS REAIS (pessoais), independente das três acima. Falsa: nenhum perfil,
+# variável ou arquivo libera dados reais. Abri-la exige revisão de código, autorização escrita do
+# responsável pelos dados e os requisitos de docs/SEGURANCA_ARMAZENAMENTO.md §6 cumpridos.
+REAL_DATA_ACTIVATION_AUTHORIZED: Final = False
+PREPROD_DB_SUFFIX = ".preprod.synthetic.sqlite3"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -117,6 +124,22 @@ class Settings(BaseSettings):
     panel_login_max_failures: int = Field(default=5, ge=3, le=20)
     panel_login_window_minutes: int = Field(default=15, ge=1, le=1440)
     panel_page_size: int = Field(default=25, ge=5, le=100)
+    # Fase 10: histórico paginado e rótulo do ambiente (ex.: "DEMONSTRAÇÃO") exibido no painel.
+    # Fase 13 — segundo fator (TOTP). A chave que cifra os segredos TOTP fica FORA do banco e dos
+    # backups (arquivo 0600). Obrigatório em pré-produção. Sem chave, o segundo fator fica indisponível.
+    panel_mfa_required: bool = False
+    panel_mfa_key_file: Path | None = None
+    panel_mfa_issuer: str = Field(default="Rocha Reis (painel)", pattern=r"^[\w À-ÿ().-]{3,40}$")
+    # Proxies reversos confiáveis para X-Forwarded-*: vazio = nenhum (o IP real da conexão é usado).
+    panel_trusted_proxies: str = Field(default="", pattern=r"^[0-9a-fA-F.:/, ]{0,200}$")
+    # Fase 12 — perfil do ambiente gravado no banco (impede abrir o banco de um ambiente em outro)
+    # e classificação dos dados. Ausente = comportamento anterior (sem marcação).
+    environment_profile: Literal["development", "demo", "test", "preproduction"] | None = None
+    data_classification: Literal["synthetic", "real"] = "synthetic"
+    # Exige volume cifrado VERIFICADO (dm-crypt) para o banco; sempre exigido em pré-produção.
+    storage_require_encrypted_volume: bool = False
+    panel_history_page_size: int = Field(default=50, ge=10, le=200)
+    panel_environment_label: str | None = Field(default=None, max_length=40, pattern=r"^[\w À-ÿ.-]{1,40}$")
     panel_sse_poll_seconds: float = Field(default=1.0, ge=0.1, le=10)
     # Stream rotaciona (cliente reconecta com Last-Event-ID): limita conexões presas no desligamento.
     panel_sse_max_seconds: float = Field(default=60.0, ge=1, le=3600)
@@ -176,6 +199,7 @@ class Settings(BaseSettings):
                 raise ValueError("Painel sem HTTPS só é permitido em 127.0.0.1/localhost.")
             if not self.panel_cookie_secure and not loopback:
                 raise ValueError("Cookie sem Secure só é permitido em 127.0.0.1/localhost.")
+        self._environment_rules()
         if self.panel_embedded_worker and (not self.panel_enabled or self.whatsapp_transport != "fake"):
             raise ValueError("Worker embutido do painel só com painel habilitado e transporte fake.")
         if self.whatsapp_transport == "graph":
@@ -191,6 +215,45 @@ class Settings(BaseSettings):
         elif self.whatsapp_access_token is not None:
             raise ValueError("Token de acesso só é aceito com transporte real explicitamente selecionado.")
         return self
+
+
+    def _environment_rules(self) -> None:
+        """Isolamento entre ambientes (Fase 12). Erros sem valores de configuração."""
+        if self.data_classification == "real" and not REAL_DATA_ACTIVATION_AUTHORIZED:
+            raise ValueError("Dados reais bloqueados: trava de código fechada e requisitos de proteção pendentes "
+                             "(docs/SEGURANCA_ARMAZENAMENTO.md).")
+        profile = self.environment_profile
+        path = self.storage_path
+        preprod_db = path is not None and path.name.endswith(PREPROD_DB_SUFFIX)
+        if profile == "preproduction":
+            if (self.app_env != "local" or self.storage_backend != "sqlite" or not preprod_db
+                    or self.knowledge_source != "database" or not self.panel_environment_label):
+                raise ValueError("Pré-produção exige APP_ENV=local, banco *.preprod.synthetic.sqlite3, conhecimento "
+                                 "no banco e rótulo de ambiente.")
+            if self.whatsapp_transport != "fake" or self.ai_provider != "fake" or self.panel_embedded_worker:
+                raise ValueError("Pré-produção desta fase: transporte e IA simulados, sem worker embutido.")
+        elif preprod_db:
+            raise ValueError("Banco de pré-produção só pode ser aberto com o perfil de pré-produção.")
+        if self.panel_mfa_required and self.panel_mfa_key_file is None:
+            raise ValueError("Segundo fator obrigatório exige PANEL_MFA_KEY_FILE.")
+        if self.panel_mfa_key_file is not None and path is not None:
+            key_dir = self.panel_mfa_key_file.absolute().parent
+            if key_dir == path.absolute().parent or path.absolute().parent in key_dir.parents:
+                raise ValueError("A chave do segundo fator não pode ficar junto do banco.")
+        if profile == "preproduction" and self.panel_enabled:
+            # Sem exceção de demonstração: pré-produção sempre com segundo fator e HTTPS.
+            if (not self.panel_mfa_required or not self.panel_cookie_secure
+                    or not self.panel_origin.startswith("https://") or self.panel_session_idle_minutes > 30):
+                raise ValueError("Painel de pré-produção exige segundo fator obrigatório, HTTPS, cookie Secure "
+                                 "e inatividade de no máximo 30 minutos.")
+        if profile == "demo" and (path is None or not path.name.startswith("demo")):
+            raise ValueError("Perfil de demonstração exige banco demo*.synthetic.sqlite3.")
+        if profile == "test" and self.app_env != "test":
+            raise ValueError("Perfil de testes exige APP_ENV=test.")
+
+    @property
+    def requires_encrypted_volume(self) -> bool:
+        return self.storage_require_encrypted_volume or self.environment_profile == "preproduction"
 
 
 def _strong_secret(value: str) -> bool:

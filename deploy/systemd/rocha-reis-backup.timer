@@ -1,0 +1,11 @@
+# REFERÊNCIA (Fase 13) — não instalado. Backup diário às 03:15 (com variação de até 10 min).
+[Unit]
+Description=Rocha Reis — backup diário
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

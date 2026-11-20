@@ -540,6 +540,12 @@ class SQLiteChannelStore:
                 raise StorageError("Envios não estão interrompidos.")
             self.repository._audit(connection, "dispatch_resumed", "channel", "operator", "committed")
 
+    def retired_contact_policy(self) -> str:
+        """Política configurada no painel (panel_settings); ausente = bloquear."""
+        with self.repository.write_transaction() as connection:
+            row = connection.execute("SELECT value FROM panel_settings WHERE key='retired_contact_policy'").fetchone()
+        return "allow_new_conversation" if row and row["value"] == 1 else "block"
+
     def halt_status(self) -> dict[str, str] | None:
         with self.repository.write_transaction() as connection:
             row = connection.execute("SELECT reason,set_by,set_at FROM channel_control WHERE key='dispatch_halt'").fetchone()

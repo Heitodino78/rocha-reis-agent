@@ -1,0 +1,55 @@
+# REFERÊNCIA (Fase 13) — NÃO está em uso. Nada foi publicado; nenhum DNS ou certificado público foi pedido.
+# Substitua os marcadores <...> só na implantação autorizada. Caddy obtém e renova certificados públicos.
+{
+	# Admin API do Caddy só no próprio servidor.
+	admin 127.0.0.1:2019
+	servers {
+		# Confiar em X-Forwarded-* só de proxies conhecidos (nenhum na frente do Caddy).
+		trusted_proxies static private_ranges
+	}
+}
+
+# 1) Endereço PÚBLICO: somente o webhook da Meta. Qualquer outra rota responde 404.
+<webhook.dominio-do-salao>, {
+	@webhook path /webhooks/whatsapp
+	handle @webhook {
+		request_body {
+			max_size 256KB
+		}
+		reverse_proxy 127.0.0.1:8080 {
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 15s
+			}
+		}
+	}
+	handle {
+		respond "Not Found" 404
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+	# Limite de taxa: usar o módulo rate_limit ou o firewall do servidor (não incluído por padrão no Caddy).
+}
+
+# 2) PAINEL: escuta SOMENTE no endereço da VPN da equipe (ex.: WireGuard 10.8.0.1). Nunca na internet.
+https://<painel.interno>:443 {
+	bind <IP-DA-VPN>
+	tls internal
+	reverse_proxy 127.0.0.1:8000 {
+		# SSE (atualização ao vivo): sem buffer e com leitura longa.
+		flush_interval -1
+		transport http {
+			read_timeout 0
+		}
+	}
+	request_body {
+		max_size 64KB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

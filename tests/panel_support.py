@@ -38,7 +38,8 @@ class Panel:
         response = self.client.post("/api/panel/auth/login", json={"login": login, "password": password},
                                     headers={"Origin": ORIGIN})
         if response.status_code == 200:
-            self.csrf = response.json()["csrf_token"]
+            # Fase 13: com segundo fator ativo a 1ª etapa não cria sessão (não há CSRF ainda).
+            self.csrf = response.json().get("csrf_token", "")
         return response
 
     def headers(self) -> dict[str, str]:

@@ -583,7 +583,8 @@ def test_migration_7_to_8_keeps_usage_and_adds_gemini_columns(tmp_path):
                                          prompt_version="v4", outcome="ok", input_tokens=10, output_tokens=5,
                                          reasoning_tokens=7, estimated_cost_micros=1)
     with closing(sqlite3.connect(path)) as connection:
-        assert SCHEMA_VERSION == 8 and connection.execute("PRAGMA user_version").fetchone() == (8,)
+        # 7 → 8 (Gemini) → … até a versão atual (Fase 10: 9); o histórico de consumo é preservado.
+        assert SCHEMA_VERSION >= 8 and connection.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
         rows_ = connection.execute("SELECT provider, model, requested_model, reasoning_tokens FROM ai_usage ORDER BY id").fetchall()
         assert rows_ == [("anthropic", "claude-opus-5-5", None, 0), ("gemini", MODEL + "-001", MODEL, 7)]  # histórico preservado
         assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)

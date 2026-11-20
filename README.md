@@ -398,6 +398,95 @@ Relatório em [`STATUS_FASE_9C.md`](docs/STATUS_FASE_9C.md). **Fase 9C-B: prepar
 não executada** — guarda schema 3, execução em duas etapas e métricas de encaminhamento por
 causa; ver [`STATUS_FASE_9C_B.md`](docs/STATUS_FASE_9C_B.md).
 
+## Consolidação operacional — Fase 10 (somente local, dados fictícios)
+
+Painel com visão geral "precisa de atenção", avisos internos (sem conteúdo, sem
+duplicatas, som opcional), urgência configurável, histórico paginado, recuperação de sessão
+com rascunho e visão de Sistema; backup criptografado com restauração isolada; demonstração
+isolada e iniciador local (sempre `127.0.0.1`).
+
+```sh
+sh iniciar.sh                       # cria a demonstração fictícia na 1ª vez e abre o painel
+PY=/tmp/rocha-reis-agent-venv/bin/python
+$PY -m rocha_reis_agent.ops chave --arquivo ~/.config/rocha-reis-agent/backup.key
+$PY -m rocha_reis_agent.ops backup --banco BANCO.synthetic.sqlite3 --destino ~/rr-backups --chave ~/.config/rocha-reis-agent/backup.key
+$PY -m rocha_reis_agent.ops verificar ~/rr-backups/ARQUIVO.rrbackup --chave ~/.config/rocha-reis-agent/backup.key
+$PY -m rocha_reis_agent.ops restaurar ~/rr-backups/ARQUIVO.rrbackup --para /caminho/novo.synthetic.sqlite3 --chave ...
+$PY -m rocha_reis_agent.ops desempenho --conversas 1000 --mensagens 400
+```
+
+O volume do repositório não guarda permissão de execução: use `sh iniciar.sh`. Os
+**backups são cifrados; o banco ativo não é**. Relatório em
+[`STATUS_FASE_10.md`](docs/STATUS_FASE_10.md); manual da equipe em
+[`MANUAL_PAINEL.md`](docs/MANUAL_PAINEL.md).
+
+## Finalização funcional — Fase 11A (11B aguardando o salão)
+
+```sh
+sh iniciar.sh --nova-demo                         # demonstração limpa (apaga só a demonstração)
+sh iniciar.sh --mensagem "Quero falar com uma pessoa"   # cliente FICTÍCIO escreve (painel aberto)
+```
+
+Para o salão: formulário de dados oficiais em [`COLETA_DADOS_OFICIAIS.md`](docs/COLETA_DADOS_OFICIAIS.md)
+e roteiro da validação com a equipe em [`PLANO_VALIDACAO_SALAO.md`](docs/PLANO_VALIDACAO_SALAO.md).
+Relatório (cenários de ponta a ponta, correções, políticas pendentes e análise de
+pré-produção) em [`STATUS_FASE_11.md`](docs/STATUS_FASE_11.md).
+
+## Pré-produção preparada — Fase 12 (somente local e sintética)
+
+```sh
+PY=/tmp/rocha-reis-agent-venv/bin/python
+$PY -m rocha_reis_agent.ops preprod            # perfil de PRÉ-PRODUÇÃO sintético (exige volume cifrado verificado)
+$PY -m rocha_reis_agent.ops ambiente --perfil ~/.local/share/rocha-reis-agent/preprod   # diagnóstico
+$PY -m rocha_reis_agent.ops metricas --perfil ~/.local/share/rocha-reis-agent/demo     # indicadores sem dados pessoais
+$PY -m rocha_reis_agent.ops reter ~/rr-backups --manter 14 --dias 30                   # plano de retenção (não apaga)
+```
+
+Conhecimento estruturado (categorias, profissionais, duração estimada, tipos de preço) pelo
+painel, com aprovação. Dados reais continuam **bloqueados** (quarta trava de código).
+Relatório em [`STATUS_FASE_12.md`](docs/STATUS_FASE_12.md); arquitetura em
+[`ARQUITETURA_PRE_PRODUCAO.md`](docs/ARQUITETURA_PRE_PRODUCAO.md); proteção de dados em
+[`SEGURANCA_ARMAZENAMENTO.md`](docs/SEGURANCA_ARMAZENAMENTO.md).
+
+## Segurança avançada — Fase 13 (somente local)
+
+```sh
+PY=/tmp/rocha-reis-agent-venv/bin/python
+$PY -m rocha_reis_agent.ops backup-agendado --perfil ~/.local/share/rocha-reis-agent/demo   # uma rodada
+$PY -m rocha_reis_agent.ops teste-restauracao --perfil ~/.local/share/rocha-reis-agent/demo
+$PY -m rocha_reis_agent.ops ensaio-recuperacao --perfil ~/.local/share/rocha-reis-agent/demo --destino /tmp/ensaio-vazio
+$PY -m rocha_reis_agent.ops mfa-rotacionar --perfil ~/.local/share/rocha-reis-agent/demo
+```
+
+Verificação em duas etapas (TOTP) no painel em **Minha conta**; obrigatória em pré-produção, que
+sobe em HTTPS com certificado de **desenvolvimento**. Referências de implantação (não instaladas)
+em [`deploy/`](deploy/README.md). Documentos: [`STATUS_FASE_13.md`](docs/STATUS_FASE_13.md),
+[`SEGURANCA_AUTENTICACAO.md`](docs/SEGURANCA_AUTENTICACAO.md),
+[`OPERACAO_BACKUP_AUTOMATICO.md`](docs/OPERACAO_BACKUP_AUTOMATICO.md),
+[`PLANO_RECUPERACAO_DESASTRES.md`](docs/PLANO_RECUPERACAO_DESASTRES.md).
+
+## Homologação com o salão — Fase 15
+
+Comece por [`PACOTE_HOMOLOGACAO_SALAO.md`](docs/PACOTE_HOMOLOGACAO_SALAO.md). Antes de cada sessão:
+`python -m rocha_reis_agent.ops verificar-rc`; registro dos resultados com `ops registro-11b` e
+`ops conferir-registro` (planilha fora do repositório). Situação técnica em
+[`RELATORIO_PRONTIDAO_RC1.md`](docs/RELATORIO_PRONTIDAO_RC1.md).
+
+## RC1 Offline — Fase 14 (candidata à homologação com o salão; não é produção)
+
+```sh
+sh iniciar.sh --nova-demo                                   # demonstração limpa e isolada
+python -m rocha_reis_agent.ops roteiro                      # 13 jornadas automáticas num perfil novo
+python -m rocha_reis_agent.ops versao                       # identificação da RC1 (commit base, impressão digital)
+```
+
+Documentos: [`RELEASE_CANDIDATE_RC1.md`](docs/RELEASE_CANDIDATE_RC1.md),
+[`ROTEIRO_DEMONSTRACAO_SALAO.md`](docs/ROTEIRO_DEMONSTRACAO_SALAO.md),
+[`CHECKLIST_HOMOLOGACAO_11B.md`](docs/CHECKLIST_HOMOLOGACAO_11B.md),
+[`TREINAMENTO_RAPIDO.md`](docs/TREINAMENTO_RAPIDO.md),
+[`DECISOES_PENDENTES_SALAO.md`](docs/DECISOES_PENDENTES_SALAO.md),
+[`STATUS_FASE_14.md`](docs/STATUS_FASE_14.md).
+
 ## Conhecimento e limites determinísticos
 
 O formato atual está em [salon.versioned.synthetic.json](fixtures/salon.versioned.synthetic.json):
@@ -606,13 +695,15 @@ fornece respostas REST sintéticas da Gemini API.
 │   │                    # graph_transport.py (BLOQUEADO, Fase 5) · send_policy.py
 │   │                    # homologation.py (Fase 6A)
 │   ├── persistence/     # sqlite.py · sqlite_channel.py · sqlite_ai.py · sqlite_knowledge.py
-│   │   └── migrations/  # 001_initial.sql … 008_ai_usage_gemini.sql
+│   │   └── migrations/  # 001_initial.sql … 011_panel_mfa.sql
 │   ├── panel/           # painel (Fase 7) + conhecimento (Fase 8)
 │   │                    # security · store · service · api · app · admin_cli · knowledge
 │   │   └── static/      # index.html · styles.css · app.js
-│   └── evaluation/      # scenarios · oracle · providers · runner · __main__ · real_run (9B bloqueada)
+│   ├── evaluation/      # scenarios · oracle · providers · runner · __main__ · real_run (9B bloqueada)
+│   └── ops/             # Fases 10–15: backup · backup_job · disaster · tls · demo · launcher · perf · environments · rehearsal · release · uat · __main__
 ├── tests/               # suíte pytest (test_*.py) e workers de processos reais
-├── tests_e2e/           # testes de navegador (Chromium headless, Fases 7 e 8)
+├── tests_e2e/           # testes de navegador (Chromium headless, Fases 7, 8 e 10)
+├── iniciar.sh           # inicia o painel local (127.0.0.1) com a demonstração fictícia
 └── docs/
     ├── CONTEXTO_MESTRE.md · REQUISITOS_E_ACEITE.md · ARQUITETURA_E_DECISOES.md
     ├── PLANO_DE_EXECUCAO.md · DADOS_PENDENTES.md · CHECKLIST_PRODUCAO.md

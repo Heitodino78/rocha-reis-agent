@@ -380,6 +380,53 @@ recuperação determinística (ADR-075), o conhecimento aprovado (ADR-076), o re
 | ADR-100 | Avaliação: `gemini-simulated` (adaptador real sobre REST simulado) e `gemini` real atrás da trava + autorização com conta/projeto **pagos**; W2 remapeado de "fallback" para "modelo efetivo inesperado" (mesmo ID e expectativas) | 120 cenários e critérios inalterados |
 
 
+## Consolidação operacional offline — Fase 10
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-107 | Avisos do painel **derivados do estado do banco** (`GET /notifications`), com chave estável por ocorrência (`hr:<conversa>:<transição>`, `sf:<envio>`…), sem texto de mensagem; o cliente só guarda as chaves já mostradas. Reconexão, recarga e eventos perdidos não criam duplicatas nem lacunas | `test_human_request_notification_has_stable_key_and_no_content`, e2e de recarga |
+| ADR-108 | Falha, resultado incerto, interrupção de envios e falha de entrada são avisos **obrigatórios** (preferências do navegador não os ocultam); escopo do atendente limitado às próprias conversas/envios | `test_send_failure_and_unknown_are_mandatory_and_scoped` |
+| ADR-109 | Migração 009: `panel_settings` tipado (`urgent_after_minutes` 1–1440, `retired_contact_policy`), validado no esquema Pydantic estrito **e** no store; travas reais seguem só no código | `test_typed_settings_are_validated_in_backend_and_audited`, `test_migration_009_preserves_existing_settings` |
+| ADR-110 | Contato excluído que volta a escrever: padrão `block` = inbox `DONE` com payload redigido e `retired_contact_blocked` (antes: `FAILED rejected_by_core`, conteúdo guardado e invisível); `allow_new_conversation` e reativação individual recomeçam sessão vazia, mantendo chaves de idempotência | `test_retired_contact_is_blocked_visibly…`, `test_allow_policy…`, `test_manual_reinstatement…` |
+| ADR-111 | Histórico paginado por `ordinal` com situação de envio buscada em lote (sem N+1); página antiga preservada nas atualizações ao vivo | `test_history_is_paginated…`, medição em `STATUS_FASE_10.md` |
+| ADR-112 | Backup: API online do SQLite em leitura → `integrity_check` + `foreign_key_check` → AES-256-GCM (`cryptography`) com manifesto como dado associado; chave em arquivo 0600 fora do diretório de backups ou frase-senha (scrypt); escrita `.partial` + rename | `tests/test_phase10_backup.py` |
+| ADR-113 | Restauração só para arquivo **novo**; substituir o banco ativo é passo separado (`promover`) com frase `SUBSTITUIR:<arquivo>`, lock exclusivo (falha com o app aberto) e cópia anterior | `test_promote_requires_confirmation…` |
+| ADR-114 | Demonstração em perfil privado fora do repositório (`~/.local/share/rocha-reis-agent/demo`, marcado; `--recriar` só apaga diretório marcado); iniciador fixa `127.0.0.1`, recusa travas abertas, transporte/IA reais e permissões frouxas | `test_demo_profile_is_isolated…`, `test_launcher_preflight_checks` |
+
+## Segurança avançada — Fase 13
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-127 | TOTP (RFC 6238) com a implementação da `cryptography` (sem dependência nova); ±1 passo; último passo gravado contra reutilização | `tests/test_phase13_mfa.py` |
+| ADR-128 | Segredo TOTP cifrado (AES-GCM, AAD = id do usuário) com chave em arquivo 0600 fora do banco e dos backups; app não inicia com chave ausente/frouxa; rotação recifra tudo numa transação | idem; `test_mfa_key_rotation_command…` |
+| ADR-129 | 1ª etapa do login com segundo fator ativo NÃO cria sessão: etapa de 5 min/5 tentativas em tabela própria + cookie separado; nenhuma rota aceita esse cookie | `test_two_step_login_and_partial_state_reaches_nothing` (API e navegador) |
+| ADR-130 | Códigos de recuperação: 10 × 60 bits, HMAC-SHA-256 por usuário, uso único; redefinição administrativa com justificativa, confirmação e auditoria | testes de recuperação e redefinição |
+| ADR-131 | Rotação de sessão em troca de senha e ativação do segundo fator; painel reabre o SSE após rotação e confere a sessão antes de deslogar | e2e Fase 13 (defeito encontrado e corrigido) |
+| ADR-132 | `X-Forwarded-*` só de proxies declarados (`PANEL_TRUSTED_PROXIES`); HSTS com HTTPS; pré-produção exige 2FA, HTTPS, cookie Secure e ≤ 30 min de inatividade | `test_forwarded_headers…`, `test_preproduction_panel_refuses_weak_settings` |
+| ADR-133 | Backup agendável com lock, verificação, destino secundário substituível (`LocalDirectory`), retenção e estado sem segredos; ensaio de desastre isolado | `tests/test_phase13_ops.py` |
+
+## Preparação de pré-produção — Fase 12
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-120 | Categoria e profissional como fatos próprios (`category:*`, `professional:*`) com `active`; serviço referencia por id; duração estimada (valor ou faixa, 5–720 min) e tipo de preço (fixo, a partir de, faixa, avaliação) no documento JSON — **sem mudança de tabela**; documentos antigos válidos por padrões | `tests/test_phase12_knowledge.py` |
+| ADR-121 | Serviço só é aprovado com categoria/profissionais aprovados e ativos; inativos somem das respostas e viram pendência; nomes duplicados bloqueiam | idem |
+| ADR-122 | Texto das respostas idêntico quando os campos novos estão vazios (avaliações fixadas por hash preservadas); oráculo aceita o máximo de faixa aprovada | regressão completa + `test_service_without_new_fields…` |
+| ADR-123 | Perfil de ambiente gravado no banco; banco `demo`/`preproduction` não abre em outro perfil; banco antigo não vira pré-produção | `tests/test_phase12_environment.py` |
+| ADR-124 | Proteção em repouso **constatada** por dm-crypt no `/sys` (nunca presumida); exigida em pré-produção; SQLCipher não adotado | idem; `SEGURANCA_ARMAZENAMENTO.md` §2 |
+| ADR-125 | Quarta trava de código `REAL_DATA_ACTIVATION_AUTHORIZED=False` + `metadata.data_classification` (migração 010); posicionada sem alterar o contexto do patch de ativação do Gemini | `test_real_data_stays_blocked_everywhere`; `git apply --check` do patch |
+| ADR-126 | Snapshot e verificação de backup em memória (`serialize`/`deserialize`); `temp_store=MEMORY` | `test_backup_and_verify_leave_no_plaintext…` |
+
+## Finalização funcional offline — Fase 11A
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-115 | Aprovação de conhecimento recusada (409, auditada) quando nome/apelido de serviço ou pergunta frequente normalizados colidem com **outro** registro aprovado; conflitos herdados aparecem em Pendências | `tests/test_phase11.py` (conflitos) |
+| ADR-116 | Erros do framework na API do painel normalizados em português (422/404/405) sem ecoar a entrada; a interface só exibe `detail` textual e substitui 5xx por orientação | `test_framework_errors_are_portuguese…` |
+| ADR-117 | Ajuda estática dentro do painel (resumo do manual), sem novo módulo nem conteúdo dinâmico | e2e `test_help_is_reachable_by_keyboard…` |
+| ADR-119 | Envio da equipe: `UNIQUE(idempotency_key)` violado por pedido concorrente com a mesma chave é resposta idempotente (mesmo `operation_id`, `duplicate`), não erro | `test_same_key_race_after_version_check…` (falha sem a correção) |
+| ADR-118 | `ops mensagem` / `iniciar.sh --mensagem|--nova-demo` só operam em perfil com marcador de demonstração e números `55119000…`; mensagem entra pelo caminho do webhook assinado | `test_fictitious_message_command_only_works…` |
+
 ## Preparação da homologação real — Fase 9C-A
 
 | ID | Decisão | Evidência/limite |

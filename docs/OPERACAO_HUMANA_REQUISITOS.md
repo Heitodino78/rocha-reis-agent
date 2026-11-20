@@ -70,5 +70,12 @@ Opções para decisão, com impactos:
    impedindo reprocessar mensagens antigas.
 3. **Bloquear e encaminhar a humano:** a mensagem é registrada para um funcionário decidir.
 
-Nenhuma opção foi aplicada. A escolha cabe ao controlador dos dados, com assessoria
+Nenhuma opção foi escolhida. A escolha cabe ao controlador dos dados, com assessoria
 jurídica, e deve ser registrada antes de qualquer uso com clientes reais.
+
+**Fase 10 — mecanismos prontos para a decisão (sem escolhê-la):** a configuração
+`retired_contact_policy` (painel → Configurações) tem `block` (padrão; equivale à opção 1,
+mas agora o conteúdo novo é descartado, nada é respondido e a administração recebe aviso
+e vê as tentativas em Sistema → Contatos com dados excluídos) e `allow_new_conversation`
+(opção 2). A opção 3 é coberta pelo aviso + **reativação individual** (confirmação
+`REATIVAR:<código>`, auditada), que também começa uma conversa vazia.

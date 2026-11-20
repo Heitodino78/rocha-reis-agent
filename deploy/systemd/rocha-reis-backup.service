@@ -1,0 +1,16 @@
+# REFERÊNCIA (Fase 13) — não instalado. Uma rodada do backup automático; acionada pelo timer.
+[Unit]
+Description=Rocha Reis — backup cifrado verificado (uma rodada)
+
+[Service]
+Type=oneshot
+User=rocha-reis
+WorkingDirectory=/opt/rocha-reis-agent
+# Só o caminho do perfil vai na linha de comando; a chave fica em arquivo 0600 indicado no perfil.
+ExecStart=/opt/rocha-reis-agent/.venv/bin/python -m rocha_reis_agent.ops backup-agendado --perfil /var/lib/rocha-reis/perfil
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rocha-reis
+UMask=0077

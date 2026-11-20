@@ -117,6 +117,15 @@ class InboundProcessor:
             self.store.finish_inbound(item, worker, outcome="invalid_input", failed=True)
             return "invalid_input"
         conversation_id = item.conversation_id
+        # Fase 10: contato cujos dados foram excluídos voltou a escrever. A decisão é do
+        # controlador dos dados (DADOS_PENDENTES); padrão = bloquear, mas de forma VISÍVEL
+        # (aviso ao ADMIN, conteúdo descartado) e reversível pelo painel.
+        if self.store.repository.is_retired(conversation_id):
+            if self.store.retired_contact_policy() == "allow_new_conversation":
+                self.store.repository.reinstate(conversation_id, origin="client")
+            else:
+                self.store.finish_inbound(item, worker, outcome="retired_contact_blocked")
+                return "retired_contact_blocked"
         outcomes: list[str] = []
 
         def effects(result: AgentResult, session_id: str) -> None:

@@ -31,7 +31,7 @@ from rocha_reis_agent.domain.conversations import (
 
 logger = logging.getLogger("rocha_reis_agent")
 APPLICATION_ID = 1381126963
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 11
 MIGRATIONS = Path(__file__).parent / "migrations"
 RESULT = TypeAdapter(AgentResult)
 
@@ -86,8 +86,11 @@ class SQLiteConversationRepository:
         retention_days: int = 7, audit_days: int = 30, audit_limit: int = 10000,
         archive_idle_hours: float = 24.0,
         fault_hook: Callable[[str], None] | None = None,
+        environment: str | None = None, require_encrypted_volume: bool = False,
     ) -> None:
         self.path = Path(path).absolute()
+        self.environment = environment
+        self.require_encrypted_volume = require_encrypted_volume
         self.limits = limits or SimulationLimits()
         if (type(busy_timeout_ms) is not int or not 1 <= busy_timeout_ms <= 5000
             or type(max_bytes) is not int or max_bytes < 1024 * 1024
@@ -120,6 +123,17 @@ class SQLiteConversationRepository:
         if any(part.is_symlink() for part in (self.path, *self.path.parents)):
             raise StorageError("Links simbólicos não são permitidos para o banco sintético.")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.environment == "preproduction":
+            status = self.path.parent.stat()
+            if status.st_mode & 0o077 or status.st_uid != os.geteuid():
+                raise StorageError("Pré-produção exige diretório do banco privado (0700) do próprio usuário.")
+        if self.require_encrypted_volume:
+            # Proteção em repouso CONSTATADA (dm-crypt), nunca presumida. Vale também para WAL/SHM e
+            # cópias de segurança anteriores à restauração, que ficam no mesmo diretório.
+            from rocha_reis_agent.persistence.storage_security import volume_protection
+            protection = volume_protection(self.path.parent)
+            if not (protection.encrypted and protection.persistent):
+                raise StorageError("O volume do banco não tem cifragem em repouso verificada (dm-crypt/LUKS).")
         # Coordena apenas criação/migração no Linux. O processamento concorrente
         # usa versões e locks do SQLite, nunca este lock de inicialização.
         lock_path = str(self.path) + ".init.lock"
@@ -188,6 +202,7 @@ class SQLiteConversationRepository:
                 connection.execute("PRAGMA foreign_keys=ON")
             if connection.execute("PRAGMA journal_mode=WAL").fetchone()[0].lower() != "wal":
                 raise StorageError("O armazenamento local exige suporte a WAL.")
+            self._check_environment(connection, fresh)
         os.chmod(self.path, 0o600)
         if self.path.stat().st_mode & 0o777 != 0o600 or self.path.stat().st_uid != os.geteuid():
             raise StorageError("Volume sem permissões privadas 0600; use armazenamento local Linux privado.")
@@ -203,11 +218,34 @@ class SQLiteConversationRepository:
             connection.execute("PRAGMA foreign_keys=ON")
             connection.execute("PRAGMA synchronous=FULL")
             connection.execute("PRAGMA secure_delete=ON")
+            # Ordenações e tabelas temporárias em memória: nada de arquivos temporários do SQLite
+            # em /var/tmp (fora do volume protegido). Fase 12.
+            connection.execute("PRAGMA temp_store=MEMORY")
             page_size = connection.execute("PRAGMA page_size").fetchone()[0]
             connection.execute(f"PRAGMA max_page_count={self.max_bytes // page_size:d}")
             yield connection
         finally:
             connection.close()
+
+    def _check_environment(self, connection: sqlite3.Connection, fresh: bool) -> None:
+        """Fase 12: o banco guarda o ambiente que o criou; outro ambiente não o abre."""
+        rows = dict(connection.execute(
+            "SELECT key,value FROM metadata WHERE key IN ('environment_profile','data_classification')").fetchall())
+        if rows.get("data_classification", "synthetic") != "synthetic":
+            raise StorageError("Banco classificado como dados reais: bloqueado nesta versão.")
+        marked = rows.get("environment_profile")
+        if self.environment is None:
+            if marked in ("demo", "preproduction"):
+                raise StorageError(f"Banco do ambiente '{marked}': abra com o perfil correspondente.")
+            return
+        if marked is None:
+            if self.environment == "preproduction" and not fresh:
+                raise StorageError("Pré-produção exige banco criado como pré-produção (este já existia sem marcação).")
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("INSERT OR IGNORE INTO metadata VALUES('environment_profile',?)", (self.environment,))
+            connection.commit()
+        elif marked != self.environment:
+            raise StorageError(f"Banco do ambiente '{marked}' não pode ser aberto como '{self.environment}'.")
 
     def _ensure_scope(self, connection: sqlite3.Connection) -> None:
         purpose = connection.execute("SELECT value FROM metadata WHERE key='purpose'").fetchone()
@@ -549,6 +587,30 @@ class SQLiteConversationRepository:
         if confirmation != f"DELETE_SYNTHETIC:{conversation_id}":
             raise StorageError("Exclusão exige confirmação DELETE_SYNTHETIC:CLIENTE.")
         self._retire_keys((conversation_id,))
+
+    def is_retired(self, conversation_id: str) -> bool:
+        validate_identifier(conversation_id)
+        with self.write_transaction() as connection:
+            row = connection.execute("SELECT retired FROM conversations WHERE id=?", (conversation_id,)).fetchone()
+        return bool(row and row["retired"])
+
+    def reinstate(self, conversation_id: str, *, origin: str = "operator") -> None:
+        """Fase 10: permite NOVA conversa para um contato excluído (retired).
+
+        Não restaura nada do que foi apagado: começa uma sessão nova e vazia. As chaves de
+        idempotência mínimas preservadas na exclusão continuam valendo (reentrega antiga
+        segue deduplicada). Quem decide quando usar é a política do controlador dos dados.
+        """
+        validate_identifier(conversation_id)
+        if origin not in ("operator", "client"):
+            raise StorageError("Origem inválida.")
+        with self.write_transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE conversations SET retired=0,closed=0,archived=0,state='AUTO',session_id=?,version=version+1,"
+                "updated_at=? WHERE id=? AND retired=1", (uuid4().hex, utc_now().isoformat(), conversation_id))
+            if cursor.rowcount != 1:
+                raise StorageError("Contato não encontrado ou não excluído.")
+            self._audit(connection, "contact_reinstated", conversation_id, origin, "committed")
 
     def purge_expired(self, *, confirmation: str) -> int:
         """Retenção: anonimiza conteúdo de conversas inativas SEM bloquear o cliente.

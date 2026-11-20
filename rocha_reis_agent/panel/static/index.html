@@ -28,6 +28,65 @@
     </form>
   </section>
 
+  <!-- Segunda etapa do login (Fase 13): código do aplicativo autenticador ou de recuperação -->
+  <section id="mfa-view" class="auth-view" hidden>
+    <form id="mfa-form" class="auth-card" novalidate>
+      <h1>Verificação em duas etapas</h1>
+      <p class="muted" id="mfa-hint">Abra o aplicativo autenticador do seu celular e digite o código de 6 números.</p>
+      <div id="mfa-code-block">
+        <label for="mfa-code">Código do aplicativo</label>
+        <input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" pattern="[0-9 ]*">
+      </div>
+      <div id="mfa-recovery-block" hidden>
+        <label for="mfa-recovery">Código de recuperação</label>
+        <input id="mfa-recovery" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
+        <p class="muted small">Cada código de recuperação só funciona uma vez.</p>
+      </div>
+      <p id="mfa-error" class="form-error" role="alert"></p>
+      <button type="submit" class="btn btn-primary btn-block">Confirmar</button>
+      <button type="button" id="mfa-use-recovery" class="btn btn-ghost btn-block">Perdi o celular: usar código de recuperação</button>
+      <button type="button" id="mfa-restart" class="btn btn-ghost btn-block">Voltar ao login</button>
+    </form>
+  </section>
+
+  <!-- Cadastro obrigatório do segundo fator (política do ambiente) -->
+  <section id="mfa-setup-view" class="auth-view" hidden>
+    <div class="auth-card" id="mfa-setup-host">
+      <h1>Ative a verificação em duas etapas</h1>
+      <p class="muted">Neste ambiente ela é obrigatória para acessar o painel.</p>
+      <button type="button" class="btn btn-ghost btn-block" data-action="logout">Sair</button>
+    </div>
+  </section>
+
+  <!-- Componente de cadastro (movido para onde for usado) -->
+  <template id="mfa-setup-template">
+    <div class="mfa-setup" data-step="password">
+      <form class="mfa-step" data-for="password" novalidate>
+        <label for="mfa-setup-password">Confirme sua senha para começar</label>
+        <input id="mfa-setup-password" type="password" autocomplete="current-password" maxlength="128">
+        <button type="submit" class="btn btn-primary">Começar</button>
+      </form>
+      <form class="mfa-step" data-for="code" novalidate hidden>
+        <ol class="small">
+          <li>No celular, abra um aplicativo autenticador (por exemplo, o do Google ou da Microsoft).</li>
+          <li>Escolha <strong>adicionar conta</strong> → <strong>inserir chave manualmente</strong>.</li>
+          <li>Conta: <strong class="mfa-account"></strong> · Chave: <code class="mfa-secret"></code> (baseada em tempo).</li>
+        </ol>
+        <details class="small"><summary>Endereço de configuração (para quem prefere colar)</summary><code class="mfa-uri"></code></details>
+        <p class="muted small">Esta chave aparece só agora. Não a envie por mensagem nem a fotografe.</p>
+        <label for="mfa-setup-code">Código de 6 números mostrado pelo aplicativo</label>
+        <input id="mfa-setup-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7">
+        <button type="submit" class="btn btn-primary">Ativar</button>
+      </form>
+      <div class="mfa-step" data-for="codes" hidden>
+        <p><strong>Guarde estes códigos de recuperação</strong> num lugar seguro (papel guardado com você). Cada um vale uma vez, se você perder o celular. Eles não serão mostrados de novo.</p>
+        <ul class="recovery-codes"></ul>
+        <button type="button" class="btn btn-primary mfa-done">Já guardei os códigos</button>
+      </div>
+      <p class="form-error mfa-setup-error" role="alert"></p>
+    </div>
+  </template>
+
   <!-- Troca obrigatória de senha -->
   <section id="password-view" class="auth-view" hidden>
     <form id="password-form" class="auth-card" novalidate>
@@ -51,23 +110,30 @@
       <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Abrir menu">☰</button>
       <span class="brand"><span class="brand-mark small" aria-hidden="true">RR</span> Atendimento</span>
       <span id="connection" class="connection" data-state="connecting" role="status">Conectando…</span>
+      <button type="button" class="icon-btn notif-toggle" data-notif-toggle aria-controls="notif-panel" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="visually-hidden">Avisos</span><span class="notif-count" data-notif-count></span></button>
     </header>
 
     <nav id="sidebar" class="sidebar" aria-label="Navegação principal">
       <div class="sidebar-head">
         <span class="brand"><span class="brand-mark small" aria-hidden="true">RR</span> Atendimento</span>
-        <span id="connection-side" class="connection" data-state="connecting" aria-hidden="true">Conectando…</span>
+        <span class="sidebar-status"><span id="connection-side" class="connection" data-state="connecting" aria-hidden="true">Conectando…</span>
+        <button type="button" class="icon-btn notif-toggle" data-notif-toggle aria-controls="notif-panel" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="visually-hidden">Avisos</span><span class="notif-count" data-notif-count></span></button></span>
       </div>
       <ul class="nav-list">
         <li><button type="button" class="nav-item" data-view="overview">Visão geral</button></li>
         <li><button type="button" class="nav-item" data-view="conversations" data-filter="all">Conversas</button></li>
         <li><button type="button" class="nav-item" data-view="conversations" data-filter="waiting">Aguardando atendimento <span class="count" id="count-waiting" aria-label="conversas aguardando"></span></button></li>
         <li><button type="button" class="nav-item" data-view="conversations" data-filter="mine">Meus atendimentos <span class="count" id="count-mine"></span></button></li>
-        <li><button type="button" class="nav-item" data-view="conversations" data-filter="resolved">Histórico</button></li>
+        <li><button type="button" class="nav-item" data-view="conversations" data-filter="auto">Automáticas</button></li>
+        <li class="admin-only"><button type="button" class="nav-item" data-view="conversations" data-filter="others">Com outros funcionários</button></li>
+        <li><button type="button" class="nav-item" data-view="conversations" data-filter="resolved">Encerradas</button></li>
         <li class="admin-only"><button type="button" class="nav-item" data-view="team">Equipe</button></li>
         <li class="admin-only"><button type="button" class="nav-item" data-view="audit">Auditoria</button></li>
         <li class="admin-only"><button type="button" class="nav-item" data-view="knowledge">Conhecimento <span class="count" id="count-pending" aria-label="pendências de conhecimento"></span></button></li>
         <li class="admin-only"><button type="button" class="nav-item" data-view="settings">Configurações</button></li>
+        <li><button type="button" class="nav-item" data-view="account">Minha conta</button></li>
+        <li><button type="button" class="nav-item" data-view="help">Ajuda</button></li>
+        <li class="admin-only"><button type="button" class="nav-item" data-view="system">Sistema <span class="count danger" id="count-system" aria-label="alertas do sistema"></span></button></li>
       </ul>
       <div class="sidebar-foot">
         <p class="user-chip"><span id="user-name"></span><span id="user-role" class="role-tag"></span></p>
@@ -76,10 +142,15 @@
     </nav>
 
     <main id="main" class="main" tabindex="-1">
+      <p id="env-banner" class="env-banner" role="note" hidden></p>
       <!-- Visão geral -->
       <section id="overview-view" class="page" hidden aria-labelledby="overview-title">
         <h2 id="overview-title">Visão geral</h2>
-        <div id="overview-cards" class="cards"></div>
+        <div id="overview-attention" class="panel-card attention" aria-live="polite">
+          <h3>Precisa de atenção</h3>
+          <ul id="attention-list" class="plain-list"></ul>
+        </div>
+        <div id="overview-cards" class="cards" aria-busy="true"></div>
         <p class="muted small" id="overview-note"></p>
       </section>
 
@@ -98,10 +169,13 @@
               <button type="button" class="chip" data-filter="mine">Minhas</button>
               <button type="button" class="chip" data-filter="human_active">Em atendimento</button>
               <button type="button" class="chip" data-filter="auto">Automáticas</button>
+              <button type="button" class="chip admin-only" data-filter="others">Com outros</button>
               <button type="button" class="chip" data-filter="resolved">Encerradas</button>
             </div>
           </div>
-          <ul id="conversation-list" class="conversation-list" aria-label="Lista de conversas"></ul>
+          <ul id="conversation-list" class="conversation-list" aria-label="Lista de conversas" aria-busy="false"></ul>
+          <p id="list-loading" class="empty" hidden>Carregando…</p>
+          <div id="list-error" class="empty" hidden><p id="list-error-text"></p><button type="button" id="list-retry" class="btn btn-ghost">Tentar de novo</button></div>
           <p id="list-empty" class="empty" hidden>Nenhuma conversa neste filtro.</p>
           <button type="button" id="load-more" class="btn btn-ghost btn-block" hidden>Carregar mais</button>
         </div>
@@ -120,6 +194,7 @@
               </div>
               <div class="detail-actions" id="detail-actions"></div>
             </header>
+            <div id="detail-alert" class="detail-alert" role="alert" hidden></div>
             <ol id="messages" class="messages" aria-label="Histórico da conversa" aria-live="polite"></ol>
             <details class="timeline">
               <summary>Linha do tempo do atendimento</summary>
@@ -156,7 +231,7 @@
           <button type="submit" class="btn btn-primary">Criar acesso</button>
         </form>
         <div class="table-wrap"><table class="data-table" aria-label="Funcionários">
-          <thead><tr><th scope="col">Nome</th><th scope="col">Login</th><th scope="col">Papel</th><th scope="col">Situação</th><th scope="col">Último acesso</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
+          <thead><tr><th scope="col">Nome</th><th scope="col">Login</th><th scope="col">Papel</th><th scope="col">Situação</th><th scope="col">Duas etapas</th><th scope="col">Último acesso</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
           <tbody id="users-body"></tbody>
         </table></div>
       </section>
@@ -175,11 +250,22 @@
       <!-- Configurações -->
       <section id="settings-view" class="page" hidden aria-labelledby="settings-title">
         <h2 id="settings-title">Configurações</h2>
-        <form id="settings-form" class="panel-card">
+        <form id="settings-form" class="panel-card" novalidate>
           <h3>Permissões dos atendentes</h3>
           <label class="switch"><input type="checkbox" id="setting-transfer"> Atendentes podem transferir conversas</label>
           <label class="switch"><input type="checkbox" id="setting-resume"> Atendentes podem retomar a automação das próprias conversas</label>
-          <button type="submit" class="btn btn-primary">Salvar permissões</button>
+          <h3>Fila de atendimento</h3>
+          <label for="setting-urgent">Destacar como urgente após (minutos de espera)</label>
+          <input id="setting-urgent" type="number" min="1" max="1440" step="1" required inputmode="numeric">
+          <h3>Contato com dados excluídos que volta a escrever</h3>
+          <p class="muted small">Decisão do responsável pelos dados (pendente). O padrão bloqueia e avisa a administração; nada é respondido automaticamente.</p>
+          <label for="setting-retired-policy" class="visually-hidden">Política para contatos excluídos</label>
+          <select id="setting-retired-policy">
+            <option value="block">Bloquear e avisar a administração (padrão)</option>
+            <option value="allow_new_conversation">Permitir nova conversa, começando do zero</option>
+          </select>
+          <p id="settings-error" class="form-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary">Salvar configurações</button>
         </form>
         <div class="panel-card">
           <h3>Envio de mensagens</h3>
@@ -189,6 +275,74 @@
             <button type="button" id="resume-dispatch-btn" class="btn btn-ghost">Retomar envios</button>
           </div>
           <p class="muted small" id="environment-note"></p>
+        </div>
+      </section>
+
+      <!-- Minha conta (Fase 13): segundo fator -->
+      <section id="account-view" class="page" hidden aria-labelledby="account-title">
+        <h2 id="account-title">Minha conta</h2>
+        <div class="panel-card">
+          <h3>Verificação em duas etapas</h3>
+          <p id="mfa-status" class="muted"></p>
+          <div id="mfa-account-actions" class="row-actions"></div>
+          <div id="mfa-account-host"></div>
+        </div>
+      </section>
+
+      <!-- Ajuda: resumo do manual da equipe (docs/MANUAL_PAINEL.md) -->
+      <section id="help-view" class="page help" hidden aria-labelledby="help-title">
+        <h2 id="help-title">Ajuda</h2>
+        <p class="muted">Resumo rápido. O manual completo está com a administração.</p>
+        <div class="panel-card">
+          <h3>Atender um cliente</h3>
+          <ol>
+            <li>Abra <strong>Aguardando atendimento</strong> e escolha a conversa (as marcadas como <strong>Urgente</strong> primeiro).</li>
+            <li>Clique em <strong>Assumir atendimento</strong>. O assistente automático para de responder esse cliente.</li>
+            <li>Escreva a resposta e clique em <strong>Enviar</strong> (ou Ctrl+Enter).</li>
+            <li>Para passar a um colega, use <strong>Transferir</strong>. Ao terminar, use <strong>Finalizar atendimento</strong>.</li>
+            <li>Depois de finalizado, a automação continua desligada até a administração usar <strong>Retomar automação</strong>.</li>
+          </ol>
+        </div>
+        <div class="panel-card">
+          <h3>Situação das mensagens enviadas</h3>
+          <ul>
+            <li><strong>Na fila de envio</strong>: ainda vai sair.</li>
+            <li><strong>Aceita pela plataforma / Entregue / Lida</strong>: tudo certo.</li>
+            <li><strong>Falhou</strong>: não saiu. Se ainda for necessária, escreva de novo.</li>
+            <li><strong>Resultado incerto</strong>: pode ter chegado. <strong>Não reenvie às cegas</strong>; confirme com o cliente ou avise a administração.</li>
+          </ul>
+        </div>
+        <div class="panel-card">
+          <h3>Avisos e problemas</h3>
+          <ul>
+            <li>O sino mostra avisos novos; clique para ir à conversa. Os avisos não mostram o texto do cliente.</li>
+            <li>"Reconectando…" no topo: aguarde alguns segundos.</li>
+            <li>Sessão encerrada: entre de novo; seu rascunho e a conversa aberta voltam.</li>
+            <li>Em computador compartilhado, use sempre <strong>Sair</strong>.</li>
+            <li>Dúvidas ou erro que se repete: fale com a administração do salão, que aciona o suporte técnico.</li>
+          </ul>
+        </div>
+        <p class="muted small" id="release-info"></p>
+      </section>
+
+      <!-- Sistema (ADMIN): estado local, travas somente leitura, contatos excluídos -->
+      <section id="system-view" class="page" hidden aria-labelledby="system-title">
+        <h2 id="system-title">Sistema</h2>
+        <p class="muted">Somente leitura, exceto a reativação de contatos. As integrações reais não podem ser ligadas por aqui.</p>
+        <div class="panel-card"><h3>Estado</h3><ul id="system-status" class="plain-list"></ul></div>
+        <div class="panel-card"><h3>Travas de integração real</h3><ul id="system-locks" class="plain-list"></ul></div>
+        <div class="panel-card">
+          <h3>Contatos com dados excluídos</h3>
+          <p class="muted small">Tentativas de contato posteriores à exclusão. Reativar começa uma conversa nova e vazia; nada do que foi excluído volta.</p>
+          <div class="table-wrap"><table class="data-table" aria-label="Contatos excluídos">
+            <thead><tr><th scope="col">Contato</th><th scope="col">Excluído em</th><th scope="col">Tentativas</th><th scope="col">Última tentativa</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
+            <tbody id="retired-body"></tbody>
+          </table></div>
+          <p id="retired-empty" class="empty" hidden>Nenhum contato excluído.</p>
+        </div>
+        <div class="panel-card">
+          <h3>Cópias de segurança</h3>
+          <p class="muted small">Feitas fora do painel, pelo comando local <code>python -m rocha_reis_agent.ops backup</code> (criptografadas; a chave fica separada). Veja o manual do painel.</p>
         </div>
       </section>
 
@@ -224,14 +378,35 @@
           <label for="knowledge-kind">Tipo</label>
           <select id="knowledge-kind"></select>
           <div data-fields="key"><label for="knowledge-key">Identificador do serviço</label>
-            <input id="knowledge-key" maxlength="64" autocapitalize="none" spellcheck="false" placeholder="ex.: corte"></div>
+            <input id="knowledge-key" maxlength="64" autocapitalize="none" spellcheck="false" placeholder="ex.: corte">
+            <p class="muted small">Letras minúsculas, números e hífen. Não muda depois de criado.</p></div>
           <div data-fields="text"><label for="knowledge-text">Texto</label><input id="knowledge-text" maxlength="240"></div>
           <div data-fields="items"><label for="knowledge-items">Itens (um por linha)</label><textarea id="knowledge-items" rows="3"></textarea></div>
           <div data-fields="url"><label for="knowledge-url">Link Booksy oficial</label><input id="knowledge-url" type="url" maxlength="2048" placeholder="https://booksy.com/…"></div>
-          <div data-fields="name"><label for="knowledge-name">Nome do serviço</label><input id="knowledge-name" maxlength="240"></div>
+          <div data-fields="name"><label for="knowledge-name" id="knowledge-name-label">Nome do serviço</label><input id="knowledge-name" maxlength="240"></div>
+          <div data-fields="active"><label class="switch"><input type="checkbox" id="knowledge-active" checked> Ativo (desmarque para tirar de uso sem apagar o histórico)</label></div>
+          <div data-fields="category"><label for="knowledge-category">Categoria (opcional)</label>
+            <select id="knowledge-category"><option value="">Sem categoria</option></select>
+            <p class="muted small">Só aparecem categorias aprovadas e ativas.</p></div>
+          <fieldset data-fields="duration" class="inline-fields">
+            <legend>Duração estimada (opcional, em minutos)</legend>
+            <label for="knowledge-duration-min">Mínima ou aproximada</label>
+            <input id="knowledge-duration-min" inputmode="numeric" maxlength="3" placeholder="ex.: 45">
+            <label for="knowledge-duration-max">Máxima (só se for uma faixa)</label>
+            <input id="knowledge-duration-max" inputmode="numeric" maxlength="3" placeholder="ex.: 60">
+            <p class="muted small">Deixe em branco se a duração não foi aprovada para divulgar. O assistente sempre diz que é uma estimativa.</p>
+          </fieldset>
+          <fieldset data-fields="team" class="team-fields">
+            <legend>Profissionais que realizam (opcional)</legend>
+            <div id="knowledge-team"></div>
+            <p class="muted small" id="knowledge-team-empty">Nenhum profissional aprovado e ativo. Cadastre em "Profissional".</p>
+          </fieldset>
           <div data-fields="aliases"><label for="knowledge-aliases">Outros nomes (separados por vírgula)</label><input id="knowledge-aliases" maxlength="600"></div>
           <div data-fields="description"><label for="knowledge-description">Descrição</label><input id="knowledge-description" maxlength="240"></div>
-          <div data-fields="amount"><label for="knowledge-amount">Valor (R$)</label><input id="knowledge-amount" inputmode="decimal" maxlength="12" placeholder="0,00"></div>
+          <div data-fields="pricing"><label for="knowledge-pricing">Tipo de preço</label>
+            <select id="knowledge-pricing"></select></div>
+          <div data-fields="amount"><label for="knowledge-amount" id="knowledge-amount-label">Valor (R$)</label><input id="knowledge-amount" inputmode="decimal" maxlength="12" placeholder="0,00"></div>
+          <div data-fields="amount_max"><label for="knowledge-amount-max">Valor máximo (R$)</label><input id="knowledge-amount-max" inputmode="decimal" maxlength="12" placeholder="0,00"></div>
           <div data-fields="note"><label for="knowledge-note">Condição do preço (opcional)</label><input id="knowledge-note" maxlength="240"></div>
           <div data-fields="questions"><label for="knowledge-questions">Perguntas (uma por linha)</label><textarea id="knowledge-questions" rows="3"></textarea></div>
           <div data-fields="answer"><label for="knowledge-answer">Resposta</label><input id="knowledge-answer" maxlength="240"></div>
@@ -266,6 +441,27 @@
       </section>
     </main>
   </div>
+
+  <aside id="notif-panel" class="notif-panel" hidden aria-labelledby="notif-title">
+    <div class="notif-head">
+      <h2 id="notif-title">Avisos</h2>
+      <button type="button" class="icon-btn" id="notif-close" aria-label="Fechar avisos">✕</button>
+    </div>
+    <ul id="notif-list" class="notif-list"></ul>
+    <p id="notif-empty" class="empty" hidden>Nenhum aviso pendente.</p>
+    <details class="notif-prefs">
+      <summary>Preferências deste navegador</summary>
+      <label class="switch"><input type="checkbox" id="notif-sound"> Tocar som em avisos novos</label>
+      <fieldset>
+        <legend class="small muted">Mostrar avisos de</legend>
+        <label class="switch"><input type="checkbox" data-notif-pref="human_requested"> Pedidos de atendimento humano</label>
+        <label class="switch"><input type="checkbox" data-notif-pref="assigned_to_me"> Conversas atribuídas a mim</label>
+        <label class="switch"><input type="checkbox" data-notif-pref="new_message"> Novas mensagens nos meus atendimentos</label>
+        <label class="switch admin-only"><input type="checkbox" data-notif-pref="retired_contact"> Contatos excluídos que voltaram a escrever</label>
+      </fieldset>
+      <p class="muted small">Falhas de envio, resultados incertos e problemas do sistema são sempre mostrados.</p>
+    </details>
+  </aside>
 
   <dialog id="confirm-dialog" class="dialog" aria-labelledby="confirm-title">
     <form method="dialog">

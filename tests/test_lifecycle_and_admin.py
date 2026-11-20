@@ -133,7 +133,8 @@ def test_explicit_deletion_remains_operator_decision(tmp_path):
     with pytest.raises(SimulationError):
         s.repository.retire(key, confirmation="sim")
     s.repository.retire(key, confirmation=f"DELETE_SYNTHETIC:{key}")
-    assert say(s, "wamid.a2", "Olá", A) == ["rejected_by_core"]  # política pendente: documentada
+    # Fase 10 (ADR-110): bloqueio padrão agora é VISÍVEL e descarta o conteúdo; a decisão segue pendente.
+    assert say(s, "wamid.a2", "Olá", A) == ["retired_contact_blocked"]
 
 
 # ------------------------------------------------------------ operações administrativas

@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 import unicodedata
 
@@ -28,6 +28,38 @@ class Record(BaseModel):
         return value
 
 
+Slug = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")]
+# Fase 12 — forma do preço aprovado: fixo, "a partir de", faixa ou só após avaliação presencial.
+Pricing = Literal["fixed", "starting", "range", "on_evaluation"]
+
+
+class Duration(Record):
+    """Duração ESTIMADA aprovada (nunca exata): valor único aproximado ou faixa, em minutos."""
+
+    min_minutes: int = Field(ge=5, le=720, strict=True)
+    max_minutes: int | None = Field(default=None, ge=5, le=720, strict=True)
+
+    @model_validator(mode="after")
+    def ordered(self) -> "Duration":
+        if self.max_minutes is not None and self.max_minutes <= self.min_minutes:
+            raise ValueError("Faixa de duração inválida: o máximo deve ser maior que o mínimo.")
+        return self
+
+
+class Category(Record):
+    id: Slug
+    name: Text
+    active: bool = Field(default=True, strict=True)
+
+
+class Professional(Record):
+    """Quem REALIZA serviços (dado de conhecimento). Não é conta do painel e não cria login."""
+
+    id: Slug
+    name: Text
+    active: bool = Field(default=True, strict=True)
+
+
 class Service(Record):
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     name: Text
@@ -35,6 +67,12 @@ class Service(Record):
     description: Text | None = None
     price: Decimal | None = Field(default=None, ge=0, max_digits=8, decimal_places=2)
     price_note: Text | None = None
+    # Fase 12 (opcionais; documentos antigos continuam válidos):
+    price_kind: Pricing | None = None          # preenchido só pela projeção do preço aprovado
+    price_max: Decimal | None = Field(default=None, ge=0, max_digits=8, decimal_places=2)
+    category_id: Slug | None = None
+    duration: Duration | None = None
+    professional_ids: tuple[Slug, ...] = Field(default=(), max_length=10)
 
 
 class FAQ(Record):
@@ -49,7 +87,9 @@ class KnowledgeBase(Record):
     address: Text | None = None
     opening_hours: Text | None = None
     services: tuple[Service, ...] = Field(default=(), max_length=20)
-    professionals: tuple[Text, ...] = Field(default=(), max_length=10)
+    professionals: tuple[Text, ...] = Field(default=(), max_length=30)
+    categories: tuple[Category, ...] = Field(default=(), max_length=30)
+    team: tuple[Professional, ...] = Field(default=(), max_length=30)
     policies: tuple[Text, ...] = Field(default=(), max_length=10)
     cancellation_policies: tuple[Text, ...] = Field(default=(), max_length=10)
     booksy_url: str | None = Field(default=None, max_length=2048)

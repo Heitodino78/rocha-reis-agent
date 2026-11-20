@@ -187,9 +187,11 @@ class PanelService:
             # Cliques simultâneos podem esgotar as retentativas de conflito do SQLite enquanto
             # outro pedido com a MESMA chave grava a mensagem. Antes de responder erro, confere-se
             # a chave: se já existe, é o mesmo envio (sucesso idempotente, nada novo é criado).
+            # Também a violação de unicidade da chave (StorageError): o outro pedido gravou entre a
+            # verificação e o commit deste, que foi revertido por inteiro (Fase 11, corrida real).
             try:
                 operation()
-            except ConcurrentUpdate:
+            except StorageError:  # inclui ConcurrentUpdate
                 existing = self.channel.operator_message(idempotency_key)
                 if existing is None or existing["conversation_id"] != conversation_id \
                         or existing["operator_user_id"] != user.id:

@@ -45,3 +45,15 @@ ai-evaluation-authorization*.json
 !fixtures/homolog/*.example.json
 # Execuções arquivadas com --save ficam locais; linhas de base são versionadas de propósito.
 evals/results/runs/
+
+# Fase 10: backups, chaves e perfis locais nunca são versionados
+*.rrbackup
+*.rrbackup.partial
+*.partial
+credenciais-demo*.txt
+.rocha-reis-demo
+credenciais-preprod*.txt
+.rocha-reis-preprod
+estado-backup.json
+*.crt
+.teste-restauracao-*

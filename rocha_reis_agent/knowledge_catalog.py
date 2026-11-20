@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from rocha_reis_agent.knowledge import FAQ, Record, Service, Text
+from rocha_reis_agent.knowledge import FAQ, Category, Pricing, Professional, Record, Service, Text
 from rocha_reis_agent.domain.contracts import normalize_for_matching
 
 
@@ -34,7 +34,9 @@ class ServiceFact(Record):
 
     @model_validator(mode="after")
     def separate_price(self) -> "ServiceFact":
-        if self.service.price is not None or self.service.price_note is not None:
+        service = self.service
+        if (service.price is not None or service.price_note is not None or service.price_kind is not None
+                or service.price_max is not None):
             raise ValueError("Preço exige registro e aprovação próprios.")
         return self
 
@@ -42,8 +44,35 @@ class ServiceFact(Record):
 class PriceFact(Record):
     kind: Literal["price"] = "price"
     service_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
-    amount: Decimal = Field(ge=0, max_digits=8, decimal_places=2)
+    # Fase 12: documentos antigos (sem `pricing`) continuam sendo preço FIXO, como antes.
+    pricing: Pricing = "fixed"
+    amount: Decimal | None = Field(default=None, ge=0, max_digits=8, decimal_places=2)
+    amount_max: Decimal | None = Field(default=None, ge=0, max_digits=8, decimal_places=2)
     note: Text | None = None
+
+    @model_validator(mode="after")
+    def consistent(self) -> "PriceFact":
+        if self.pricing == "on_evaluation":
+            if self.amount is not None or self.amount_max is not None:
+                raise ValueError("Preço mediante avaliação não tem valor.")
+        elif self.amount is None:
+            raise ValueError("Informe o valor.")
+        elif self.pricing == "range":
+            if self.amount_max is None or self.amount_max <= self.amount:
+                raise ValueError("Faixa de preço exige valor máximo maior que o mínimo.")
+        elif self.amount_max is not None:
+            raise ValueError("Valor máximo só existe em faixa de preço.")
+        return self
+
+
+class CategoryFact(Record):
+    kind: Literal["category"] = "category"
+    category: Category
+
+
+class ProfessionalFact(Record):
+    kind: Literal["professional"] = "professional"
+    professional: Professional
 
 
 class ListFact(Record):
@@ -62,7 +91,7 @@ class BooksyFact(Record):
 
 
 FactData = Annotated[
-    TextFact | ServiceFact | PriceFact | ListFact | FAQFact | BooksyFact,
+    TextFact | ServiceFact | PriceFact | ListFact | FAQFact | BooksyFact | CategoryFact | ProfessionalFact,
     Field(discriminator="kind"),
 ]
 
@@ -114,6 +143,10 @@ class FactRevision(Record):
             return ("price", self.data.service_id)
         if isinstance(self.data, FAQFact):
             return ("faq", self.id)
+        if isinstance(self.data, CategoryFact):
+            return ("category", self.data.category.id)
+        if isinstance(self.data, ProfessionalFact):
+            return ("professional", self.data.professional.id)
         return (self.data.kind, "singleton")
 
 
