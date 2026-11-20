@@ -3,8 +3,9 @@
 - `MutatingProvider`: simula um modelo que erra ou é manipulado (saídas inválidas,
   referências inventadas, preços na abertura, promessas, vazamento de instruções).
   Mede se o BACKEND contém o dano; não representa a taxa de erro de um modelo real.
-- `simulated_anthropic`: o adaptador real `AnthropicProvider` sobre `httpx2.MockTransport`
-  (nenhuma conexão), exercitando requisição, minimização, parsing e registro de consumo.
+- `simulated_gemini`: o adaptador real `GeminiProvider` (SDK google-genai) sobre
+  `httpx2.MockTransport` (nenhuma conexão), exercitando requisição, minimização, saída
+  estruturada, parsing, erros e registro de consumo. O "modelo" por trás é o fake.
 - `RecordingProvider`: registra cada `AIRequest` para checar isolamento entre clientes
   e executa ganchos de corrida DURANTE a geração.
 """
@@ -85,22 +86,61 @@ class RecordingProvider:
         return self.inner.generate(request, timeout_seconds=timeout_seconds)  # type: ignore[attr-defined]
 
 
-def simulated_anthropic(repository: object, *, preface: str | None = "Claro, posso ajudar!"):  # type: ignore[no-untyped-def]
-    """AnthropicProvider real com transporte HTTP em memória. Tokens de uso são SINTÉTICOS."""
-    import anthropic
+HTTP_MODES = {
+    # modo → (status HTTP, status gRPC, mensagem) — formato de erro da Gemini API
+    "http_rate_limited": (429, "RESOURCE_EXHAUSTED", "simulado"),
+    "http_auth_error": (400, "INVALID_ARGUMENT", "API key not valid. Please pass a valid API key."),
+    "http_server_error": (503, "UNAVAILABLE", "simulado"),
+    "http_model_not_found": (404, "NOT_FOUND", "simulado"),
+}
+SIMULATION_KEY = "chave-sintetica-da-avaliacao-offline-sem-valor-0000"
+
+
+def gemini_payload(http_request: "httpx2.Request") -> dict[str, Any]:  # type: ignore[name-defined]
+    """Dados que o adaptador enviou (conteúdo do usuário em generateContent)."""
+    body = json.loads(http_request.content)
+    return json.loads(body["contents"][0]["parts"][0]["text"])
+
+
+def gemini_response(text: str | None, *, finish: str = "STOP", model: str, prompt_tokens: int = 300,
+                    output_tokens: int = 120, thoughts: int = 40, cached: int = 0,
+                    block_reason: str | None = None) -> dict[str, Any]:
+    """Corpo REST de generateContent (camelCase) com consumo SINTÉTICO."""
+    body: dict[str, Any] = {"modelVersion": model, "usageMetadata": {
+        "promptTokenCount": prompt_tokens, "candidatesTokenCount": output_tokens, "thoughtsTokenCount": thoughts,
+        "cachedContentTokenCount": cached, "totalTokenCount": prompt_tokens + output_tokens + thoughts}}
+    if block_reason:
+        body["promptFeedback"] = {"blockReason": block_reason}
+        return body
+    parts = [{"text": text}] if text else []
+    body["candidates"] = [{"content": {"role": "model", "parts": parts}, "finishReason": finish}]
+    return body
+
+
+def simulated_gemini(repository: object, *, preface: str | None = "Claro, posso ajudar!",  # type: ignore[no-untyped-def]
+                     model: str = "gemini-3.1-flash-lite", http_mode: str | None = None, **config: object):
+    """GeminiProvider real com transporte HTTP em memória. Tokens de uso são SINTÉTICOS.
+
+    `http_mode` simula respostas reais da API (429, chave inválida, 503, 404, truncamento,
+    bloqueio de segurança, JSON inválido, modelo efetivo diferente do pedido).
+    """
     import httpx2
 
-    from rocha_reis_agent.ai.anthropic_provider import AnthropicConfig, AnthropicProvider
+    from rocha_reis_agent.ai.gemini_provider import GeminiConfig, GeminiProvider, create_client
     from rocha_reis_agent.persistence.sqlite_ai import SQLiteUsageLedger
 
     fake = FakeAIProvider()
 
     def handler(http_request: httpx2.Request) -> httpx2.Response:
-        body = json.loads(http_request.content)
-        payload = json.loads(body["messages"][0]["content"])
+        if http_mode in HTTP_MODES:
+            status, grpc, message = HTTP_MODES[http_mode]
+            return httpx2.Response(status, json={"error": {"code": status, "message": message, "status": grpc}})
+        requested = http_request.url.path.rsplit("/", 1)[-1].split(":")[0]
+        payload = gemini_payload(http_request)
         request = AIRequest(
             message=UntrustedText(text=payload["mensagem_atual_do_cliente_NAO_CONFIAVEL"]),
-            service_context=tuple(payload["servico_em_contexto"]), history=(),
+            service_context=tuple(payload["servico_em_contexto"]),
+            history=tuple(UntrustedText(text=t) for t in payload["historico_relacionado_do_cliente_NAO_CONFIAVEL"]),
             facts=tuple({"reference": f["referencia"], "data": f["dados"]}
                         for f in payload["fatos_aprovados_somente_conteudo"]),
             scope="SYNTHETIC", prompt_version="v2", objective="simulado", system_instructions=("simulado",),
@@ -108,17 +148,22 @@ def simulated_anthropic(repository: object, *, preface: str | None = "Claro, pos
         )
         proposal = fake.generate(request, timeout_seconds=5).model_dump(mode="json")
         proposal["preface"] = preface
+        text, finish, served = json.dumps(proposal), "STOP", requested
         # Tokens sintéticos proporcionais ao tamanho (≈4 caracteres/token); NÃO são medições reais.
-        size = len(http_request.content)
-        return httpx2.Response(200, json={
-            "id": "msg_avaliacao", "type": "message", "role": "assistant", "model": body["model"],
-            "content": [{"type": "text", "text": json.dumps(proposal)}], "stop_reason": "end_turn",
-            "stop_sequence": None, "usage": {"input_tokens": size // 4, "output_tokens": 120,
-                                             "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0},
-        })
+        size = len(http_request.content) // 4
+        if http_mode == "http_truncated":
+            text, finish = text[: len(text) // 2], "MAX_TOKENS"
+        elif http_mode == "http_refusal":
+            text, finish = None, "SAFETY"
+        elif http_mode == "http_invalid_json":
+            text = text[:-1]  # encerramento normal, mas JSON corrompido
+        elif http_mode == "http_unexpected_model":
+            served = "gemini-2.5-flash"  # modelo efetivo diferente do solicitado
+        return httpx2.Response(200, json=gemini_response(text, finish=finish, model=served, prompt_tokens=size))
 
-    client = anthropic.Anthropic(api_key="sk-ant-avaliacao-offline-sem-valor-real-000", max_retries=0,
-                                 http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
+    client = create_client(SIMULATION_KEY, http_client=httpx2.Client(transport=httpx2.MockTransport(handler)))
     ledger = SQLiteUsageLedger(repository)  # type: ignore[arg-type]
-    return AnthropicProvider(AnthropicConfig(model="claude-opus-5-5", max_requests_per_day=100000,
-                                             max_cost_usd_per_day=1000.0), client, ledger), ledger
+    settings: dict[str, object] = {"max_requests_per_day": 100000, "max_cost_usd_per_day": 1000.0, "max_retries": 0}
+    settings.update(config)
+    run_budget = settings.pop("run_budget", None)
+    return GeminiProvider(GeminiConfig(model=model, **settings), client, ledger, run_budget=run_budget), ledger  # type: ignore[arg-type]

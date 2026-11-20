@@ -76,8 +76,10 @@ def test_unknown_information_is_not_invented(tmp_path):
     s = stack(tmp_path)
     say(s, "wamid.1", "Vocês têm promoção amanhã?")
     (reply,) = replies(s)
-    assert "R$" not in reply and "promo" not in reply.lower()
-    assert "Não compreendi" in reply or "Não tenho informação confirmada" in reply
+    # Fase 9: a promoção é reconhecida e a AUSÊNCIA de registro aprovado é declarada
+    # (CONTEXTO_MESTRE §4.4); nenhuma oferta, valor ou desconto é afirmado.
+    assert "R$" not in reply and "Não tenho informação confirmada sobre promoções" in reply
+    assert not any(term in reply.lower() for term in ("temos promoção", "desconto de", "grátis", "%"))
 
 
 def test_booksy_is_only_a_link_without_availability_or_confirmation(tmp_path):

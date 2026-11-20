@@ -23,6 +23,10 @@ class ResponseGenerator:
             if not selected:
                 selected = [Intent.GREETING]
             fragments = [self._answer(i, detection, knowledge) for i in selected[:3]]
+            corrected = [s.name for s in knowledge.services if s.id in detection.service_ids]
+            if detection.spelling_corrected and corrected:
+                # Transparência: o serviço foi reconhecido por correção ortográfica.
+                fragments.insert(0, f"Entendi que você se refere a: {', '.join(corrected[:3])}.")
             if len(selected) > 3:
                 fragments.append("Vamos detalhar as demais dúvidas uma por vez.")
             reply = " ".join(fragments)
@@ -69,6 +73,9 @@ class ResponseGenerator:
             return self._known(" ".join(knowledge.policies[:3]), "políticas de atendimento")
         if intent == Intent.CANCELLATION_POLICY:
             return self._known(" ".join(knowledge.cancellation_policies[:3]), "política de cancelamento")
+        if intent == Intent.PROMOTION:
+            # Não há registro aprovado de promoções: nunca afirmar nem negar oferta.
+            return f"Não tenho informação confirmada sobre promoções. {HELP}"
         if intent == Intent.FAQ and detection.faq_index is not None:
             return knowledge.faqs[detection.faq_index].answer
         return f"Não compreendi com segurança. Pode reformular sua dúvida? {HELP}"

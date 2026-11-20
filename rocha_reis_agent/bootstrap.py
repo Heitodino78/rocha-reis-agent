@@ -158,26 +158,28 @@ def configured_knowledge(settings: Settings, repository: ConversationRepository)
 
 
 def build_ai_provider(settings: Settings, repository: ConversationRepository, *, http_client: object | None = None):  # type: ignore[no-untyped-def]
-    """None = FakeAIProvider (padrão). O real exige a trava de código E configuração validada."""
+    """None = FakeAIProvider (padrão). O Gemini real exige a trava de código E configuração validada."""
     if settings.ai_provider == "fake":
         return None
-    if not config_module.AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED:
-        raise ValueError("Provedor de IA real não autorizado nesta fase.")
+    if not config_module.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED:
+        raise ValueError("Provedor de IA real (Gemini) não autorizado nesta fase.")
     from rocha_reis_agent.ai.prompts import PromptRegistry
     if PromptRegistry().get(settings.ai_prompt_version).output_contract != "ai-response-v2":
         raise ValueError("Provedor real exige versão de prompt com contrato ai-response-v2.")
     # Importação tardia: o SDK só é carregado quando a IA real é autorizada.
-    import anthropic
-    from rocha_reis_agent.ai.anthropic_provider import AnthropicConfig, AnthropicProvider
+    from rocha_reis_agent.ai.gemini_provider import GeminiConfig, GeminiProvider, create_client
     from rocha_reis_agent.persistence.sqlite_ai import SQLiteUsageLedger
 
-    assert settings.ai_api_key is not None and isinstance(repository, SQLiteConversationRepository)
-    client = anthropic.Anthropic(api_key=settings.ai_api_key.get_secret_value(), max_retries=settings.ai_max_retries,
-                                 timeout=settings.ai_timeout_seconds, http_client=http_client)  # type: ignore[arg-type]
-    config = AnthropicConfig(
-        model=settings.ai_model, max_output_tokens=settings.ai_max_output_tokens, effort=settings.ai_effort,
-        max_retries=settings.ai_max_retries, refusal_fallback=settings.ai_refusal_fallback,
+    assert settings.gemini_api_key is not None and settings.ai_model is not None
+    assert isinstance(repository, SQLiteConversationRepository)
+    # Chave EXPLÍCITA (o SDK leria GEMINI_API_KEY/GOOGLE_API_KEY sozinho); Gemini Developer API.
+    client = create_client(settings.gemini_api_key.get_secret_value(), http_client=http_client)
+    config = GeminiConfig(
+        model=settings.ai_model, max_output_tokens=settings.ai_max_output_tokens,
+        thinking_level=settings.ai_thinking_level, max_retries=settings.ai_max_retries,
         max_concurrency=settings.ai_max_concurrency, max_requests_per_day=settings.ai_max_requests_per_day,
         max_cost_usd_per_day=settings.ai_max_cost_usd_per_day, max_input_chars=settings.ai_max_input_chars,
+        max_input_tokens=settings.ai_max_input_tokens,
+        max_requests_per_run=settings.ai_max_requests_per_run, max_cost_usd_per_run=settings.ai_max_cost_usd_per_run,
     )
-    return AnthropicProvider(config, client, SQLiteUsageLedger(repository))
+    return GeminiProvider(config, client, SQLiteUsageLedger(repository))

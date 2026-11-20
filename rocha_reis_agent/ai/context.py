@@ -15,6 +15,7 @@ from rocha_reis_agent.knowledge_projection import AuthorizedKnowledge, project_a
 def build_request(
     message: InboundMessage, conversation: Conversation, knowledge: AuthorizedKnowledge,
     prompt: PromptVersion, *, control: Detection, context_turns: int, history_limit: int = 4,
+    inherited_from: str | None = None,
 ) -> AIRequest:
     known = {s.id for s in knowledge.base.services}
     context = tuple(key for key in conversation.service_context if key in known)
@@ -38,6 +39,9 @@ def build_request(
         if entry.role == "client" and aliases
         and any(contains(normalized(entry.text), alias) for alias in aliases)
     )
+    if inherited_from is not None and history_limit:
+        # Pergunta anterior do MESMO cliente que dá sentido à pergunta elíptica (não confiável).
+        history = (*history, UntrustedText(text=inherited_from[:500]))
     return AIRequest(
         message=UntrustedText(text=message.text), service_context=context,
         history=history[-history_limit:] if history_limit else (),

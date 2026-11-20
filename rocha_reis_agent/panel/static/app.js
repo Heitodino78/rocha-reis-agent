@@ -674,11 +674,11 @@ async function previewKnowledge(event) {
 async function loadAiUsage() {
   try {
     const data = await api("/ai/usage");
-    $("ai-status").textContent = `Provedor: ${data.provider} · modelo configurado: ${data.model} · prompt: ${data.prompt_version} · `
+    $("ai-status").textContent = `Provedor: ${data.provider} · modelo configurado: ${data.model || "nenhum (a definir na homologação)"} · prompt: ${data.prompt_version} · `
       + (data.real_provider_code_lock ? "provedor real AUTORIZADO no código" : "provedor real BLOQUEADO no código (nenhuma chamada externa)");
     const rows = (data.usage_last_24h && data.usage_last_24h.rows) || [];
     $("ai-usage").replaceChildren(...(rows.length ? rows.map((r) => el("li", {
-      text: `${r.provider}/${r.model} ${r.prompt_version} · ${r.outcome}: ${r.n} chamadas, ${r.input_tokens}+${r.output_tokens} tokens, `
+      text: `${r.provider}/${r.model} ${r.prompt_version} · ${r.outcome}: ${r.n} chamadas, ${r.input_tokens}+${r.output_tokens} tokens (raciocínio: ${r.reasoning_tokens || 0}), `
         + (r.cost_micros === null ? "custo não estimado" : `≈ US$ ${(r.cost_micros / 1e6).toFixed(4)} (estimativa)`) })) :
       [el("li", { text: `Sem chamadas nas últimas 24h. Limites: ${data.limits.requests_per_day} req/dia, US$ ${data.limits.cost_usd_per_day}/dia.` })]));
   } catch (error) { $("ai-status").textContent = error.message; }

@@ -88,16 +88,25 @@ def test_network_client_is_confined_to_the_disabled_graph_adapter():
     in_memory = ROOT / "rocha_reis_agent" / "evaluation" / "providers.py"
     source = in_memory.read_text(encoding="utf-8")
     used = set(re.findall(r"httpx2\.([A-Za-z_]+)", source))
-    assert used <= {"MockTransport", "Request", "Response"}, used
-    assert "base_url" not in source and "http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(" in source
+    # Fase 9B: o cliente httpx2 da avaliação existe SÓ com transporte em memória.
+    assert used <= {"MockTransport", "Request", "Response", "Client"}, used
+    assert "base_url" not in source and "httpx2.Client(transport=httpx2.MockTransport(" in source
+    assert source.count("httpx2.Client(") == source.count("httpx2.Client(transport=httpx2.MockTransport(")
+    # Fase 9B: o adaptador Gemini importa httpx2 SÓ para os tipos de exceção do transporte do SDK.
+    gemini = ROOT / "rocha_reis_agent" / "ai" / "gemini_provider.py"
+    assert set(re.findall(r"httpx2\.([A-Za-z_]+)", gemini.read_text(encoding="utf-8"))) <= {"TimeoutException", "TransportError"}
     for path in (ROOT / "rocha_reis_agent").rglob("*.py"):
         source = path.read_text(encoding="utf-8")
         for forbidden in ("import httpx2", "import httpx\n", "import requests", "urllib.request", "http.client",
                           "import aiohttp", "socket.create_connection"):
-            if path != allowed and not (path == in_memory and forbidden == "import httpx2"):
+            if path != allowed and not (path in (in_memory, gemini) and forbidden == "import httpx2"):
                 assert forbidden not in source, (path.name, forbidden)
         if path != allowed:
             assert "graph.facebook.com" not in source
+        # O SDK Google (cliente de rede) só é importado pelo adaptador Gemini; Anthropic não existe mais.
+        if path != gemini:
+            assert "from google import genai" not in source and "google.genai" not in source, path.name
+        assert "import anthropic" not in source, path.name
         if "import graph_transport" in source or "channels.graph_transport import" in source:
             assert path.name == "bootstrap.py"  # importação tardia, atrás da trava
     import subprocess, sys

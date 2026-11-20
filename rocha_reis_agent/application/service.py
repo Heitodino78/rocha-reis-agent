@@ -94,6 +94,7 @@ class AgentService:
                 try:
                     knowledge = authorize_knowledge(self.knowledge.get())
                     control = self.detector.detect(message.text, knowledge.base)
+                    control, inherited_from = self._inherit(conversation, control, knowledge.base)
                     if Intent.HUMAN in control.intents:
                         detection = self._context(conversation, control)
                         self.handoff.request(conversation)
@@ -103,7 +104,7 @@ class AgentService:
                             message, conversation, knowledge, self.prompt,
                             control=control,
                             context_turns=self.conversations.limits.context_turns,
-                            history_limit=self.ai_history_limit,
+                            history_limit=self.ai_history_limit, inherited_from=inherited_from,
                         )
                         provider = self.provider if self.provider is not None else FakeAIProvider(self.detector)
                         raw = provider.generate(request, timeout_seconds=self.ai_timeout_seconds)
@@ -122,8 +123,12 @@ class AgentService:
                             or detection.use_context != control.use_context
                             or detection.catalog_requested != control.catalog_requested
                             or (Intent.BOOKING in control.intents and Intent.BOOKING not in detection.intents)
+                            # Intenção herdada pelo backend (pergunta elíptica) não pode ser descartada.
+                            or (control.inherit_intents and Intent.PRICE not in detection.intents)
                         ):
                             raise AIValidationError("Proposta diverge do escopo autorizado da consulta.")
+                        detection = replace(detection, inherit_intents=control.inherit_intents,
+                                            spelling_corrected=control.spelling_corrected)
                         detection = self._context(conversation, detection)
                         reply = self.responses.render(detection, knowledge.base)
                         if v2:
@@ -173,6 +178,27 @@ class AgentService:
             if effects is not None:
                 effects(result, conversation.session_id)
             return result
+
+    def _inherit(self, conversation: Conversation, control: Detection, base) -> tuple[Detection, str | None]:  # type: ignore[no-untyped-def]
+        """Pergunta elíptica ("e a escova?") herda PREÇO da pergunta anterior do MESMO cliente.
+
+        Só dentro da janela de contexto e quando a pergunta anterior pode ser enviada ao
+        provedor como histórico (AI_HISTORY_LIMIT > 0); caso contrário a mensagem segue
+        como consulta sobre o serviço, sem herança.
+        """
+        if not control.inherit_intents:
+            return control, None
+        plain = replace(control, inherit_intents=False)
+        if self.ai_history_limit == 0 or conversation.context_age >= self.conversations.limits.context_turns:
+            return plain, None
+        previous = next((e for e in reversed(conversation.history[:-1]) if e.role == "client"), None)
+        if previous is None:
+            return plain, None
+        earlier = self.detector.detect(previous.text, base)
+        if Intent.PRICE not in earlier.intents or Intent.HUMAN in earlier.intents:
+            return plain, None
+        rest = tuple(i for i in control.intents if i not in (Intent.SERVICES, Intent.PRICE))
+        return replace(control, intents=(Intent.PRICE, *rest)), previous.text[:500]
 
     def _context(self, conversation: Conversation, detection: Detection) -> Detection:
         if detection.service_ids:

@@ -74,13 +74,25 @@ Antes de importar conversas, telefones ou cadastro de clientes: obter autorizaç
 
 ## IA generativa (Fase 8)
 
-- [ ] Autorização para usar provedor de IA externo, com fornecedor escolhido (Anthropic implementado; outro exige novo adaptador).
+- [x] Fornecedor escolhido: **Google Gemini** (decisão do responsável, 20/11/2026, Fase 9B). Anthropic substituído.
+- [ ] Autorização para usar a Gemini API com conta Google e projeto Cloud **pagos** identificados (nível gratuito usa o conteúdo para melhorar produtos: vedado para conversas de clientes).
 - [ ] Orçamento mensal e limites diários (`AI_MAX_REQUESTS_PER_DAY`, `AI_MAX_COST_USD_PER_DAY`).
 - [ ] Avaliação jurídica: retenção e uso para treinamento pelo provedor, transferência internacional, contrato de tratamento, aviso ao cliente sobre IA.
 - [ ] Decisão sobre minimização: nomes e dados livres digitados pelos clientes hoje não são removidos antes do envio.
 - [ ] Quem cria e guarda a chave de API (gerenciador de segredos) e quem autoriza a troca da trava de código.
-- [ ] Modelo e nível de esforço escolhidos após medição real (Opus 5.5 / Sonnet 5.5 / Haiku 5.5).
-- [ ] Ativação do prompt `v2` (hoje registrado e inativo) após avaliação com o modelo escolhido.
+- [ ] Modelo e nível de raciocínio escolhidos após medição real (piloto `gemini-3.1-flash-lite`; comparar `gemini-3.5-flash-lite` e `gemini-3.8-flash`).
+- [ ] Ativação do prompt `v2` ou `v3` (ambos registrados e inativos) após avaliação com o modelo escolhido.
+
+## Avaliação com IA real (Fase 9B)
+
+- [ ] Autorização escrita específica para a avaliação (responsável, executor, modelos, orçamento, nº de requisições e cenários, período, dados só sintéticos, armazenamento, interrupção) — formato em `fixtures/homolog/ai_evaluation_authorization.example.json`.
+- [ ] Orçamento da avaliação aprovado (sugestão técnica: US$ 15 / 1.500 requisições — `HOMOLOGACAO_IA_FASE9.md` §6).
+- [ ] Retenção de prompts/respostas pelo Google no nível pago (os termos dizem "limited period", sem dias) confirmada no Data Processing Addendum; transferência internacional ("any country") avaliada pelo jurídico.
+- [ ] Responsável legal (18+) aceita os termos da Gemini API e contrata o projeto; restrição de API configurada na chave.
+- [ ] Verificar `gemini-2.5-flash-lite` (possivelmente mais barato; tarifa não lida em texto verbatim) e os rate limits por modelo no AI Studio.
+- [ ] Latência aceitável para o salão (o critério O1 pré-registrado usa p95 ≤ 8 s; `AI_TIMEOUT_SECONDS` padrão de 2 s é curto para modelos com raciocínio).
+- [ ] Quantas mensagens tem um atendimento típico (para converter custo por mensagem em custo por atendimento).
+- [ ] Como tratar temas sensíveis (saúde, gravidez, alergias): hoje o detector não os reconhece (cenário X2).
 
 ## Checklist de coleta junto ao Salão Rocha Reis (para a base de conhecimento)
 

@@ -21,7 +21,12 @@ from rocha_reis_agent.knowledge_projection import authorize_knowledge
 
 # Casos difíceis declarados no conjunto: o detector de regras NÃO os resolve. Se esta lista
 # mudar, a mudança deve ser explicada (melhoria real ou regressão), nunca ajustada às cegas.
-KNOWN_RULE_DETECTOR_GAPS = {"D2", "D4", "F2", "K1", "K3"}
+# Fase 9: os cinco casos difíceis da Fase 8 (D2, D4, F2, K1, K3) foram corrigidos (STATUS_FASE_9 §6).
+# Novos casos difíceis DECLARADOS na Fase 9 (pedido humano indireto, gíria no preço, reclamação
+# indireta, assunto de saúde): exigem compreensão que regras não oferecem; ficam para a 9B.
+# Fase 9B: X2 (saúde) passou a escalar por regra de SEGURANÇA (vocabulário fechado de saúde),
+# não por compreensão; H9, J6 e L3 continuam dependendo de um modelo real.
+KNOWN_RULE_DETECTOR_GAPS = {"H9", "J6", "L3"}
 
 
 @pytest.fixture(scope="module")
@@ -49,17 +54,17 @@ def reports(scenarios, offline):
     return {
         (provider, prompt): evaluate(scenarios, provider=provider, prompt_version=prompt)
         for provider, prompt in (("fake", "v1"), ("fake", "v2"), ("hostile", "v1"), ("hostile", "v2"),
-                                 ("anthropic-simulated", "v2"))
+                                 ("gemini-simulated", "v2"))
     }
 
 
 def test_scenario_set_covers_every_required_category(scenarios):
-    assert {s.category for s in scenarios.scenarios} == set(CATEGORIES) == set("ABCDEFGHIJKLMNOPQRST")
+    assert {s.category for s in scenarios.scenarios} == set(CATEGORIES) == set("ABCDEFGHIJKLMNOPQRSTUVWX")
     critical = [s for s in scenarios.scenarios if s.critical]
     assert len(critical) >= 40 and {s.category for s in critical} >= set("CDEHMNPQRST")
 
 
-@pytest.mark.parametrize("key", [("fake", "v1"), ("fake", "v2"), ("anthropic-simulated", "v2")])
+@pytest.mark.parametrize("key", [("fake", "v1"), ("fake", "v2"), ("gemini-simulated", "v2")])
 def test_full_runs_have_no_critical_failure_and_only_declared_gaps(reports, key):
     metrics = reports[key]["metrics"]
     assert metrics["critical_scenarios_failed"] == [] and metrics["safety_violations"] == 0
@@ -85,7 +90,7 @@ def test_v2_keeps_answering_when_only_the_preface_is_malicious(reports):
 
 
 def test_simulated_adapter_reports_estimated_cost_but_labels_it(reports):
-    metrics = reports[("anthropic-simulated", "v2")]["metrics"]
+    metrics = reports[("gemini-simulated", "v2")]["metrics"]
     assert metrics["estimated_cost_usd"] > 0 and "SINTÉTICOS" in metrics["cost_basis"]
     assert reports[("fake", "v1")]["metrics"]["estimated_cost_usd"] is None
 
@@ -131,9 +136,10 @@ def test_cli_exit_codes_and_report_file(tmp_path, offline, capsys):
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["run"]["provider"] == "fake" and report["run"]["prompt_version"] == "v2"
     assert "Não valida a qualidade de um modelo generativo real" in capsys.readouterr().out
-    assert main(["--provider", "anthropic-simulated", "--prompt", "v1"]) == 2  # adaptador exige contrato v2
-    with pytest.raises(SystemExit):
-        main(["--provider", "anthropic"])  # provedor real não é selecionável na avaliação
+    assert main(["--provider", "gemini-simulated", "--prompt", "v1"]) == 2  # adaptador exige contrato v2
+    # Fase 9: o provedor real existe na CLI, mas é RECUSADO pela trava de código (nada é enviado).
+    assert main(["--provider", "gemini", "--prompt", "v3"]) == 2
+    assert "trava de código" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("text,human", [

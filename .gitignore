@@ -38,3 +38,10 @@ dist/
 autorizacao*.json
 homolog-authorization*.json
 *.homolog.synthetic.sqlite3*
+
+# Fase 9: autorização real de avaliação com IA e arquivo local de execuções
+ai_evaluation_authorization*.json
+ai-evaluation-authorization*.json
+!fixtures/homolog/*.example.json
+# Execuções arquivadas com --save ficam locais; linhas de base são versionadas de propósito.
+evals/results/runs/

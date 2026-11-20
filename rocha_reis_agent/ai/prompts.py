@@ -43,6 +43,10 @@ class PromptRegistry:
         except (OSError, UnicodeError, ValidationError, ValueError):
             raise SimulationError("Registro de prompts inválido ou indisponível.") from None
 
+    @property
+    def versions(self) -> tuple[str, ...]:
+        return tuple(self._versions)
+
     def get(self, version: str | None = None) -> PromptVersion:
         selected = version if version is not None else self.active
         if selected not in self._versions:

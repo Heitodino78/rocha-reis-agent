@@ -99,7 +99,7 @@ _FORBIDDEN_STEMS = (
     "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo",
     # fatos comerciais
     "preco", "valor", "custa", "custo", "reais", "gratis", "gratuit", "desconto", "promoc", "oferta", "pagamento",
-    "pix", "cartao", "endereco", "rua", "avenida", "localiz", "funcionamento", "abrimos", "fechamos", "politica",
+    "pix", "cartao", "cupo", "parcel", "dinheiro", "credito", "debito", "endereco", "rua", "avenida", "localiz", "funcionamento", "abrimos", "fechamos", "politica",
     "cancelamento", "booksy", "link",
     # alegações de ação do sistema ou da equipe
     "transferi", "encaminhei", "notifiquei", "avisei", "atend", "humano", "equipe", "funcionari", "recepcion",

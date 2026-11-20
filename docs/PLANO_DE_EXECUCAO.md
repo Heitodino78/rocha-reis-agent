@@ -98,7 +98,10 @@ ensaio ponta a ponta com reinícios. Evidências em `STATUS_FASE_6.md` e
 | 6B | Ensaio real com número de teste, allowlist, limites e evidências | Bloqueada até autorização |
 | 7 | Painel de atendimento humano: login Argon2id, RBAC, conversas, assumir/transferir/finalizar/retomar, resposta pela outbox, SSE, auditoria | **Implementado e testado localmente** (`STATUS_FASE_7.md`); não validado pelo salão |
 | 8 | IA generativa (adaptador Anthropic **bloqueado**), conhecimento gerido/aprovado no painel, prompts v2, validação factual, avaliações reproduzíveis | **Implementado e testado localmente** (`STATUS_FASE_8.md`); IA real não ativada nem validada |
-| 9 (proposta) | Infraestrutura de produção: banco cifrado, backup/restauração, worker supervisionado, alertas, LGPD | Planejado (`CHECKLIST_PRODUCAO.md`) |
+| 9A | Homologação **offline** da IA: auditoria, correções de qualidade, registro verificado de modelos, orçamento com reserva de pior caso, avaliação v2 (120 cenários, critérios pré-registrados), roteiro 9B | **Implementado e testado offline** (`STATUS_FASE_9.md`) |
+| 9B | **Migração para Google Gemini** (provedor oficial): SDK `google-genai`, `GeminiProvider` bloqueado, registro de modelos Gemini, orçamento adaptado, prompt v4, avaliação com Gemini simulado | **Implementado e testado offline** (`STATUS_FASE_9.md` §B) |
+| 9C (proposta) | Homologação real com Gemini (dados sintéticos, conta paga, orçamento e autorização específicos) | **Bloqueada** até autorização (`HOMOLOGACAO_IA_FASE9.md`) |
+| 10 (proposta) | Infraestrutura de produção: banco cifrado, backup/restauração, worker supervisionado, alertas, LGPD | Planejado (`CHECKLIST_PRODUCAO.md`); antes numerada como "9 (proposta)" |
 
 Já existe no núcleo: máquina de estados humana, pausa e retomada explícita,
 cancelamento de respostas obsoletas. Existe só como simulação: ações de operador
@@ -121,6 +124,23 @@ dado real, nenhum envio. Detalhes em `STATUS_FASE_8.md` e `IA_GENERATIVA.md`.
 Proposta de próxima etapa: coleta e aprovação dos dados oficiais com o salão e
 validação do painel com a equipe; avaliação com IA real só com autorização (ver
 `IA_GENERATIVA.md` §7). Nada avança sem pedido explícito.
+
+## Fase 9A — Homologação offline da IA generativa (executada em 20/11/2026)
+
+Escopo do pedido do usuário: auditar a IA, corrigir os cinco problemas de qualidade
+conhecidos, verificar modelos na documentação oficial, revisar o adaptador, versionar
+prompts, evoluir as avaliações, implementar limites de consumo e preparar a 9B — **sem
+nenhuma chamada paga**. Conflito de numeração registrado: a "Fase 9 (proposta)" de
+infraestrutura passa a ser a etapa 10. Evidências em `STATUS_FASE_9.md`. A Fase 9B só
+avança com autorização explícita contendo os itens de `HOMOLOGACAO_IA_FASE9.md` §1.
+
+## Fase 9B — Migração para Google Gemini (executada offline em 20/11/2026)
+
+Decisão do responsável: **Google Gemini é o provedor oficial**; a integração Anthropic das
+Fases 8/9A passa a ser histórica. Conflito de numeração registrado: a "9B" preparada na
+9A (avaliação real com Anthropic) foi substituída por esta migração; a homologação real
+com Gemini passa a ser proposta como 9C e continua bloqueada. Nenhuma chamada externa,
+nenhum dado real. Evidências em `STATUS_FASE_9.md` (parte B).
 
 ## Atendimento humano operacional — planejamento original (histórico)
 

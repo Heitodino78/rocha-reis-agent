@@ -1,8 +1,18 @@
-# IA generativa — arquitetura, provedor, privacidade e ativação (Fase 8)
+# IA generativa — arquitetura, provedor, privacidade e ativação
 
-**Estado:** adaptador real **IMPLEMENTADO e BLOQUEADO**. Nenhuma chamada a API externa
-foi feita. Qualidade de modelo real: **não validada**. Este documento é a referência
-técnica; o relatório da execução está em [`STATUS_FASE_8.md`](STATUS_FASE_8.md).
+> **GOOGLE GEMINI É O PROVEDOR OFICIAL ESCOLHIDO PARA O ROCHA REIS AGENT** (decisão do
+> responsável, 20/11/2026, Fase 9B). A integração Anthropic das Fases 8 e 9A é uma decisão
+> **histórica substituída**: o adaptador e o SDK foram removidos e os relatórios daquelas
+> fases continuam como evidência do que foi feito na época (§9). Claude Code é só a
+> ferramenta de desenvolvimento; não é o modelo que atende clientes.
+
+**Estado:** adaptador Gemini **IMPLEMENTADO e BLOQUEADO** (trava de código própria).
+Nenhuma chamada à API Gemini foi feita, nem gratuita nem paga. Qualidade de modelo real:
+**não validada**.
+
+Relatórios: [`STATUS_FASE_8.md`](STATUS_FASE_8.md) e [`STATUS_FASE_9.md`](STATUS_FASE_9.md).
+Modelos: [`AVALIACAO_MODELOS_IA.md`](AVALIACAO_MODELOS_IA.md). Homologação real (não
+autorizada): [`HOMOLOGACAO_IA_FASE9.md`](HOMOLOGACAO_IA_FASE9.md).
 
 ## 1. Fluxo
 
@@ -10,78 +20,59 @@ técnica; o relatório da execução está em [`STATUS_FASE_8.md`](STATUS_FASE_8
 Mensagem (não confiável)
  → normalização, sessão, deduplicação (núcleo, Fases 1–4)
  → barreira de estado: WAITING_HUMAN / HUMAN_ACTIVE / RESOLVED → nenhuma chamada à IA
- → detector determinístico (controle): pedido humano decide SEM modelo
+ → detector determinístico (controle): pedido humano e temas de saúde decididos SEM modelo
  → catálogo aprovado (arquivo ou banco) → projeção autorizada (só revisões APPROVED)
  → recuperação determinística de fatos relevantes + contexto limitado do MESMO cliente
  → AIRequest (instruções confiáveis | fatos "só conteúdo" | histórico e mensagem NÃO confiáveis)
- → AIProvider (fake | anthropic BLOQUEADO)
+ → AIProvider (fake | Gemini BLOQUEADO)
+     Gemini: system_instruction = instruções; contents = dados rotulados;
+     response_json_schema = contrato v2; orçamento reservado ANTES da chamada
+ → bloqueio de segurança / truncamento / modelo efetivo inesperado → falha segura
  → validação estrutural (Pydantic, campos extras proibidos)
- → validação de escopo: referências ⊆ fatos recuperados; serviço/contexto = controle do backend
+ → validação de escopo: referências ⊆ fatos recuperados; serviço/contexto/intenção herdada = controle do backend
  → resposta montada pelo BACKEND com templates e campos aprovados
- → abertura do modelo (só v2) sanitizada; qualquer sinal factual → descartada
+ → abertura do modelo sanitizada; qualquer sinal factual → descartada
  → nova checagem: conhecimento mudou durante a consulta? → falha segura
  → commit otimista (versão da conversa): operador assumiu durante a geração? → conflito,
    reprocessa, estado humano → nenhuma resposta
  → outbox → despacho reconfere estado/sessão/janela/responsável antes de enviar
 ```
 
-Qualquer falha (timeout, rede, recusa, JSON inválido, referência inventada, limite de
-consumo) leva à mesma saída segura: resposta fixa sem fatos, contexto preservado e a
-conversa em `WAITING_HUMAN`. Nada de retry infinito: no máximo `AI_MAX_RETRIES` (≤3) no SDK.
+Qualquer falha leva à mesma saída segura: resposta fixa sem fatos, contexto preservado e a
+conversa em `WAITING_HUMAN`. São falhas: timeout, rede, 429, chave inválida, bloqueio de
+segurança, JSON inválido, referência inventada, limite de consumo e modelo inesperado.
 
-## 2. Escolha do provedor inicial: Anthropic (Claude)
+## 2. Provedor: Google Gemini (Gemini Developer API)
 
-| Critério | Anthropic (escolhido) | OpenAI (não implementado) |
-|---|---|---|
-| API | Messages API, SDK Python oficial `anthropic` 2.x (já no lock com hash) | API própria e SDK Python oficial |
-| Saída estruturada | `output_config.format` com JSON Schema | Existe saída estruturada por schema |
-| Integração Python | SDK sobre `httpx2` — o mesmo cliente HTTP já travado no projeto; testável com `httpx2.MockTransport` | Exigiria segundo SDK e outra pilha HTTP |
-| Falhas | Exceções tipadas (timeout, conexão, 429, 401, 403, 400, 5xx); `stop_reason` `refusal`/`max_tokens` | Equivalentes existem |
-| Recusa | `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) em Opus 5.5/Sonnet 5.5; Haiku 5.5 sem fallback no servidor | — |
-| Versionamento | ID de modelo explícito (`claude-opus-5-5`), sem sufixo de data | IDs próprios |
-| Custos publicados | Tabela oficial abaixo (verificada) | **Não verificados nesta execução** |
-| Privacidade | ZDR só por acordo; ver §5 | Não avaliado nesta execução |
+| Item | Implementação |
+|---|---|
+| SDK | **`google-genai` 3.6.1** (oficial), fixo no `requirements.in` e travado com hash. Usa `httpx2`, o mesmo cliente HTTP já travado no projeto |
+| Chamada | `client.models.generate_content(model, contents, config=GenerateContentConfig(...))`. A documentação nova recomenda a "Interactions API"; o `generateContent` documentado no README do SDK foi mantido por ter binding estável e saída estruturada por JSON Schema. Reavaliar em revisão futura |
+| Cliente | Só por `create_client(api_key, http_client)`: chave **explícita**, `vertexai=False`, `enterprise=False`. `genai.Client()` sem argumentos leria `GEMINI_API_KEY`/`GOOGLE_API_KEY` do ambiente, por isso nunca é usado |
+| Saída estruturada | `response_mime_type="application/json"` + `response_json_schema=RESPONSE_SCHEMA_V2`. Recursos usados (object, array, enum, anyOf, null, required, additionalProperties) constam da documentação |
+| Raciocínio | `ThinkingConfig(thinking_level=…)`. Padrão do registro: `minimal` nos Flash-Lite e `medium` no 3.8 Flash (que **não** aceita `minimal`). Não existe "desligar" documentado |
+| Prazo | `HttpOptions(timeout=ms, retry_options=HttpRetryOptions(attempts=N))` **por requisição**; `AI_TIMEOUT_SECONDS` é dividido entre as tentativas (o SDK também repete timeouts) |
+| Erros | `ClientError` (429 → `rate_limited`; 401 ou 400 "API key not valid" → `auth_error`; 403; 404 → `model_not_found`; outros 4xx); `ServerError`/`APIError` → `provider_unavailable`; `httpx2.TimeoutException` → `timeout`; `httpx2.TransportError` → `network_error` |
+| Bloqueios | `prompt_feedback.block_reason` → `blocked_prompt`; `finish_reason` SAFETY/PROHIBITED_CONTENT/BLOCKLIST/SPII/RECITATION… → `blocked_output`; MAX_TOKENS → `truncated`; outro diferente de STOP → `unexpected_finish`. Sempre verificados **antes** de ler o conteúdo |
+| Modelo efetivo | `model_version` igual ao pedido (ou com sufixo de versão `-NNN`). Diferente → `unexpected_model`, falha segura, custo de pior caso |
+| Consumo | `usage_metadata`: `prompt_token_count` (inclui cache), `cached_content_token_count`, `candidates_token_count`, `thoughts_token_count` (cobrado como saída) |
 
-**Justificativa:** o SDK já estava no lock e usa o mesmo `httpx2` do adaptador Graph,
-o que permite testar o caminho completo sem rede; saída por JSON Schema reduz parsing
-frágil; o contrato `AIProvider` continua neutro — trocar de provedor é escrever outro
-adaptador que devolva `AIResponseV2`, sem tocar no núcleo. A OpenAI não foi descartada
-por qualidade: apenas não há benefício concreto em manter dois SDKs nesta fase, e seus
-preços/políticas **não foram conferidos** aqui. Reavaliar antes da ativação se o
-salão/agência preferir outro fornecedor.
+## 3. Modelos e custos (estimativa, não medição)
 
-Fonte consultada: referência oficial da API Claude (cache de 2026-11-03), em 20/11/2026.
-Reconfirmar em <https://platform.claude.com/docs/en/about-claude/pricing> antes de ativar.
+Registro verificado: [`ai/models.json`](../rocha_reis_agent/ai/models.json) (`verified_at`
+2026-11-20, nível pago Standard). Detalhes, fontes e não verificados em
+[`AVALIACAO_MODELOS_IA.md`](AVALIACAO_MODELOS_IA.md).
 
-## 3. Modelos candidatos e custos (estimativa, não medição)
-
-| Modelo | ID | Entrada US$/MTok | Saída US$/MTok | Observações relevantes |
+| Modelo (estável) | Entrada US$/MTok | Saída (com raciocínio) | Cache (leitura) | Raciocínio |
 |---|---|---|---|---|
-| Claude Opus 5.5 | `claude-opus-5-5` | 4,00 | 20,00 | Padrão da configuração. Thinking sempre ligado; `effort` padrão `medium`; sem `temperature`; fallback de recusa disponível |
-| Claude Sonnet 5.5 | `claude-sonnet-5-5` | 2,00 | 10,00 | Effort padrão `high` (recalibrado); fallback `default` |
-| Claude Haiku 5.5 | `claude-haiku-5-5` | 0,10 | 0,50 | Preço até 100K tokens de entrada; **sem fallback de recusa no servidor** (configuração exige `AI_REFUSAL_FALLBACK=off`) |
+| `gemini-3.1-flash-lite` | 0,25 | 1,50 | 0,025 | minimal (padrão)–high |
+| `gemini-3.5-flash-lite` | 0,30 | 2,50 | 0,03 | minimal (padrão)–high |
+| `gemini-3.8-flash` | 0,75 → **1,50 em 01/01/2027** | 3,75 → **7,50** | 0,075 → 0,15 | low–high (padrão medium) |
 
-O papel do modelo aqui é **classificar** e propor no máximo uma frase de cortesia —
-tarefa curta. Estimativa ilustrativa por mensagem (≈1.500 tokens de entrada, ≈600 de
-saída incluindo raciocínio; **suposição, não medição**):
+**Não há modelo padrão fixo** (`AI_MODEL` é obrigatório com o provedor real). A avaliação
+offline usa `gemini-3.1-flash-lite` só como ponto de partida mais econômico.
 
-| Modelo | Custo/mensagem | 1.000 mensagens |
-|---|---|---|
-| Opus 5.5 | ≈ US$ 0,018 | ≈ US$ 18 |
-| Sonnet 5.5 | ≈ US$ 0,009 | ≈ US$ 9 |
-| Haiku 5.5 | ≈ US$ 0,00045 | ≈ US$ 0,45 |
-
-O cache do prompt de sistema (`cache_control`, já enviado) reduz a parte fixa da entrada.
-**Exige medição real:** tokens efetivos (inclusive raciocínio), latência p50/p95 no
-Brasil, taxa de recusa, acurácia de intenção em mensagens reais anonimizadas ou
-sintéticas realistas, e custo por atendimento concluído. O módulo de avaliação já
-registra tokens, latência, custo estimado e métricas por provedor e versão de prompt.
-
-**Recomendação:** medir os três modelos no conjunto `evals/` (Opus 5.5 em `low` e
-`medium`, Sonnet 5.5 em `low`, Haiku 5.5) assim que houver autorização e orçamento;
-a escolha final é do responsável. Não trocar o modelo padrão por custo sem essa medição.
-
-## 4. Contratos
+## 4. Contratos (inalterados desde a Fase 8)
 
 - `AIProvider.generate(request, timeout_seconds)` → `AIResponse | AIResponseV2 | dict | str`
   (o backend revalida tudo; tipo Python não é confiança).
@@ -92,66 +83,87 @@ a escolha final é do responsável. Não trocar o modelo padrão por custo sem e
   `catalog_requested`, `faq_reference`, `fact_references`, `needs_clarification`,
   `human_handoff_suggested`, `information_missing`, `preface` (≤240).
   Não há campo de texto factual livre nem de ação administrativa.
-- O JSON Schema enviado ao provedor (`RESPONSE_SCHEMA_V2`) é só uma restrição de
-  formato; esquema válido **não** significa conteúdo verdadeiro.
+- O JSON Schema enviado (`RESPONSE_SCHEMA_V2`) é só uma restrição de formato. Esquema
+  válido **não** significa conteúdo verdadeiro nem autoriza ação.
 
 ## 5. Privacidade e dados (LGPD) — avaliação antes de qualquer ativação
 
-| Pergunta | Situação atual do código | Decisão pendente de |
-|---|---|---|
-| O que é enviado? | Instruções do prompt; fatos aprovados do catálogo (não pessoais); IDs de serviço do contexto; mensagem atual e até 4 mensagens anteriores **do mesmo cliente** relacionadas ao serviço (≤500 caracteres cada), com telefone, e-mail, CPF/CNPJ e sequências longas de dígitos **removidos** (`ai/privacy.py`) | — |
-| O que nunca é enviado | Telefone/BSUID, ID de conversa, nome de perfil do WhatsApp, mensagens de funcionários, dados de outros clientes, metadados de revisão | — |
-| Limite da minimização | Nomes próprios e dados livres digitados pelo cliente (ex.: "sou a Maria, estou grávida") **não** são removidos | Salão + jurídico |
-| Finalidade | Classificar a intenção da mensagem para responder com dados aprovados | Controlador (salão) |
-| Retenção no provedor | **Não assumida.** ZDR só por acordo com a Anthropic e por elegibilidade de recursos (ex.: message threads não são elegíveis; não usados aqui). Confirmar retenção padrão e uso para treinamento nos termos comerciais vigentes | Agência + salão |
-| Transferência internacional | Processamento fora do Brasil é provável; exige base do art. 33 da LGPD e cláusulas contratuais | Jurídico |
-| Logs locais | Só metadados (`ai_usage`: modelo, versão do prompt, resultado, tokens, latência, custo estimado). Nenhum texto, prompt ou resposta. Testado | — |
-| Exclusão | Dados locais seguem a retenção/anonimização das Fases 3–5; exclusão no provedor depende do contrato | Agência |
-| Dados reais | **Proibidos** nesta fase; avaliações usam só cenários sintéticos | Autorização + base legal |
+Termos consultados: Gemini API Additional Terms
+(<https://aistudio.google.com/docs/terms>, "Effective March 23, 2026") e a página de
+preços, em 20/11/2026. **Não se declara conformidade com a LGPD.**
 
-## 6. Limites de consumo implementados
+| Pergunta | Situação | Decisão pendente de |
+|---|---|---|
+| O que é enviado? | Instruções do prompt; fatos aprovados (não pessoais); IDs de serviço do contexto; mensagem atual e até 4 mensagens anteriores **do mesmo cliente** (≤500 caracteres cada), com telefone, e-mail, CPF/CNPJ e dígitos longos **removidos** (`ai/privacy.py`) | — |
+| O que nunca é enviado | Telefone/BSUID, ID de conversa, nome de perfil, mensagens de funcionários, dados de outros clientes, metadados de revisão | — |
+| Limite da minimização | Nomes próprios e dados livres digitados pelo cliente **não** são removidos | Salão + jurídico |
+| **Nível gratuito** | "Google uses the content you submit … to provide, improve, and develop Google products"; revisores humanos podem ler entradas e saídas; "Do not submit sensitive, confidential, or personal information". **Inadequado para conversas de clientes** | — (vedado pelo projeto) |
+| **Nível pago** | Prompts e respostas **não** usados para melhorar produtos; tratados sob o *Data Processing Addendum* (Google como operador). Pago = projeto Cloud com faturamento ativo | Agência + salão (contratação) |
+| Retenção (pago) | Registros "for a limited period of time" só para detectar abuso. **O número de dias não aparece nos termos lidos**; confirmar no DPA. ZDR não mencionado | Jurídico |
+| Transferência internacional | "may be stored transiently or cached in any country in which Google … maintain[s] facilities". Exige base do art. 33 da LGPD | Jurídico |
+| Elegibilidade | 18 anos ou mais; uso profissional (não consumidor); região disponível (Brasil consta); apps voltados a menores de 18 anos vedados; **vedado uso para conselho médico** (por isso temas de saúde vão para pessoa) | Responsável legal |
+| Logs locais | Só metadados (`ai_usage`: modelos pedido/efetivo, prompt, resultado, tokens incl. raciocínio, latência, custo estimado). Nenhum texto. Testado | — |
+| Dados reais | **Proibidos** nesta fase; avaliações só com cenários sintéticos | Autorização + base legal |
+
+## 6. Limites de consumo implementados (`ai/budget.py`, neutro em relação ao provedor)
 
 | Limite | Configuração | Efeito |
 |---|---|---|
 | Tamanho da mensagem | `SIM_MAX_MESSAGE_CHARS` (≤2000) | Recusada antes de qualquer processamento |
-| Histórico enviado | `AI_HISTORY_LIMIT` (≤10, padrão 4) × 500 caracteres; só mensagens do cliente relacionadas | — |
-| Entrada ao provedor | `AI_MAX_INPUT_CHARS` (padrão 6000) | Recusa **antes** da chamada |
-| Saída | `AI_MAX_OUTPUT_TOKENS` (padrão 4096, inclui raciocínio); `max_tokens` → falha segura | — |
-| Concorrência | `AI_MAX_CONCURRENCY` (semáforo por processo) | Excesso → falha segura |
-| Tentativas | `AI_MAX_RETRIES` (0–3, no SDK); núcleo não repete | Sem retry infinito |
-| Requisições/dia | `AI_MAX_REQUESTS_PER_DAY` (janela móvel de 24 h, persistida) | Bloqueio antes da chamada |
-| Custo/dia | `AI_MAX_COST_USD_PER_DAY` sobre **estimativa** (`ai/pricing.json`) | Modelo sem tarifa → bloqueia |
+| Histórico enviado | `AI_HISTORY_LIMIT` (≤10, padrão 4) × 500 caracteres | — |
+| Entrada | `AI_MAX_INPUT_CHARS` (6000) e `AI_MAX_INPUT_TOKENS` (4000 **estimados**, caracteres ÷ 2) | Recusa **antes** da chamada |
+| Saída | `AI_MAX_OUTPUT_TOKENS` (2048, inclui raciocínio; ≤ limite do modelo); MAX_TOKENS → falha segura | — |
+| Concorrência | `AI_MAX_CONCURRENCY` | Excesso → falha segura sem custo |
+| Tentativas | `AI_MAX_RETRIES` (0–3, `HttpRetryOptions`); núcleo não repete | Prazo total limitado |
+| Por período | `AI_MAX_REQUESTS_PER_DAY`, `AI_MAX_COST_USD_PER_DAY` (janela de 24 h persistida) | Bloqueio antes da chamada |
+| Por execução | `AI_MAX_REQUESTS_PER_RUN`, `AI_MAX_COST_USD_PER_RUN` (`RunBudget`) | Bloqueio antes da chamada |
+| Por modelo | `RunBudget.per_model_max_requests` (autorização da avaliação real) | Bloqueio antes da chamada |
+| Reserva de pior caso | entrada estimada × tarifa + todo `max_output_tokens` × tarifa de saída, × tentativas | Só chama se couber |
+| Consumo incerto | timeout, rede, 5xx, erro inesperado, modelo inesperado, consumo ausente | Registra o pior caso (nunca zero) |
+| Sem tarifa | Modelo fora do registro | Bloqueia |
 
-O consumo é gravado em transação independente: mesmo uma resposta descartada pela
-validação conta para o orçamento.
+## 7. Condições para ativar o Gemini real (todas obrigatórias)
 
-## 7. Condições para ativar a IA real (todas obrigatórias)
-
-1. Autorização escrita do responsável (salão + agência) para usar um provedor externo,
-   com finalidade, orçamento mensal e limites aprovados.
-2. Avaliação jurídica de privacidade (§5): retenção, treinamento, transferência
-   internacional, contrato de tratamento, texto de transparência ao cliente.
-3. Chave de API criada pelo responsável da conta, guardada em gerenciador de segredos
-   (nunca no repositório, `.env` versionado ou chat), exclusiva deste uso.
-4. Reconfirmar modelo, tarifas e parâmetros na documentação oficial do dia; atualizar
-   `ai/pricing.json` com data de verificação.
-5. Alteração de código revisada: `AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED = True` em
-   `config.py` (a variável de ambiente sozinha nunca basta), em commit próprio.
-6. `AI_PROVIDER=anthropic`, `AI_PROMPT_VERSION=v2` explícito, SQLite, limites conservadores.
-7. Primeiro uso **apenas** com `python -m rocha_reis_agent.evaluation` adaptado para o
-   provedor real sobre os cenários sintéticos, com orçamento de teste aprovado; critérios
-   de aceite: zero violações críticas, `unsupported_claim_rate = 0`, acurácia de intenção
-   ≥ fake, latência p95 aceitável para o salão.
-8. A ativação da IA **não** ativa a Meta e vice-versa (travas independentes, testado).
+1. Autorização escrita do responsável (salão + agência), maior de 18 anos, para usar a
+   Gemini API com conta Google e projeto Cloud **pagos** identificados, finalidade,
+   orçamento e limites.
+2. Avaliação jurídica de privacidade (§5): DPA, retenção, transferência internacional e
+   aviso ao cliente.
+3. Chave criada pelo responsável da conta, guardada em gerenciador de segredos (nunca no
+   repositório, em `.env` versionado ou em chat), exclusiva deste uso e com restrição de
+   API no console.
+4. Modelos, tarifas e níveis de raciocínio reconfirmados na documentação do dia; atualizar
+   `ai/models.json` (`verified_at`).
+5. Alteração de código revisada: `GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED = True` em
+   commit próprio. A variável de ambiente sozinha nunca basta.
+6. Primeiro uso **apenas** na avaliação sintética (`--provider gemini`), com o roteiro de
+   [`HOMOLOGACAO_IA_FASE9.md`](HOMOLOGACAO_IA_FASE9.md) e os critérios pré-registrados
+   (`evals/criteria.json`).
+7. A trava do Gemini **não** abre a Meta e vice-versa (testado nos dois sentidos).
 
 ## 8. Riscos conhecidos
 
-- O backend restringe o modelo a classificar; ganhos de compreensão (gírias, erros de
-  digitação) só aparecem onde o controle determinístico não diverge da proposta. Hoje
-  serviço, contexto e agendamento são fixados pelo detector de regras — mais seguro,
-  menos flexível. Relaxar isso exige nova avaliação.
-- A sanitização da abertura é por lista de termos: pode descartar cortesias inocentes
-  (falso positivo, aceitável) e, em tese, deixar passar uma frase enganosa sem termo
-  listado; o oráculo da avaliação cobre parte disso, não tudo.
-- Custos e latência reais desconhecidos; tarifas podem mudar.
-- Retenção pelo provedor depende de contrato não firmado.
+- O backend restringe o modelo a classificar. Serviço, contexto, agendamento e intenção
+  herdada são fixados pelo detector: mais seguro, menos flexível.
+- Pedidos humanos indiretos, gírias de preço e reclamações indiretas (H9, J6, L3) dependem do
+  modelo. Com o fake, o recall de encaminhamento humano é 0,947 (< 0,95 do critério Q2).
+- A sanitização da abertura é feita por lista de termos.
+- Temas de saúde escalam por vocabulário fechado: pode haver falsos positivos (aceitável)
+  e omissões de termos não listados.
+- Latência, consumo de raciocínio, taxa de bloqueio e custo reais são desconhecidos. O
+  reajuste do 3.8 Flash em 01/01/2027 dobra a tarifa.
+- A retenção pelo provedor não está quantificada nos termos lidos.
+- Rate limits por modelo só aparecem no AI Studio autenticado (não lidos). Há limite de
+  gasto de US$ 10 por 10 minutos no Tier 1.
+- `generateContent` é chamado de "legado, ainda suportado" em parte da documentação nova:
+  pode exigir migração futura para a Interactions API.
+
+## 9. Histórico substituído — Anthropic (Fases 8 e 9A)
+
+Entre 19 e 20/11/2026 o projeto implementou e testou **offline** um adaptador Anthropic
+(SDK `anthropic` 2.11, modelos Claude Opus/Sonnet/Haiku 5.5, `pricing.json` e depois
+`models.json`). **Nenhuma chamada real foi feita.** Na Fase 9B, por decisão do
+responsável, esse adaptador, o SDK, a trava `AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED` e o
+registro de modelos Claude foram removidos. Os relatórios das Fases 8 e 9A e os arquivos
+`evals/results/baseline-*.json` e `evals/results/phase9-*.json` permanecem como evidência
+histórica. Os resultados `anthropic-simulated` neles **não** dizem nada sobre o Gemini.

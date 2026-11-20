@@ -2,7 +2,7 @@
 
 **Versão:** 0.1 (19/11/2026)  
 **Classificação:** documento de planejamento; sujeito a validação com o salão  
-**Status:** Fases 0 a 5 implementadas e testadas localmente: fundação, simulador, FakeAIProvider, conhecimento versionado/validação, persistência SQLite sintética, integração Meta WhatsApp **offline** (webhook assinado, inbox/outbox, transporte fake) e adaptador HTTP Graph API **bloqueado** por trava de código, com classificação de erros, janela de atendimento e retenção sem bloqueio permanente; Fase 6A: estrutura de homologação controlada (offline); Fase 7: painel web local de atendimento humano (login, RBAC, conversas, respostas pela outbox, tempo real); Fase 8: adaptador de IA generativa (Anthropic) implementado e **bloqueado**, conhecimento gerido e aprovado pelo painel, avaliações reproduzíveis. Homologação real (6B) não executada; painel não validado com a equipe do salão. Nenhuma conexão real com a Meta, chamada a IA generativa real, validação com o salão ou implantação. Evidências em `STATUS_FASE_0.md` a `STATUS_FASE_8.md`.
+**Status:** Fases 0 a 5 implementadas e testadas localmente: fundação, simulador, FakeAIProvider, conhecimento versionado/validação, persistência SQLite sintética, integração Meta WhatsApp **offline** (webhook assinado, inbox/outbox, transporte fake) e adaptador HTTP Graph API **bloqueado** por trava de código, com classificação de erros, janela de atendimento e retenção sem bloqueio permanente; Fase 6A: estrutura de homologação controlada (offline); Fase 7: painel web local de atendimento humano (login, RBAC, conversas, respostas pela outbox, tempo real); Fase 8: adaptador de IA generativa (Anthropic) implementado e **bloqueado**, conhecimento gerido e aprovado pelo painel, avaliações reproduzíveis; Fase 9A: homologação **offline** da IA (registro verificado de modelos, orçamento com reserva de pior caso, correções de qualidade, avaliação com 120 cenários e critérios pré-registrados, roteiro de avaliação real preparado e bloqueado); Fase 9B: **migração para Google Gemini** (provedor oficial), adaptador implementado e **bloqueado**, testado offline. Homologação real Meta (6B) e homologação real Gemini (9C) não executadas; painel não validado com a equipe do salão. Nenhuma conexão real com a Meta, chamada a IA generativa real, validação com o salão ou implantação. Evidências em `STATUS_FASE_0.md` a `STATUS_FASE_9.md`.
 
 ## 1. Identidade do projeto
 
@@ -66,6 +66,7 @@ Agente: se a promoção não estiver cadastrada e validada, informa que não con
 - **Decisão atual:** ignorar essa integração direta por enquanto; o agente enviará o link Booksy para o cliente usar.
 - O projeto foi descrito como agente inteligente de atendimento via WhatsApp com interpretação de mensagens, informações do salão e encaminhamento humano.
 - A construção deve começar por arquitetura/documentação e testes locais com Codex.
+- **Provedor de IA generativa: Google Gemini** (Gemini API, SDK oficial `google-genai`), decisão do responsável em 20/11/2026. Substitui a integração Anthropic das Fases 8/9A. Ferramentas de desenvolvimento (Codex, Claude Code) não são o modelo que atende clientes.
 
 ## 6. Hipóteses e pontos não confirmados
 
@@ -76,7 +77,7 @@ Não presumir como fatos:
 - Ferramenta usada pelo salão para acompanhar e responder conversas quando a IA encaminhar para humanos.
 - Horários de atendimento humano e SLA de resposta.
 - Preferências de linguagem, tom comercial, tratamento por nome, consentimento e política de privacidade.
-- Fornecedor de IA, orçamento mensal de APIs, hospedagem, limites de uso e retenção de histórico.
+- Orçamento mensal de APIs, modelo Gemini específico, hospedagem, limites de uso e retenção de histórico (o fornecedor já foi decidido: Google Gemini).
 - Confirmação contratual, autorização de uso de dados reais e ambiente de produção.
 
 Essas lacunas constam em `DADOS_PENDENTES.md`.

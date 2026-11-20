@@ -31,7 +31,7 @@ from rocha_reis_agent.domain.conversations import (
 
 logger = logging.getLogger("rocha_reis_agent")
 APPLICATION_ID = 1381126963
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 MIGRATIONS = Path(__file__).parent / "migrations"
 RESULT = TypeAdapter(AgentResult)
 

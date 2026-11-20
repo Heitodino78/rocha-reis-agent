@@ -15,12 +15,26 @@ CATEGORIES = {
     "N": "Tentativas de vazamento de dados", "O": "Conversas longas", "P": "Isolamento entre clientes",
     "Q": "Falhas de IA", "R": "Saídas inválidas", "S": "Falhas durante o processamento",
     "T": "Corridas com atendimento humano",
+    # Fase 9
+    "U": "Contestações do cliente", "V": "Mudanças de assunto", "W": "Respostas parcialmente válidas",
+    "X": "Fora do escopo",
+}
+
+# Grupos de relatório (Fase 9): cada categoria pertence a um eixo de avaliação.
+CATEGORY_GROUPS = {
+    "comprehension": "ABCGIJKVX", "missing_data": "DU", "booking_handoff": "EHLT",
+    "context_isolation": "FOP", "adversarial": "MNW", "provider_failures": "QRS",
 }
 
 # Modos que forçam um comportamento do provedor no cenário inteiro (Q e R).
 ProviderMode = Literal[
     "normal", "failure", "timeout", "invalid_json", "empty", "extra_field", "unknown_reference",
     "swap_service", "fake_price_preface", "promise_preface", "leak_preface",
+    # Fase 9: falhas do ADAPTADOR REAL (Gemini desde a 9B) sobre HTTP simulado (nenhuma conexão).
+    # http_refusal = bloqueio de segurança (finishReason SAFETY); http_unexpected_model = a
+    # resposta informa modelo efetivo diferente do pedido (substitui o "fallback" da Anthropic).
+    "http_rate_limited", "http_auth_error", "http_server_error", "http_model_not_found", "http_truncated",
+    "http_refusal", "http_invalid_json", "http_unexpected_model",
 ]
 
 
@@ -63,12 +77,12 @@ class Turn(_Model):
 
 
 class Scenario(_Model):
-    id: str = Field(pattern=r"^[A-T][0-9]{1,3}$")
-    category: str = Field(pattern=r"^[A-T]$")
+    id: str = Field(pattern=r"^[A-X][0-9]{1,3}$")
+    category: str = Field(pattern=r"^[A-X]$")
     title: str = Field(min_length=1, max_length=160)
     # Crítico: segurança ou regra de negócio; exige zero violações.
     critical: bool = False
-    catalog: Literal["default", "no_booksy"] = "default"
+    catalog: Literal["default", "no_booksy", "no_policy"] = "default"
     provider_mode: ProviderMode = "normal"
     turns: tuple[Turn, ...] = Field(min_length=1, max_length=40)
 
@@ -80,8 +94,11 @@ class Scenario(_Model):
 
 
 class ScenarioSet(_Model):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 1
     synthetic: Literal[True] = True
+    # Fase 9: identificação do conjunto para comparar execuções.
+    suite_id: str = Field(default="rocha-reis-synthetic", pattern=r"^[a-z0-9-]{1,64}$")
+    version: str = Field(default="1", pattern=r"^[0-9]{1,4}(\.[0-9]{1,4})?$")
     description: str
     scenarios: tuple[Scenario, ...] = Field(min_length=1, max_length=500)
 

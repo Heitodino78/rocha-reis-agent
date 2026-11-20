@@ -16,9 +16,10 @@ GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED: Final = False
 # mecanismo não autoriza usá-lo. A trava de produção acima não é afetada por esta.
 HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED: Final = False
 HOMOLOG_DB_SUFFIX = ".homolog.synthetic.sqlite3"
-# Trava do provedor de IA REAL (Fase 8). Independente das travas da Meta: abrir uma
-# nunca abre a outra. Falsa nesta fase; uma chave configurada sozinha não ativa nada.
-AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED: Final = False
+# Trava do provedor de IA REAL — Google Gemini (Fase 9B; substitui a trava Anthropic da Fase 8).
+# Independente das travas da Meta: abrir uma nunca abre a outra. Falsa nesta fase; a
+# existência de GEMINI_API_KEY (ou GOOGLE_API_KEY) no ambiente NUNCA ativa nada.
+GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED: Final = False
 
 
 class ConfigurationError(RuntimeError):
@@ -43,18 +44,25 @@ class Settings(BaseSettings):
     sim_max_events_per_session: int = Field(default=1000, ge=1, le=10000)
     sim_max_conversations: int = Field(default=100, ge=1, le=1000)
     sim_context_turns: int = Field(default=5, ge=1, le=100)
-    ai_provider: Literal["fake", "anthropic"] = "fake"
-    ai_model: str = Field(default="claude-opus-5-5", pattern=r"^claude-[a-z0-9-]{1,60}$")
-    ai_api_key: SecretStr | None = None
-    # Inclui tokens de raciocínio (thinking sempre ligado no Claude Opus 5.5).
-    ai_max_output_tokens: int = Field(default=4096, ge=256, le=16000)
-    ai_effort: Literal["low", "medium", "high"] = "medium"
+    ai_provider: Literal["fake", "gemini"] = "fake"
+    # Sem modelo padrão: a escolha depende da homologação (Fase 9B). Só IDs do registro verificado.
+    ai_model: str | None = Field(default=None, pattern=r"^gemini-[a-z0-9.-]{1,60}$")
+    # Lida de GEMINI_API_KEY. Só aceita com provedor real explicitamente selecionado E trava aberta.
+    gemini_api_key: SecretStr | None = None
+    # Inclui tokens de raciocínio (cobrados como saída).
+    ai_max_output_tokens: int = Field(default=2048, ge=256, le=65536)
+    # Ausente = nível padrão do modelo no registro (minimal nos Flash-Lite, medium no 3.8 Flash).
+    ai_thinking_level: Literal["minimal", "low", "medium", "high"] | None = None
     ai_max_retries: int = Field(default=1, ge=0, le=3)
-    ai_refusal_fallback: Literal["default", "off"] = "default"
     ai_max_concurrency: int = Field(default=2, ge=1, le=16)
     ai_max_requests_per_day: int = Field(default=500, ge=1, le=100000)
     ai_max_cost_usd_per_day: float = Field(default=5.0, gt=0, le=1000)
     ai_max_input_chars: int = Field(default=6000, ge=1000, le=50000)
+    # Tokens de entrada ESTIMADOS (caracteres ÷ 2, conservador) recusados antes da chamada.
+    ai_max_input_tokens: int = Field(default=4000, ge=500, le=100000)
+    # Fase 9: tetos por EXECUÇÃO do processo (além dos diários). Ausente = só os diários.
+    ai_max_requests_per_run: int | None = Field(default=None, ge=1, le=100000)
+    ai_max_cost_usd_per_run: float | None = Field(default=None, gt=0, le=1000)
     # Fase 8: conhecimento em arquivo (fixtures, padrão) ou no banco (gestão pelo painel).
     knowledge_source: Literal["file", "database"] = "file"
     knowledge_require_distinct_approver: bool = False
@@ -139,19 +147,24 @@ class Settings(BaseSettings):
                 raise ValueError("Homologação exige banco *.homolog.synthetic.sqlite3, canal e arquivo de autorização.")
         elif homolog_db or self.homolog_authorization_file is not None:
             raise ValueError("Banco ou autorização de homologação só no ambiente de homologação.")
-        if self.ai_provider == "anthropic":
-            if not AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED:
-                raise ValueError("Provedor de IA real não autorizado nesta fase.")
-            key = self.ai_api_key.get_secret_value() if self.ai_api_key else ""
+        if self.ai_provider == "gemini":
+            if not GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED:
+                raise ValueError("Provedor de IA real (Gemini) não autorizado nesta fase.")
+            key = self.gemini_api_key.get_secret_value() if self.gemini_api_key else ""
             others = {s.get_secret_value() for s in (self.whatsapp_verify_token, self.whatsapp_app_secret,
                                                      self.whatsapp_conversation_key, self.whatsapp_access_token) if s}
             if (len(key) < 20 or not key.isprintable() or any(c.isspace() for c in key) or key in others
-                    or self.storage_backend != "sqlite" or self.ai_prompt_version is None):
-                raise ValueError("IA real exige chave exclusiva, SQLite (consumo) e versão de prompt explícita.")
-            if self.ai_model.startswith("claude-haiku") and self.ai_refusal_fallback != "off":
-                # Referência oficial (2026-11): Haiku 5.5 não tem fallback de recusa no servidor.
-                raise ValueError("Modelo sem fallback de recusa no servidor: use AI_REFUSAL_FALLBACK=off.")
-        elif self.ai_api_key is not None:
+                    or self.storage_backend != "sqlite" or self.ai_prompt_version is None or self.ai_model is None):
+                raise ValueError("IA real exige chave exclusiva, SQLite (consumo), modelo e versão de prompt explícitos.")
+            # Modelo do registro verificado (ai/models.json): estável, com saída estruturada,
+            # nível de raciocínio e limite de saída aceitos.
+            from rocha_reis_agent.ai.model_registry import ModelNotSupported, require_model
+            try:
+                require_model(self.ai_model, thinking_level=self.ai_thinking_level,
+                              max_output_tokens=self.ai_max_output_tokens)
+            except ModelNotSupported as error:
+                raise ValueError(str(error)) from None
+        elif self.gemini_api_key is not None:
             raise ValueError("Chave de IA só é aceita com provedor real explicitamente selecionado.")
         if self.knowledge_source == "database" and self.storage_backend != "sqlite":
             raise ValueError("Conhecimento no banco exige SQLite.")
@@ -195,6 +208,6 @@ def load_settings() -> Settings:
         return Settings()
     except (ValidationError, SettingsError, OSError, UnicodeError):
         raise ConfigurationError(
-            "Configuração inválida. Revise as variáveis APP_, SIM_, AI_, STORAGE_, WHATSAPP_, CHANNEL_ e o arquivo .env; "
+            "Configuração inválida. Revise as variáveis APP_, SIM_, AI_, GEMINI_, STORAGE_, WHATSAPP_, CHANNEL_ e o arquivo .env; "
             "consulte .env.example."
         ) from None

@@ -1,7 +1,9 @@
-"""Fase 8 — provedor generativo (Anthropic, DESATIVADO), contrato v2 e travas.
+"""Fases 8 e 9B — provedor generativo REAL (Google Gemini, DESATIVADO), contrato v2 e travas.
 
-Todo tráfego HTTP vai para httpx2.MockTransport (em memória). Estes testes provam o
-comportamento do adaptador e do backend, NÃO a qualidade de um modelo real.
+Fase 9B: os testes da Fase 8 (escritos para o adaptador Anthropic, substituído) foram
+portados para o adaptador Gemini com a MESMA intenção; muda só o formato HTTP. Todo
+tráfego vai para httpx2.MockTransport (em memória). Estes testes provam o comportamento
+do adaptador e do backend, NÃO a qualidade de um modelo real.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -9,14 +11,12 @@ import json
 import logging
 from threading import Barrier, Event
 
-import anthropic
 import httpx2
 import pytest
 
 from rocha_reis_agent import config as config_module
-from rocha_reis_agent.ai.anthropic_provider import RESPONSE_SCHEMA_V2, AnthropicConfig, AnthropicProvider
-from rocha_reis_agent.ai.contracts import AIProviderError, AIProviderTimeout, AIRequest, AIValidationError, UntrustedText
-from rocha_reis_agent.ai.fake import FakeAIProvider
+from rocha_reis_agent.ai.contracts import AIProviderError
+from rocha_reis_agent.ai.gemini_provider import RESPONSE_SCHEMA_V2, GeminiConfig, GeminiProvider
 from rocha_reis_agent.ai.privacy import redact_personal_data
 from rocha_reis_agent.ai.prompts import PromptRegistry
 from rocha_reis_agent.ai.validation import sanitize_preface
@@ -27,52 +27,14 @@ from rocha_reis_agent.domain.conversations import utc_now
 from rocha_reis_agent.knowledge_projection import authorize_knowledge
 from rocha_reis_agent.persistence.sqlite import SQLiteConversationRepository
 from rocha_reis_agent.persistence.sqlite_ai import SQLiteUsageLedger
+from gemini_support import KEY, MODEL, ModelFromFake, Recorder, body, error, make_provider, make_request as _request
 from whatsapp_support import ROOT, settings
 
-KEY = "sk-ant-" + "sintetica-de-teste-" + "Qx7Lp2Vm9Rk4Wz8Nb3"
+GEMINI = {"ai_provider": "gemini", "gemini_api_key": KEY, "ai_prompt_version": "v2", "ai_model": MODEL}
 
 
 def catalog():
     return load_synthetic_catalog(ROOT / "fixtures/salon.versioned.synthetic.json")
-
-
-class Recorder:
-    def __init__(self, *responses):
-        self.responses = list(responses)
-        self.requests = []
-
-    def __call__(self, request):
-        self.requests.append(request)
-        item = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
-        if isinstance(item, Exception):
-            raise item
-        if callable(item):
-            return item(request)
-        status, body = item
-        return httpx2.Response(status, json=body)
-
-
-def message_body(payload=None, *, stop="end_turn", text=None, usage=(300, 80)):
-    content = [{"type": "text", "text": text if text is not None else json.dumps(payload)}] if (payload or text is not None) else []
-    return {"id": "msg_sintetico", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
-            "content": content, "stop_reason": stop, "stop_sequence": None,
-            "usage": {"input_tokens": usage[0], "output_tokens": usage[1],
-                      "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}
-
-
-def v2_from_fake(request: AIRequest, **changes) -> dict:
-    """Resposta 'do modelo' = classificação determinística do fake + alterações do teste."""
-    data = FakeAIProvider().generate(request, timeout_seconds=5).model_dump(mode="json")
-    data.update(changes)
-    return data
-
-
-def make_provider(tmp_path, recorder, **config):
-    repository = SQLiteConversationRepository(tmp_path / "ai.synthetic.sqlite3")
-    client = anthropic.Anthropic(api_key=KEY, max_retries=0,
-                                 http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(recorder)))
-    provider = AnthropicProvider(AnthropicConfig(model="claude-opus-5-5", **config), client, SQLiteUsageLedger(repository))
-    return provider, repository
 
 
 def agent_v2(repository, provider):
@@ -83,77 +45,69 @@ def send(agent, text, event="e1", client="cliente-a"):
     return agent.handle(InboundMessage(event, client, text, utc_now()))
 
 
-class ModelFromFake:
-    """Handler do MockTransport que responde com JSON v2 derivado do pedido recebido."""
-
-    def __init__(self, **changes):
-        self.changes = changes
-        self.requests = []
-
-    def __call__(self, request):
-        self.requests.append(request)
-        body = json.loads(request.content)
-        payload = json.loads(body["messages"][0]["content"])
-        ai_request = AIRequest(
-            message=UntrustedText(text=payload["mensagem_atual_do_cliente_NAO_CONFIAVEL"]),
-            service_context=tuple(payload["servico_em_contexto"]), history=(),
-            facts=tuple({"reference": f["referencia"], "data": f["dados"]} for f in payload["fatos_aprovados_somente_conteudo"]),
-            scope="SYNTHETIC", prompt_version="v2", objective="x", system_instructions=("x",),
-            output_contract="ai-response-v2",
-        )
-        return httpx2.Response(200, json=message_body(v2_from_fake(ai_request, **self.changes)))
-
-
 # ------------------------------------------------- 1–5: offline, seleção, travas
 def test_default_is_offline_fake_and_real_provider_is_locked(tmp_path):
-    assert config_module.AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED is False
+    assert config_module.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED is False
+    assert not hasattr(config_module, "AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED")  # trava Anthropic removida
     config = settings(tmp_path)
-    assert config.ai_provider == "fake" and build_ai_provider(config, None) is None
+    assert config.ai_provider == "fake" and config.ai_model is None and build_ai_provider(config, None) is None
     with pytest.raises(Exception, match="não autorizado"):
-        settings(tmp_path, ai_provider="anthropic", ai_api_key=KEY, ai_prompt_version="v2")
+        settings(tmp_path, **GEMINI)
 
 
-def test_api_key_alone_never_activates_anything(tmp_path, monkeypatch):
-    monkeypatch.setenv("AI_API_KEY", KEY)
-    with pytest.raises(Exception) as caught:
+@pytest.mark.parametrize("variable", ["GEMINI_API_KEY"])
+def test_api_key_alone_never_activates_anything(tmp_path, monkeypatch, variable):
+    monkeypatch.setenv(variable, KEY)
+    with pytest.raises(Exception) as caught:   # chave sem provedor real selecionado: configuração recusada
         settings(tmp_path)
     assert KEY not in str(caught.value)
 
 
+def test_google_api_key_in_environment_is_ignored_and_no_client_is_built(tmp_path, monkeypatch):
+    """O SDK leria GOOGLE_API_KEY sozinho; a aplicação nunca cria o cliente sem trava e chave explícita."""
+    monkeypatch.setenv("GOOGLE_API_KEY", KEY)
+    config = settings(tmp_path)
+    assert config.ai_provider == "fake" and build_ai_provider(config, None) is None
+
+
 def test_ai_and_meta_locks_are_independent(tmp_path, monkeypatch):
     token = "EAAG" + "SinteticoTokenDeTeste" + "Qx7Lp2Vm9Rk4Wz8Nb3Hc6Jd1Fg5Ty0"
-    monkeypatch.setattr(config_module, "AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", True)
-    assert settings(tmp_path, ai_provider="anthropic", ai_api_key=KEY, ai_prompt_version="v2").ai_provider == "anthropic"
+    monkeypatch.setattr(config_module, "GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", True)
+    assert settings(tmp_path, **GEMINI).ai_provider == "gemini"
     with pytest.raises(Exception, match="não autorizado"):  # abrir a IA não abre o WhatsApp
         settings(tmp_path, whatsapp_transport="graph", whatsapp_access_token=token, whatsapp_graph_api_version="v26.0")
-    monkeypatch.setattr(config_module, "AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", False)
+    monkeypatch.setattr(config_module, "GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", False)
     monkeypatch.setattr(config_module, "GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED", True)
     with pytest.raises(Exception, match="não autorizado"):  # abrir o WhatsApp não abre a IA
-        settings(tmp_path, ai_provider="anthropic", ai_api_key=KEY, ai_prompt_version="v2")
+        settings(tmp_path, **GEMINI)
 
 
 @pytest.mark.parametrize("changes", [
-    {"ai_api_key": None}, {"ai_api_key": "curta"}, {"ai_prompt_version": None},
+    {"gemini_api_key": None}, {"gemini_api_key": "curta"}, {"ai_prompt_version": None}, {"ai_model": None},
     {"storage_backend": "memory", "storage_path": None, "whatsapp_enabled": False},
-    {"ai_api_key": "vT9xQ2mL7pR4sK8wZ1nB6cH3jF5gD0aY"},  # chave igual a outro segredo
+    {"gemini_api_key": "vT9xQ2mL7pR4sK8wZ1nB6cH3jF5gD0aY"},  # chave igual a outro segredo
+    {"ai_model": "gemini-2.5-flash"},                          # descontinuado / fora do registro
+    {"ai_model": "gemini-3.1-pro-preview"},                    # preview não registrado
+    {"ai_model": "gemini-3.8-flash", "ai_thinking_level": "minimal"},  # nível não aceito pelo modelo
+    {"ai_max_output_tokens": 65537},                           # acima do limite da configuração
 ])
 def test_unlocked_configuration_still_requires_valid_setup(tmp_path, monkeypatch, changes):
-    monkeypatch.setattr(config_module, "AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", True)
-    values = {"ai_provider": "anthropic", "ai_api_key": KEY, "ai_prompt_version": "v2", **changes}
+    monkeypatch.setattr(config_module, "GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", True)
+    values = {**GEMINI, **changes}
     with pytest.raises(Exception):
-        settings(tmp_path, **values)
+        settings(tmp_path, **{k: v for k, v in values.items() if v is not None})
 
 
 def test_unlocked_factory_requires_v2_prompt_and_builds_without_calling(tmp_path, monkeypatch):
-    monkeypatch.setattr(config_module, "AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", True)
+    monkeypatch.setattr(config_module, "GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", True)
     repository = SQLiteConversationRepository(tmp_path / "f.synthetic.sqlite3")
     with pytest.raises(ValueError, match="ai-response-v2"):
-        build_ai_provider(settings(tmp_path, ai_provider="anthropic", ai_api_key=KEY, ai_prompt_version="v1"), repository)
-    recorder = Recorder((200, message_body({"x": 1})))
-    provider = build_ai_provider(settings(tmp_path, ai_provider="anthropic", ai_api_key=KEY, ai_prompt_version="v2"),
-                                 repository, http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(recorder)))
-    assert isinstance(provider, AnthropicProvider) and recorder.requests == []
-    assert KEY not in repr(provider)
+        build_ai_provider(settings(tmp_path, **{**GEMINI, "ai_prompt_version": "v1"}), repository)
+    recorder = Recorder((200, body({"x": 1})))
+    provider = build_ai_provider(settings(tmp_path, **GEMINI), repository,
+                                 http_client=httpx2.Client(transport=httpx2.MockTransport(recorder)))
+    assert isinstance(provider, GeminiProvider) and recorder.requests == []
+    assert KEY not in repr(provider) and provider.thinking_level == "minimal"   # padrão do registro
 
 
 def test_fake_provider_unchanged_for_v1_and_offline(agent=None):
@@ -168,36 +122,44 @@ def test_request_is_well_formed_minimized_and_answer_is_backend_composed(tmp_pat
     provider, repository = make_provider(tmp_path, model)
     result = send(agent_v2(repository, provider), "Quanto custa o corte? meu fone é (11) 98888-7777")
     (request,) = model.requests
-    body = json.loads(request.content)
-    assert str(request.url) == "https://api.anthropic.com/v1/messages"
-    assert request.headers["authorization"] == f"Bearer {KEY}"  # SDK 2.x envia a chave como Bearer
-    assert body["model"] == "claude-opus-5-5" and body["max_tokens"] == 4096
-    assert body["output_config"]["format"] == {"type": "json_schema", "schema": RESPONSE_SCHEMA_V2}
-    assert body["output_config"]["effort"] == "medium" and body["fallbacks"] == "default"
-    assert request.headers["anthropic-beta"] == "server-side-fallback-2026-07-01"
-    assert "temperature" not in body and "top_p" not in body  # não suportados no Claude Opus 5.5
-    assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
-    payload = json.loads(body["messages"][0]["content"])
-    assert "98888" not in body["messages"][0]["content"] and "[telefone removido]" in payload["mensagem_atual_do_cliente_NAO_CONFIAVEL"]
+    sent = json.loads(request.content)
+    assert str(request.url) == f"https://generativelanguage.googleapis.com/v1/models/{MODEL}:generateContent"
+    assert request.headers["x-goog-api-key"] == KEY and "authorization" not in request.headers
+    generation = sent["generationConfig"]
+    assert generation["responseMimeType"] == "application/json" and generation["responseJsonSchema"] == RESPONSE_SCHEMA_V2
+    assert generation["maxOutputTokens"] == 2048
+    assert generation["thinkingConfig"] in ({"thinking_level": "MINIMAL"}, {"thinkingLevel": "MINIMAL"})
+    assert "temperature" not in generation and "topP" not in generation and "topK" not in generation
+    assert "Objetivo:" in sent["systemInstruction"]["parts"][0]["text"]   # instruções confiáveis separadas
+    user = sent["contents"][0]["parts"][0]["text"]
+    payload = json.loads(user)
+    assert "98888" not in user and "[telefone removido]" in payload["mensagem_atual_do_cliente_NAO_CONFIAVEL"]
     assert "cliente-a" not in request.content.decode()  # nenhum identificador interno vai ao provedor
     assert {f["referencia"]["id"] for f in payload["fatos_aprovados_somente_conteudo"]} == {"service:corte", "price:corte"}
     assert result.reply.startswith("[SIMULAÇÃO — DADOS FICTÍCIOS] Claro, posso ajudar! Corte de teste: R$ 45,00")
     assert result.prompt_version == "v2"
     (usage,) = SQLiteUsageLedger(repository).summary()["rows"]
-    assert usage["outcome"] == "ok" and usage["input_tokens"] == 300 and usage["cost_micros"] > 0
+    assert usage["outcome"] == "ok" and usage["input_tokens"] == 300 and usage["reasoning_tokens"] == 20
+    assert usage["model"] == usage["requested_model"] == MODEL and usage["cost_micros"] > 0
 
 
-# ----------------------------------------- 8–12: falhas, recusa, referências
+# ----------------------------------------- 8–12: falhas, bloqueio, referências
 @pytest.mark.parametrize("response,expected", [
-    ((200, message_body(text="isto não é json")), "ai_validation"),
-    ((200, message_body(text="")), "ai_validation"),
-    ((200, message_body({"contract": "ai-response-v2", "intents": ["price"]})), "ai_validation"),  # incompleta
-    ((200, message_body(text='{"x": 1}', stop="max_tokens")), "ai_validation"),               # truncada
-    ((200, message_body(stop="refusal")), "ai_provider"),                                      # recusa
-    ((529, {"type": "error", "error": {"type": "overloaded_error", "message": "x"}}), "ai_provider"),
-    ((429, {"type": "error", "error": {"type": "rate_limit_error", "message": "x"}}), "ai_provider"),
-    ((401, {"type": "error", "error": {"type": "authentication_error", "message": "x"}}), "ai_provider"),
-    ((400, {"type": "error", "error": {"type": "invalid_request_error", "message": "x"}}), "ai_provider"),
+    ((200, body(text="isto não é json")), "ai_validation"),
+    ((200, body(text="")), "ai_validation"),                                           # sem partes de texto
+    ((200, body({"contract": "ai-response-v2", "intents": ["price"]})), "ai_validation"),  # incompleta
+    ((200, body(text='{"contract": "ai-res', finish="MAX_TOKENS")), "ai_validation"),    # truncada
+    ((200, body(text=None, finish="SAFETY")), "ai_provider"),                          # bloqueio na saída
+    ((200, body(block="SAFETY")), "ai_provider"),                                      # bloqueio no prompt
+    ((200, body({"x": 1}, finish="RECITATION")), "ai_provider"),
+    ((200, body({"x": 1}, finish="OTHER")), "ai_validation"),                          # encerramento inesperado
+    (error(503, "UNAVAILABLE"), "ai_provider"),
+    (error(500, "INTERNAL"), "ai_provider"),
+    (error(429, "RESOURCE_EXHAUSTED"), "ai_provider"),
+    (error(400, "INVALID_ARGUMENT", "API key not valid. Please pass a valid API key."), "ai_provider"),
+    (error(403, "PERMISSION_DENIED"), "ai_provider"),
+    (error(404, "NOT_FOUND"), "ai_provider"),
+    (error(400, "INVALID_ARGUMENT"), "ai_provider"),
     (httpx2.ConnectError("sintético"), "ai_provider"),
     (httpx2.ReadTimeout("sintético"), "ai_timeout"),
 ])
@@ -278,7 +240,6 @@ def test_model_is_never_called_outside_auto(tmp_path):
 def test_operator_takeover_during_slow_generation_blocks_reply(tmp_path):
     entered, release = Event(), Event()
     inner = ModelFromFake()
-
     calls = []
 
     def slow(request):
@@ -310,7 +271,7 @@ def test_daily_request_budget_and_unknown_price_block_calls(tmp_path):
     assert "R$ 45,00" in send(agent, "Quanto custa o corte?", "e1").reply
     blocked = send(agent, "Quanto custa a escova?", "e2", "cliente-b")
     assert blocked.state == State.WAITING_HUMAN  # sem chamada: limite diário
-    unknown = AnthropicProvider(AnthropicConfig(model="claude-modelo-sem-tarifa"), provider.client, provider.ledger)
+    unknown = GeminiProvider(GeminiConfig(model="gemini-modelo-sem-tarifa"), provider.client, provider.ledger)
     with pytest.raises(AIProviderError, match="Tarifa"):
         unknown.generate(_request(), timeout_seconds=5)
 
@@ -318,7 +279,7 @@ def test_daily_request_budget_and_unknown_price_block_calls(tmp_path):
 def test_cost_budget_uses_estimates(tmp_path):
     provider, repository = make_provider(tmp_path, ModelFromFake(), max_cost_usd_per_day=0.01)
     ledger = SQLiteUsageLedger(repository)
-    ledger.record(provider="anthropic", model="claude-opus-5-5", prompt_version="v2", outcome="ok",
+    ledger.record(provider="gemini", model=MODEL, prompt_version="v2", outcome="ok",
                   input_tokens=1000, output_tokens=1000, estimated_cost_micros=20_000)
     with pytest.raises(AIProviderError, match="custo"):
         provider.generate(_request(), timeout_seconds=5)
@@ -330,7 +291,7 @@ def test_concurrency_limit_rejects_excess_calls(tmp_path):
     def slow(request):
         barrier.wait(5)
         assert release.wait(10)
-        return httpx2.Response(200, json=message_body({"x": 1}))
+        return httpx2.Response(200, json=body({"x": 1}))
 
     provider, repository = make_provider(tmp_path, slow, max_concurrency=1)
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -343,15 +304,18 @@ def test_concurrency_limit_rejects_excess_calls(tmp_path):
 
 
 def test_oversized_input_is_refused_before_any_call(tmp_path):
-    recorder = Recorder((200, message_body({"x": 1})))
+    recorder = Recorder((200, body({"x": 1})))
     provider, _ = make_provider(tmp_path, recorder, max_input_chars=1000)
     with pytest.raises(AIProviderError, match="limite"):
         provider.generate(_request("x" * 1500), timeout_seconds=5)
+    tokens, _ = make_provider(tmp_path, recorder, name="t", max_input_tokens=500)
+    with pytest.raises(AIProviderError, match="tokens"):   # limite de tokens estimados
+        tokens.generate(_request("y" * 900), timeout_seconds=5)
     assert recorder.requests == []
 
 
 def test_v1_contract_is_refused_by_real_provider(tmp_path):
-    provider, _ = make_provider(tmp_path, Recorder((200, message_body({"x": 1}))))
+    provider, _ = make_provider(tmp_path, Recorder((200, body({"x": 1}))))
     with pytest.raises(AIProviderError):
         provider.generate(_request(contract="ai-response-v1"), timeout_seconds=5)
 
@@ -360,12 +324,14 @@ def test_logs_and_usage_never_contain_content_or_key(tmp_path, caplog):
     provider, repository = make_provider(tmp_path, ModelFromFake(preface="Claro!"))
     with caplog.at_level(logging.DEBUG):
         send(agent_v2(repository, provider), "Quanto custa o corte? SEGREDO_DO_CLIENTE")
-    text = "".join(r.getMessage() + str(r.__dict__) for r in caplog.records if not r.name.startswith(("httpx", "anthropic")))
+    text = "".join(r.getMessage() + str(r.__dict__) for r in caplog.records
+                   if not r.name.startswith(("httpx", "google")))
     assert "SEGREDO_DO_CLIENTE" not in text and KEY not in text
     import sqlite3
     from contextlib import closing
     with closing(sqlite3.connect(repository.path)) as connection:
-        assert "SEGREDO_DO_CLIENTE" not in json.dumps(connection.execute("SELECT * FROM ai_usage").fetchall())
+        dump = json.dumps(connection.execute("SELECT * FROM ai_usage").fetchall())
+    assert "SEGREDO_DO_CLIENTE" not in dump and KEY not in dump
 
 
 def test_redaction_patterns():
@@ -374,15 +340,11 @@ def test_redaction_patterns():
     assert redact_personal_data("Quanto custa? 45 reais às 15h do dia 20/11") == "Quanto custa? 45 reais às 15h do dia 20/11"
 
 
-def _request(text="Quanto custa o corte?", contract="ai-response-v2"):
-    return AIRequest(message=UntrustedText(text=text), service_context=(), history=(), facts=(), scope="SYNTHETIC",
-                     prompt_version="v2", objective="x", system_instructions=("x",), output_contract=contract)
-
-
 def test_model_parameters_must_match_model_capabilities(tmp_path, monkeypatch):
-    """Haiku 5.5 não aceita fallback de recusa no servidor: a configuração não pode enviá-lo."""
-    monkeypatch.setattr(config_module, "AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", True)
-    base = {"ai_provider": "anthropic", "ai_api_key": KEY, "ai_prompt_version": "v2", "ai_model": "claude-haiku-5-5"}
+    """gemini-3.8-flash não aceita raciocínio 'minimal'; os Flash-Lite aceitam (registro verificado)."""
+    monkeypatch.setattr(config_module, "GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED", True)
+    flash = {**GEMINI, "ai_model": "gemini-3.8-flash"}
     with pytest.raises(Exception):
-        settings(tmp_path, **base)
-    assert settings(tmp_path, **base, ai_refusal_fallback="off").ai_refusal_fallback == "off"
+        settings(tmp_path, **flash, ai_thinking_level="minimal")
+    assert settings(tmp_path, **flash, ai_thinking_level="low").ai_thinking_level == "low"
+    assert settings(tmp_path, **GEMINI, ai_thinking_level="minimal").ai_thinking_level == "minimal"

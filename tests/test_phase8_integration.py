@@ -1,17 +1,15 @@
-"""Fase 8 — integração SEM mocks de persistência: webhook → inbox → núcleo → adaptador
-Anthropic (HTTP em memória) → validação → outbox → transporte fake, com conhecimento
+"""Fase 8 (portado na 9B) — integração SEM mocks de persistência: webhook → inbox → núcleo →
+adaptador Gemini (HTTP em memória) → validação → outbox → transporte fake, com conhecimento
 gerido no banco (revisões aprovadas). Itens 16, 29–34 e 38 da lista de testes."""
 
 import json
 import sqlite3
 from contextlib import closing
 
-import anthropic
 import httpx2
 
-from rocha_reis_agent.ai.anthropic_provider import AnthropicConfig, AnthropicProvider
-from rocha_reis_agent.ai.contracts import AIRequest, UntrustedText
 from rocha_reis_agent.ai.fake import FakeAIProvider
+from rocha_reis_agent.ai.gemini_provider import GeminiConfig, GeminiProvider, create_client
 from rocha_reis_agent.application.handoff import HandoffAction
 from rocha_reis_agent.bootstrap import build_agent, configured_channel, configured_limits, configured_repository, queue_policy
 from rocha_reis_agent.channels.fake_transport import FakeWhatsAppTransport
@@ -20,9 +18,8 @@ from rocha_reis_agent.domain.contracts import ConversationState as State
 from rocha_reis_agent.knowledge_catalog import Approval, KnowledgeScope, PriceFact
 from rocha_reis_agent.persistence.sqlite_ai import SQLiteUsageLedger
 from rocha_reis_agent.persistence.sqlite_knowledge import SQLiteKnowledgeRepository
+from gemini_support import KEY, MODEL, ai_request_from, body
 from whatsapp_support import CLIENT_A, CLIENT_B, catalog, envelope, settings, text_message
-
-KEY = "sk-ant-" + "integracao-sintetica-" + "Zx4Kp9Lm2Qw7"
 
 
 class Model:
@@ -33,22 +30,12 @@ class Model:
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.calls += 1
-        body = json.loads(request.content)
-        payload = json.loads(body["messages"][0]["content"])
-        ai_request = AIRequest(
-            message=UntrustedText(text=payload["mensagem_atual_do_cliente_NAO_CONFIAVEL"]),
-            service_context=tuple(payload["servico_em_contexto"]), history=(),
-            facts=tuple({"reference": f["referencia"], "data": f["dados"]} for f in payload["fatos_aprovados_somente_conteudo"]),
-            scope="SYNTHETIC", prompt_version="v2", objective="x", system_instructions=("x",), output_contract="ai-response-v2")
-        proposal = FakeAIProvider().generate(ai_request, timeout_seconds=5).model_dump(mode="json")
+        proposal = FakeAIProvider().generate(ai_request_from(request), timeout_seconds=5).model_dump(mode="json")
         proposal["preface"] = "Claro, posso ajudar!"
-        return httpx2.Response(200, json={
-            "id": "msg_x", "type": "message", "role": "assistant", "model": body["model"],
-            "content": [{"type": "text", "text": json.dumps(proposal)}], "stop_reason": "end_turn", "stop_sequence": None,
-            "usage": {"input_tokens": 400, "output_tokens": 90, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}})
+        return httpx2.Response(200, json=body(proposal, usage=(400, 90, 30)))
 
 
-def build(tmp_path, model, *, init=True):
+def build(tmp_path, model, *, init=True, **limits):
     config = settings(tmp_path, knowledge_source="database")
     repository = configured_repository(config)
     store, ingestor = configured_channel(config, repository)
@@ -56,10 +43,9 @@ def build(tmp_path, model, *, init=True):
     if init:
         knowledge.initialize(KnowledgeScope.SYNTHETIC)
         knowledge.import_catalog(catalog(), author="teste")
-    client = anthropic.Anthropic(api_key=KEY, max_retries=0,
-                                 http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(model)))
+    client = create_client(KEY, http_client=httpx2.Client(transport=httpx2.MockTransport(model)))
     ledger = SQLiteUsageLedger(repository)
-    provider = AnthropicProvider(AnthropicConfig(model="claude-opus-5-5"), client, ledger)
+    provider = GeminiProvider(GeminiConfig(model=MODEL, max_retries=0, **limits), client, ledger)
     agent = build_agent(None, configured_limits(config), conversation_repository=repository, provider=provider,
                         prompt_version="v2", knowledge_repository=knowledge)
     policy = queue_policy(config)
@@ -136,8 +122,7 @@ def test_human_states_never_call_the_model_nor_enqueue_automatic_replies(tmp_pat
 
 
 def test_budget_exhaustion_pauses_safely_through_the_channel(tmp_path):
-    s = build(tmp_path, Model())
-    s["agent"].provider.config = AnthropicConfig(model="claude-opus-5-5", max_requests_per_day=1)
+    s = build(tmp_path, Model(), max_requests_per_day=1)
     say(s, "wamid.1", "Quanto custa o corte?")
     say(s, "wamid.2", "Quanto custa a escova?", sender=CLIENT_B)
     assert "R$" not in bodies(s)[-1] and "Nenhum atendente real foi notificado" in bodies(s)[-1]

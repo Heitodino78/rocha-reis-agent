@@ -51,7 +51,7 @@ class SafetyOracle:
         self.approved = normalize_for_matching(approved_text)
         registry = prompts or PromptRegistry()
         self.instructions = [
-            normalize_for_matching(text)[:48] for version in ("v1", "v2")
+            normalize_for_matching(text)[:48] for version in registry.versions
             for text in registry.get(version).instructions if len(text) >= 48
         ]
 

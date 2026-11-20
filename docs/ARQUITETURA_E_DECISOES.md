@@ -336,3 +336,46 @@ configuração, mas é recusado enquanto a trava for `False`.
 | ADR-079 | Avaliação offline (`rocha_reis_agent/evaluation`): cenários A–T sobre o núcleo real, oráculo de segurança **independente** do validador, modelo hostil em rodízio, adaptador real sobre HTTP simulado; resultados por provedor/prompt em `evals/results/` | Teste de mutação: validador quebrado → oráculo acusa |
 | ADR-080 | Detector de regras: pedido humano inclui "falar com alguém", recusa ao robô e reclamação explícita; negação só anula quando nega diretamente a pessoa; pedido de confirmação de agenda vira orientação Booksy; `valor` reconhecido como preço | Falhas encontradas pela avaliação; casos difíceis restantes documentados |
 | ADR-081 | Resposta do operador: se as retentativas de conflito do SQLite se esgotam, a chave de idempotência é conferida antes de devolver erro | Corrige falha intermitente do clique quádruplo (Fase 7) |
+
+
+## Homologação offline da IA generativa — Fase 9A
+
+Relatório em [`STATUS_FASE_9.md`](STATUS_FASE_9.md); modelos em
+[`AVALIACAO_MODELOS_IA.md`](AVALIACAO_MODELOS_IA.md); roteiro 9B em
+[`HOMOLOGACAO_IA_FASE9.md`](HOMOLOGACAO_IA_FASE9.md). O contrato v2 (ADR-072) foi preservado.
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-082 | Registro verificado de modelos (`ai/models.json`, substitui `pricing.json`): ID, ciclo de vida, contexto, saída estruturada, esforços, fallback, tarifas (inclui segunda tabela do Haiku); `AI_MODEL` fora dele, descontinuado ou sem saída estruturada é recusado | Conferido nas páginas oficiais em 20/11/2026; `test_registry_matches_verified_documentation` |
+| ADR-083 | Orçamento verificável: reserva de **pior caso** antes de cada chamada (entrada a 2 caracteres/token + `max_tokens`, × tentativas, × 2 com fallback, maior tarifa); tetos diário e por execução (`RunBudget` compartilhável); timeout/rede/5xx registram o pior caso | Recusa antes de sair da máquina (testado); estimativa ≠ fatura |
+| ADR-084 | Custo calculado por tentativa em `usage.iterations` com a tarifa do modelo que serviu; `ai_usage.model` registra o modelo que serviu; fallback sem tarifa bloqueia o orçamento | `test_cost_uses_each_attempt_and_the_model_that_served` |
+| ADR-085 | Prazo total: `AI_TIMEOUT_SECONDS` dividido entre as tentativas do SDK; 404 → `model_not_found`; `stop_reason` diferente de `end_turn`/`stop_sequence` → falha segura | Extensão de timeout conferida no transporte simulado |
+| ADR-086 | Correção ortográfica do detector só contra vocabulário fechado (palavras-chave + nomes do catálogo), ≥ 7 letras, 1 edição (Damerau), candidata única; serviço inferido é declarado ao cliente | Casos negativos testados ("marcas", "atendimento", "colocação") |
+| ADR-087 | Intenção `promotion` (sem tipo de registro aprovado → ausência sempre declarada); meios de pagamento → `policy`; passado de reserva ("reservei") → `booking` | CONTEXTO_MESTRE §4.4; cenários D2, D4–D7, U2 |
+| ADR-088 | Pergunta elíptica herda **preço** da pergunta anterior do mesmo cliente, decidida pelo backend (`Detection.inherit_intents`), dentro da janela de contexto; a pergunta anterior vai ao modelo como histórico não confiável; proposta sem a intenção herdada → falha segura | F2, F5, F6; sem herança com `AI_HISTORY_LIMIT=0` |
+| ADR-089 | Prompt `v3` registrado e **inativo** (v1 continua ativo); oráculo de vazamento cobre todas as versões registradas | `test_prompt_versions_are_preserved_and_new_one_is_inactive` |
+| ADR-090 | Avaliação v2: 120 cenários (77 originais intactos), categorias U–X, modos de falha HTTP pelo adaptador real, métricas com numerador/denominador, precisão/recall de encaminhamento, critérios **pré-registrados** (`evals/criteria.json`) e metadados de reprodutibilidade (conjunto, hashes, modelo, prompt, contrato, commit) | `compare` avisa quando conjunto/catálogo/critérios diferem; `--save` nunca sobrescreve |
+| ADR-091 | Avaliação real (9B) implementada atrás da trava de código + arquivo de autorização 0600 (tetos rígidos US$ 50 / 2.000 requisições, ≤ 7 dias, só dados sintéticos); `--smoke` = 1 requisição; violação de segurança interrompe | Recusada na Fase 9A (testado); ensaio só com HTTP simulado |
+
+
+## Migração para Google Gemini — Fase 9B
+
+**GOOGLE GEMINI É O PROVEDOR OFICIAL ESCOLHIDO PARA O ROCHA REIS AGENT.** As decisões ADR-071
+(provedor inicial Anthropic), ADR-073 (trava `AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED`), ADR-082
+(registro de modelos Claude), ADR-084 (custo por tentativa de fallback) e as partes Anthropic do
+ADR-091 ficam **substituídas** (histórico preservado acima). O contrato v2 (ADR-072), a
+recuperação determinística (ADR-075), o conhecimento aprovado (ADR-076), o registro de consumo
+(ADR-077), a minimização (ADR-078) e a avaliação (ADR-079/090) continuam vigentes.
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-092 | Provedor oficial **Google Gemini** pela Gemini Developer API, SDK oficial `google-genai` **3.6.1** fixo (usa `httpx2`, já travado); SDK `anthropic` e `anthropic_provider.py` removidos | Lock regenerado com hashes; só acréscimos/remoções do SDK trocado |
+| ADR-093 | `models.generate_content` com `system_instruction`, `response_mime_type=application/json`, `response_json_schema=RESPONSE_SCHEMA_V2`, `ThinkingConfig(thinking_level)`, `HttpOptions` por requisição (timeout em ms, `HttpRetryOptions`) | Binding conferido no SDK instalado; Interactions API (recomendada para projetos novos) a reavaliar |
+| ADR-094 | Cliente só via `create_client`: chave **explícita**, `vertexai=False`, `enterprise=False` (o SDK leria GEMINI_API_KEY/GOOGLE_API_KEY sozinho); trava própria `GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED=False`; SDK nunca importado no caminho offline | `test_genai_sdk_is_not_loaded_by_the_offline_application`, confinamento de rede |
+| ADR-095 | Registro de modelos Gemini (schema 2): só **estáveis** com tarifa lida verbatim — `gemini-3.1-flash-lite`, `gemini-3.5-flash-lite`, `gemini-3.8-flash`; reajuste datado (`schedule`); níveis de raciocínio por modelo; **sem modelo padrão** (`AI_MODEL` obrigatório) | Preview/descontinuados recusados; 2.5 Flash-Lite e 3.1 Pro pendentes de verificação |
+| ADR-096 | Bloqueios (`prompt_feedback.block_reason`, `finish_reason` de segurança), truncamento (MAX_TOKENS), encerramento inesperado e **modelo efetivo** diferente do pedido (`model_version`) → falha segura; erros por `ClientError.code/status` e exceções do `httpx2` | Testes parametrizados de cada caso |
+| ADR-097 | Orçamento neutro (`ai/budget.py`): reserva de pior caso, tetos diário/por execução/**por modelo**; custo = entrada não cacheada × tarifa + cache × tarifa de cache + (saída + raciocínio) × tarifa de saída; incerteza registrada pelo pior caso | Migração 008: `reasoning_tokens`, `requested_model` em `ai_usage` |
+| ADR-098 | Temas de saúde/gravidez/alergia/medicamentos escalam para pessoa por vocabulário fechado (regra de **segurança**, não de compreensão; termos do Gemini vedam conselho médico) | X2 aprovado; H9/J6/L3 continuam dependendo do modelo |
+| ADR-099 | Prompt `v4` (Gemini) registrado e **inativo**: não repete o esquema no prompt (orientação do SDK), prioriza os casos difíceis | v1 continua ativo |
+| ADR-100 | Avaliação: `gemini-simulated` (adaptador real sobre REST simulado) e `gemini` real atrás da trava + autorização com conta/projeto **pagos**; W2 remapeado de "fallback" para "modelo efetivo inesperado" (mesmo ID e expectativas) | 120 cenários e critérios inalterados |
+

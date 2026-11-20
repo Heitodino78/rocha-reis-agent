@@ -383,7 +383,7 @@ def build_panel_router(ctx: PanelContext) -> APIRouter:
         from rocha_reis_agent import config as config_module
         return {"provider": settings.ai_provider, "model": settings.ai_model,
                 "prompt_version": settings.ai_prompt_version or "ativa do registro",
-                "real_provider_code_lock": config_module.AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED,
+                "real_provider_code_lock": config_module.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED,
                 "limits": {"requests_per_day": settings.ai_max_requests_per_day,
                            "cost_usd_per_day": settings.ai_max_cost_usd_per_day,
                            "max_output_tokens": settings.ai_max_output_tokens},

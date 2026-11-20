@@ -17,6 +17,10 @@ Se houver conflito, sinalize-o ao usuário; nunca invente um requisito para reso
 
 **Sem integração direta com a API do Booksy no escopo atual.** Ao surgir intenção de agendamento, enviar o **link oficial configurado** do perfil Booksy do salão, quando disponível. Não consultar horários, criar, alterar ou cancelar reservas, não fazer scraping e não automatizar o painel web. Se o link não estiver configurado, informar indisponibilidade e oferecer atendimento humano; não fabricar URL.
 
+## Provedor de IA generativa
+
+**Google Gemini é o provedor oficial** (Gemini API, SDK `google-genai`; decisão do responsável em 20/11/2026). A integração Anthropic das Fases 8/9A é histórica. Ferramentas de desenvolvimento (Codex, Claude Code) não são o modelo do produto. Nenhuma chamada à API Gemini, gratuita ou paga, sem autorização explícita; a presença de `GEMINI_API_KEY` não é autorização.
+
 ## Limites operacionais
 
 - Primeiro desenvolver localmente, com dados fictícios/sintéticos, sem enviar mensagens reais.

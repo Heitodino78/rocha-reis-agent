@@ -27,6 +27,12 @@ class FakeAIProvider:
             raise AIProviderError("Falha simulada.")
         knowledge = request_knowledge(request)
         detection = self.detector.detect(request.message.text, knowledge.base)
+        if detection.inherit_intents and request.history:
+            # Simula um modelo que lê a pergunta anterior enviada como histórico.
+            earlier = self.detector.detect(request.history[-1].text, knowledge.base)
+            if Intent.PRICE in earlier.intents and Intent.HUMAN not in earlier.intents:
+                rest = tuple(i for i in detection.intents if i not in (Intent.SERVICES, Intent.PRICE))
+                detection = replace(detection, intents=(Intent.PRICE, *rest))
         effective = detection
         if detection.use_context and len(request.service_context) == 1:
             effective = replace(detection, service_ids=request.service_context)

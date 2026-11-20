@@ -73,6 +73,9 @@ class Intent(StrEnum):
     POLICY = "policy"
     CANCELLATION_POLICY = "cancellation_policy"
     FAQ = "faq"
+    # Fase 9: ofertas/promoções/descontos. Não existe registro aprovado desse tipo:
+    # o backend sempre declara a ausência do dado (CONTEXTO_MESTRE §4.4).
+    PROMOTION = "promotion"
     UNKNOWN = "unknown"
 
 
@@ -100,6 +103,11 @@ class Detection:
     use_context: bool = False
     catalog_requested: bool = False
     faq_index: int | None = None
+    # Fase 9 — extraídos SOMENTE pelo backend (o modelo não pode alterá-los):
+    # pergunta elíptica ("e a escova?") herda a intenção da pergunta anterior do cliente;
+    inherit_intents: bool = False
+    # serviço reconhecido por correção ortográfica contra o vocabulário do catálogo.
+    spelling_corrected: bool = False
 
 
 @dataclass(frozen=True, slots=True)

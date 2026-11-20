@@ -1,16 +1,19 @@
 # Rocha Reis Agent
 
 Fundação e simulador local de atendimento em português para o **Salão de Beleza
-Rocha Reis**, projeto da agência de **Heitor e Renan**. Fases 0 a 5, 6A, 7 e 8
+Rocha Reis**, projeto da agência de **Heitor e Renan**. Fases 0 a 5, 6A, 7, 8, 9A e 9B
 implementadas e testadas localmente: API com `GET /health`, núcleo de conversas por CLI,
 conhecimento versionado, arquitetura de IA com **FakeAIProvider determinístico**,
 persistência SQLite sintética e **preparação offline do webhook oficial Meta
 WhatsApp Cloud API** com inbox/outbox duráveis e transporte **fake**, e o
 **adaptador HTTP Graph API** (Fase 5) implementado porém **bloqueado** por trava de
-código. A Fase 8 acrescentou o **adaptador generativo Anthropic** (também
-**bloqueado** por trava de código própria), conhecimento gerido e aprovado pelo
-painel e um **módulo de avaliações** reproduzível. Nenhum modelo generativo real,
-conta Meta ou envio real está conectado.
+código. A Fase 8 acrescentou conhecimento gerido e aprovado pelo painel, o contrato de
+IA v2 e um **módulo de avaliações** reproduzível; a Fase 9A homologou a IA **offline**
+(orçamento com reserva de pior caso, correções de qualidade, 120 cenários com critérios
+pré-registrados). **Na Fase 9B o provedor oficial passou a ser o GOOGLE GEMINI**: adaptador
+`GeminiProvider` (SDK oficial `google-genai`) implementado e **bloqueado** por trava de
+código própria; a integração Anthropic das Fases 8/9A é histórica e foi removida. Nenhum
+modelo generativo real, conta Meta ou envio real está conectado.
 
 **Booksy:** somente orientação por link configurado, sem consultar disponibilidade
 ou realizar operações sobre reservas. O link oficial e os dados do salão continuam
@@ -55,7 +58,9 @@ curl --noproxy '*' --fail-with-body -i --max-time 5 http://127.0.0.1:8000/health
 Resultado esperado: **HTTP 200**, JSON `{"status":"ok"}`. Use `Ctrl+C` para
 encerrar o servidor. O endpoint indica apenas que o processo HTTP responde;
 não atesta prontidão do agente ou de provedores. A documentação HTTP automática
-está desativada. Não foram acrescentadas rotas HTTP de simulação ou administração.
+está desativada. Esta aplicação expõe somente `/health` e, com `WHATSAPP_ENABLED=true`,
+o webhook da Fase 4; o painel da Fase 7 é uma aplicação separada. Não há rotas HTTP
+de simulação.
 
 ## Executar o simulador com FakeAIProvider
 
@@ -179,8 +184,8 @@ STORAGE_BACKEND=sqlite STORAGE_PATH="$HOME/.local/share/rocha-reis-agent/dev.syn
 ```
 
 A fábrica HTTP inicializa o repositório configurado em
-`app.state.conversation_repository`; continua expondo somente `/health`. Não há
-endpoint de mensagem/administração, servidor remoto, worker ou inbox. `/health`
+`app.state.conversation_repository`. Na Fase 3 ela expunha somente `/health`; o
+webhook, a inbox/outbox e o worker vieram na Fase 4 e o painel na Fase 7. `/health`
 permanece liveness; não consulta o banco a cada requisição nem é readiness.
 
 Cada arquivo é marcado como sintético; bancos desconhecidos e schemas futuros
@@ -197,7 +202,8 @@ três tentativas totais. SQLite serializa commits; a ordem garantida é a dos co
 sem promessa de FIFO por chegada ou timestamp. Esgotamento de conflitos/bloqueios
 retorna erro controlado e exige reenviar o mesmo evento; não descarta silenciosamente.
 Não há garantia de entrega de resposta ao terminal após o commit, nem atomicidade
-com APIs externas. Nenhum canal externo existe nesta fase.
+com APIs externas. O canal WhatsApp (Fase 4) acrescenta a outbox transacional
+descrita abaixo.
 
 Configurações adicionais (todos os prazos são de teste, sem presunção legal):
 
@@ -305,12 +311,11 @@ descrito em `requirements-e2e.txt`.
 
 ## IA generativa, conhecimento aprovado e avaliações — Fase 8 (somente local)
 
-- **Provedor real:** `ai/anthropic_provider.py` (SDK oficial `anthropic`), contrato
-  `ai-response-v2`: o modelo só **classifica** e pode propor uma abertura curta; todos
-  os fatos (preços, horários, endereço, link Booksy) são escritos pelo backend a partir
-  de registros aprovados. **Bloqueado** por `AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED=False`
-  em `config.py`; uma chave configurada nunca ativa nada. Detalhes e condições de
-  ativação em [`IA_GENERATIVA.md`](docs/IA_GENERATIVA.md).
+- **Contrato `ai-response-v2`:** o modelo só **classifica** e pode propor uma abertura
+  curta; todos os fatos (preços, horários, endereço, link Booksy) são escritos pelo backend
+  a partir de registros aprovados. Na Fase 8 o provedor real era um adaptador Anthropic,
+  **substituído pelo Google Gemini na Fase 9B** (ver abaixo e
+  [`IA_GENERATIVA.md`](docs/IA_GENERATIVA.md)).
 - **Conhecimento no banco** (`KNOWLEDGE_SOURCE=database`): revisões imutáveis,
   rascunho → aprovação → revogação pela seção **Conhecimento** do painel (somente
   ADMIN), histórico, pendências e prévia. Um rascunho novo suspende o dado anterior.
@@ -322,7 +327,7 @@ PY=/tmp/rocha-reis-agent-venv/bin/python
 # Base de conhecimento no banco (variáveis do painel + KNOWLEDGE_SOURCE=database)
 $PY -m rocha_reis_agent.panel.admin_cli knowledge-init --scope synthetic --confirm KNOWLEDGE_SCOPE:SYNTHETIC
 $PY -m rocha_reis_agent.panel.admin_cli knowledge-import-fixture
-# Avaliações offline (sem rede): fake | hostile | anthropic-simulated; prompt v1 | v2
+# Avaliações offline (sem rede): fake | hostile | gemini-simulated; prompt v1 … v4
 $PY -m rocha_reis_agent.evaluation --provider fake --prompt v1
 $PY -m rocha_reis_agent.evaluation --provider hostile --prompt v2 --output /tmp/avaliacao.json
 ```
@@ -330,6 +335,49 @@ $PY -m rocha_reis_agent.evaluation --provider hostile --prompt v2 --output /tmp/
 Resultados de referência em `evals/results/`; roteiro completo e métricas em
 [`STATUS_FASE_8.md`](docs/STATUS_FASE_8.md). Resultados com provedores simulados
 medem o backend; **não validam a qualidade de um modelo generativo real**.
+
+## Homologação offline da IA — Fase 9A (sem chamadas pagas)
+
+- **Registro verificado de modelos** `ai/models.json`: na 9A continha Claude; desde a 9B
+  contém só modelos **Gemini** estáveis (ver seção seguinte).
+- **Orçamento verificável:** reserva de pior caso antes de cada chamada, tetos diário e por
+  execução (`AI_MAX_REQUESTS_PER_RUN`, `AI_MAX_COST_USD_PER_RUN`), timeout/rede/5xx
+  contabilizados pelo pior caso.
+- **Qualidade:** os 5 casos difíceis da Fase 8 foram corrigidos (correção ortográfica em
+  vocabulário fechado, meios de pagamento, intenção `promotion`, pergunta elíptica que herda
+  o preço). Quatro novos casos difíceis estão declarados.
+- **Prompt `v3`** registrado e inativo (`v1` continua ativo).
+- **Avaliação v2:** 120 cenários (77 originais intactos), métricas com denominadores,
+  precisão/recall de encaminhamento humano, critérios pré-registrados em
+  [`evals/criteria.json`](evals/criteria.json), comparação entre execuções.
+
+Resultados e limitações em [`STATUS_FASE_9.md`](docs/STATUS_FASE_9.md) (parte A).
+
+## Google Gemini — Fase 9B (provedor oficial; adaptador bloqueado, sem chamadas)
+
+- **`ai/gemini_provider.py`** (SDK oficial `google-genai` 3.6.1): `generate_content` com
+  saída estruturada (`response_json_schema` = contrato v2), raciocínio por `thinking_level`,
+  prazo total dividido entre tentativas, bloqueios de segurança, truncamento e modelo
+  efetivo inesperado tratados como falha segura. **Bloqueado** por
+  `GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED=False` em `config.py`; `GEMINI_API_KEY` sozinha
+  nunca ativa nada, e o cliente só é criado com chave explícita (o SDK leria a variável).
+- **Modelos** ([`ai/models.json`](rocha_reis_agent/ai/models.json)): `gemini-3.1-flash-lite`,
+  `gemini-3.5-flash-lite`, `gemini-3.8-flash` (estáveis, tarifas pagas verificadas em
+  20/11/2026). **Sem modelo padrão**: `AI_MODEL` é obrigatório com o provedor real.
+  Comparação em [`AVALIACAO_MODELOS_IA.md`](docs/AVALIACAO_MODELOS_IA.md).
+- **Consumo:** `ai_usage` registra modelo pedido e efetivo, tokens de raciocínio e de cache
+  (migração 008); custo estimado pela tarifa do modelo, com raciocínio cobrado como saída.
+- **Prompt `v4`** (Gemini) registrado e inativo; temas de saúde escalam para pessoa.
+
+```sh
+PY=/tmp/rocha-reis-agent-venv/bin/python
+$PY -m rocha_reis_agent.evaluation --provider gemini-simulated --model gemini-3.1-flash-lite --prompt v4 --save
+$PY -m rocha_reis_agent.evaluation compare evals/results/phase9b-fake-v4.json evals/results/phase9b-hostile-v4.json
+$PY -m rocha_reis_agent.evaluation --provider gemini --model gemini-3.1-flash-lite --prompt v4   # RECUSADO (trava)
+```
+
+Relatório em [`STATUS_FASE_9.md`](docs/STATUS_FASE_9.md) (parte B); homologação real
+(não autorizada) em [`HOMOLOGACAO_IA_FASE9.md`](docs/HOMOLOGACAO_IA_FASE9.md).
 
 ## Conhecimento e limites determinísticos
 
@@ -343,8 +391,9 @@ Estados: `DRAFT`, `APPROVED`, `REJECTED`, `ARCHIVED`. Somente a última revisão
 `APPROVED` de cada ID pode sustentar resposta. Nova revisão pendente desativa a
 anterior até aprovação; não existe retorno silencioso a uma versão antiga.
 Conflitos de versão, lacunas no histórico e dois registros ativos para o mesmo
-dado são rejeitados. `append_revision` é autoria local confiável, sem endpoint
-administrativo ou poder de escrita atribuído ao provedor.
+dado são rejeitados. No modo `KNOWLEDGE_SOURCE=file`, `append_revision` é autoria
+local confiável, sem poder de escrita atribuído ao provedor; no modo `database`
+(Fase 8), revisões são criadas e aprovadas pelo painel, somente por ADMIN.
 
 [knowledge/official.json](knowledge/official.json) está vazio; as pendências sem
 valores estão em [knowledge/pending.json](knowledge/pending.json). A CLI recusa
@@ -361,10 +410,14 @@ perguntas alternativas e resposta. Campos desconhecidos, dados inválidos e arqu
 acima de 100 KB são rejeitados. A CLI recusa importar base não sintética nesta fase.
 
 O detector reconhece saudação, serviço, preço, funcionamento, localização,
-profissionais, agendamento, humano, política, FAQ e mensagem desconhecida.
+profissionais, agendamento, humano, política (inclui meios de pagamento), promoção
+(sempre "não tenho informação confirmada"), FAQ e mensagem desconhecida. Desde a Fase 9A,
+tolera um erro de digitação em palavras-chave e nomes do catálogo (vocabulário fechado,
+serviço inferido declarado ao cliente) e trata perguntas elípticas ("e a escova?").
 Suporta múltiplas intenções; pedido de humano suspende as demais respostas e
 agendamento tem prioridade. Até três intenções de conteúdo são respondidas por
-mensagem, com aviso para detalhar as restantes. Não há IA generativa.
+mensagem, com aviso para detalhar as restantes. O detector é determinístico; a IA
+generativa da Fase 8 só classifica dentro desse escopo e está bloqueada.
 
 O contexto guarda serviços por conversa. Perguntas curtas como “E quanto custa?”
 reutilizam um único serviço recente. Contexto ausente, ambíguo ou vencido exige
@@ -405,8 +458,9 @@ preempção de código bloqueado ou cliente de rede real nesta fase.
 
 [prompts/registry.json](prompts/registry.json) indica a versão ativa; cada arquivo,
 como [v1.json](prompts/v1.json), contém objetivo, instruções, contrato e mudanças.
-Para testar outra versão, crie `v2.json`, registre-a em `versions` e selecione
-`AI_PROMPT_VERSION=v2`, preservando `v1.json`. Não editar uma versão publicada
+[v2.json](prompts/v2.json) (contrato `ai-response-v2`, Fase 8) e [v3.json](prompts/v3.json)
+(Fase 9A) já estão registradas, porém inativas; selecione com `AI_PROMPT_VERSION=v2` ou `v3`. Novas versões seguem o mesmo
+padrão (`vN.json` registrado em `versions`), preservando as anteriores. Não editar uma versão publicada
 para mudar seu significado. Mensagens de cliente não escolhem versão ou instruções.
 `/provenance` mostra referências e versão aplicada, sem imprimir o prompt.
 
@@ -440,20 +494,24 @@ cp .env.example .env
 
 | Variável | Padrão | Valores aceitos |
 |---|---|---|
-| `APP_ENV` | `local` | `local`, `test` |
+| `APP_ENV` | `local` | `local`, `test`, `homologation` (Fase 6A; exige banco e autorização próprios) |
 | `APP_NAME` | `rocha-reis-agent` | Identificador técnico de 1 a 64 caracteres; começa por letra minúscula e contém apenas letras minúsculas, números e hífen |
 | `SIM_MAX_MESSAGE_CHARS` | `2000` | 1 a 2000 caracteres antes de normalizar espaços |
 | `SIM_MAX_HISTORY_ENTRIES` | `100` | 1 a 1000 entradas de histórico e, separadamente, de transições de estado |
 | `SIM_MAX_EVENTS_PER_SESSION` | `1000` | 1 a 10000 eventos; no SQLite o limite é por conversa, incluindo resets |
 | `SIM_MAX_CONVERSATIONS` | `100` | 1 a 1000 conversas por processo em memória, ou por arquivo SQLite |
 | `SIM_CONTEXT_TURNS` | `5` | 1 a 100 turnos automáticos; pausa humana preserva o contexto |
-| `AI_PROVIDER` | `fake` | `fake`; `anthropic` é recusado enquanto a trava de código da Fase 8 for `False` |
-| `AI_MODEL`, `AI_EFFORT`, `AI_MAX_*`, `AI_REFUSAL_FALLBACK` | ver `.env.example` | Somente com o provedor real (bloqueado); limites de tokens, tentativas, concorrência, requisições e custo estimado por dia |
+| `AI_PROVIDER` | `fake` | `fake`; `gemini` é recusado enquanto `GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED` for `False` |
+| `AI_MODEL` | Ausente | Obrigatório com `gemini`: ID estável do registro `ai/models.json` (sem padrão fixo) |
+| `GEMINI_API_KEY` | Ausente | Só com `AI_PROVIDER=gemini` e trava aberta; com o fake, a configuração é recusada |
+| `AI_THINKING_LEVEL`, `AI_MAX_INPUT_TOKENS` | padrão do modelo, `4000` | Nível de raciocínio aceito pelo modelo; tokens de entrada estimados recusados antes da chamada |
+| `AI_MAX_*`, `AI_MAX_RETRIES` | ver `.env.example` | Somente com o provedor real (bloqueado); limites de tokens, tentativas, concorrência, requisições e custo estimado por dia |
 | `KNOWLEDGE_SOURCE` | `file` | `file` (fixtures) ou `database` (gestão pelo painel; exige SQLite) |
 | `KNOWLEDGE_REQUIRE_DISTINCT_APPROVER` | `false` | `true` exige outro administrador para aprovar |
 | `AI_PROMPT_VERSION` | Ausente | Versão ativa do registro; pode selecionar uma versão `vN` registrada |
 | `AI_HISTORY_LIMIT` | `4` | 0 a 10 mensagens relevantes, até 500 caracteres cada |
-| `AI_TIMEOUT_SECONDS` | `2` | Maior que 0 e até 30; contrato do provedor, timeout simulado no fake |
+| `AI_TIMEOUT_SECONDS` | `2` | Maior que 0 e até 30; prazo TOTAL do provedor real (dividido entre as tentativas); timeout simulado no fake |
+| `AI_MAX_REQUESTS_PER_RUN`, `AI_MAX_COST_USD_PER_RUN` | Ausente | Fase 9A: tetos por execução do processo, além dos diários (só com o provedor real, bloqueado) |
 
 O `.env` é lido a partir do diretório atual em UTF-8. Variáveis do processo têm
 precedência. Chaves desconhecidas no `.env` são rejeitadas para detectar erros de
@@ -493,148 +551,74 @@ carga de fixtures e CLI. A Fase 2 cobre aprovação, versões, contratos, prompt
 saídas sem suporte factual, ataques, privacidade e falhas do fake. A Fase 8
 (`test_ai_generative.py`, `test_knowledge_management.py`, `test_evaluation.py`,
 `test_phase8_integration.py`, `tests_e2e/test_knowledge_browser.py`) cobre o adaptador
-Anthropic com `httpx2.MockTransport`, travas, falhas, limites de consumo, gestão do
-conhecimento, avaliações reproduzíveis e o fluxo webhook → IA → outbox. Evidências em
-[`STATUS_FASE_2.md`](docs/STATUS_FASE_2.md), [`STATUS_FASE_4.md`](docs/STATUS_FASE_4.md) e nos registros históricos
-[`STATUS_FASE_1.md`](docs/STATUS_FASE_1.md) e [`STATUS_FASE_0.md`](docs/STATUS_FASE_0.md).
+real (Gemini desde a 9B, com `httpx2.MockTransport`), travas, falhas, limites de consumo,
+gestão do conhecimento, avaliações reproduzíveis e o fluxo webhook → IA → outbox.
+Evidências por fase em `docs/STATUS_FASE_0.md` a [`STATUS_FASE_9.md`](docs/STATUS_FASE_9.md);
+o resultado mais recente registrado (Fase 9B) está no relatório da fase.
+`tests/test_phase9.py` bloqueia sockets e cobre adaptador Gemini, orçamento, registro de
+modelos, guarda da avaliação real, qualidade, migração 008 e corridas; `tests/gemini_support.py`
+fornece respostas REST sintéticas da Gemini API.
 
 ## Estrutura e evolução
 
 ```text
 .
-├── AGENTS.md
-├── PROMPT_INICIAL_CODEX.md
-├── README.md
-├── .env.example
-├── .gitignore
-├── pyproject.toml
-├── requirements.in
-├── requirements.lock
-├── examples/
-│   ├── phase1.demo.txt
-│   ├── phase2.demo.txt
-│   ├── phase3.start.demo.txt
-│   └── phase3.resume.demo.txt
+├── AGENTS.md · PROMPT_INICIAL_CODEX.md · README.md
+├── .env.example · .gitignore · pyproject.toml
+├── requirements.in · requirements.lock · requirements-e2e.txt
+├── examples/            # roteiros da CLI (phase1, phase2, phase3.start, phase3.resume)
 ├── fixtures/
-│   ├── salon.synthetic.json
-│   └── salon.versioned.synthetic.json
-├── knowledge/
-│   ├── official.json
-│   └── pending.json
-├── prompts/
-│   ├── registry.json
-│   └── v1.json
+│   ├── salon.synthetic.json · salon.versioned.synthetic.json
+│   ├── meta/            # webhooks Meta sintéticos (Fase 4)
+│   └── homolog/         # exemplos de autorização: homologação Meta (6A) e avaliação de IA (9B)
+├── knowledge/           # official.json (vazio) · pending.json
+├── prompts/             # registry.json · v1.json (ativo) · v2 (Fase 8) · v3 (9A) · v4 (9B, Gemini), inativos
+├── evals/               # cenários (120) e catálogo sintéticos, criteria.json, results/ de referência
 ├── rocha_reis_agent/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── main.py
-│   ├── intents.py
-│   ├── knowledge.py
-│   ├── knowledge_catalog.py
-│   ├── knowledge_projection.py
-│   ├── catalog_io.py
-│   ├── memory.py
-│   ├── responses.py
-│   ├── simulator.py
-│   ├── bootstrap.py
-│   ├── persistence/
-│   │   ├── __init__.py
-│   │   ├── sqlite.py
-│   │   ├── sqlite_channel.py        # inbox/outbox do canal (Fase 4)
-│   │   └── migrations/
-│   │       ├── 001_initial.sql
-│   │       ├── 002_audit_correlation.sql
-│   │       ├── 003_whatsapp_channel.sql
-│   │       ├── 004_lifecycle_delivery.sql
-│   │       ├── 005_homologation_controls.sql
-│   │       ├── 006_operator_panel.sql
-│   │       └── 007_knowledge_and_ai_usage.sql  # Fase 8
-│   ├── evaluation/                  # avaliações offline (Fase 8)
-│   │   ├── scenarios.py · oracle.py · providers.py · runner.py · __main__.py
-│   ├── panel/                       # painel de atendimento (Fase 7) + conhecimento (Fase 8)
-│   │   ├── security.py · store.py · service.py · api.py · app.py · admin_cli.py · knowledge.py
-│   │   └── static/ (index.html, styles.css, app.js)
-│   ├── channels/                    # Meta WhatsApp offline (Fase 4)
-│   │   ├── __init__.py
-│   │   ├── contracts.py
-│   │   ├── meta.py
-│   │   ├── service.py
-│   │   ├── fake_transport.py
-│   │   ├── graph_transport.py       # Graph API HTTP, bloqueado (Fase 5)
-│   │   ├── send_policy.py           # janela de atendimento (Fase 5)
-│   │   ├── homologation.py          # autorização, allowlist, limites (Fase 6A)
-│   │   └── local_cli.py
-│   ├── ai/
-│   │   ├── __init__.py
-│   │   ├── contracts.py
-│   │   ├── context.py
-│   │   ├── fake.py
-│   │   ├── anthropic_provider.py    # provedor real, BLOQUEADO (Fase 8)
-│   │   ├── pricing.json             # tarifas para ESTIMATIVA de custo
-│   │   ├── privacy.py               # minimização antes de provedor externo
-│   │   ├── prompts.py
-│   │   └── validation.py
-│   ├── application/
-│   │   ├── __init__.py
-│   │   ├── conversations.py
-│   │   ├── handoff.py
-│   │   ├── ports.py
-│   │   ├── service.py
-│   │   └── retry.py
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── errors.py
-│   │   ├── health.py
-│   │   └── whatsapp.py
-│   └── domain/
-│       ├── __init__.py
-│       ├── contracts.py
-│       └── conversations.py
-├── tests/
-│   ├── conftest.py
-│   ├── test_config.py
-│   ├── test_health.py
-│   ├── test_attendance.py
-│   ├── test_booking.py
-│   ├── test_handoff.py
-│   ├── test_inputs_and_failures.py
-│   ├── test_knowledge.py
-│   ├── test_sessions.py
-│   ├── test_simulator.py
-│   ├── test_knowledge_versions.py
-│   ├── test_ai_contracts.py
-│   ├── test_ai_safety.py
-│   ├── test_ai_knowledge.py
-│   ├── test_ai_context_and_handoff.py
-│   ├── test_sqlite_persistence.py
-│   ├── test_sqlite_failures_and_concurrency.py
-│   ├── test_sqlite_restart_and_retention.py
-│   ├── test_sqlite_ai_regressions.py
-│   └── persistence_worker.py
+│   ├── config.py · main.py · bootstrap.py · observability.py
+│   ├── intents.py · responses.py · memory.py · simulator.py
+│   ├── knowledge.py · knowledge_catalog.py · knowledge_projection.py · catalog_io.py
+│   ├── domain/          # contracts.py · conversations.py
+│   ├── application/     # service.py · conversations.py · handoff.py · ports.py · retry.py
+│   ├── ai/              # contracts · context · fake · prompts · validation · privacy
+│   │                    # gemini_provider.py (BLOQUEADO, 9B) · budget.py · models.json + model_registry.py
+│   ├── api/             # errors.py · health.py · whatsapp.py (webhook, Fase 4)
+│   ├── channels/        # contracts · meta · service · fake_transport · local_cli
+│   │                    # graph_transport.py (BLOQUEADO, Fase 5) · send_policy.py
+│   │                    # homologation.py (Fase 6A)
+│   ├── persistence/     # sqlite.py · sqlite_channel.py · sqlite_ai.py · sqlite_knowledge.py
+│   │   └── migrations/  # 001_initial.sql … 008_ai_usage_gemini.sql
+│   ├── panel/           # painel (Fase 7) + conhecimento (Fase 8)
+│   │                    # security · store · service · api · app · admin_cli · knowledge
+│   │   └── static/      # index.html · styles.css · app.js
+│   └── evaluation/      # scenarios · oracle · providers · runner · __main__ · real_run (9B bloqueada)
+├── tests/               # suíte pytest (test_*.py) e workers de processos reais
+├── tests_e2e/           # testes de navegador (Chromium headless, Fases 7 e 8)
 └── docs/
-    ├── CONTEXTO_MESTRE.md
-    ├── REQUISITOS_E_ACEITE.md
-    ├── ARQUITETURA_E_DECISOES.md
-    ├── PLANO_DE_EXECUCAO.md
-    ├── DADOS_PENDENTES.md
-    ├── STATUS_FASE_0.md
-    ├── STATUS_FASE_1.md
-    ├── STATUS_FASE_2.md
-    └── STATUS_FASE_3.md
+    ├── CONTEXTO_MESTRE.md · REQUISITOS_E_ACEITE.md · ARQUITETURA_E_DECISOES.md
+    ├── PLANO_DE_EXECUCAO.md · DADOS_PENDENTES.md · CHECKLIST_PRODUCAO.md
+    ├── INTEGRACAO_META_FASE4.md · HOMOLOGACAO_META_FASE6.md
+    ├── OPERACAO_HUMANA_REQUISITOS.md · IA_GENERATIVA.md
+    ├── AVALIACAO_MODELOS_IA.md · HOMOLOGACAO_IA_FASE9.md
+    └── STATUS_FASE_0.md … STATUS_FASE_9.md
 ```
 
-`main.py` compõe somente HTTP/configuração. `application/` gerencia atendimento,
-sessões e handoff. `domain/` contém mensagens validadas, resultados e estados.
-`IntentDetector`, `KnowledgeRepository` e `ConversationRepository` separam as
-regras dos adaptadores. O motor de regras poderá ser substituído sem alterar o
-gerenciamento de sessões. O contrato `AIProvider` está implementado com fake;
-provedor real continua futuro. `persistence/` implementa SQLite sem expor SQL ao domínio.
+`main.py` compõe HTTP/configuração (`/health` e webhook opcional); `panel/app.py` é a
+aplicação separada do painel. `application/` gerencia atendimento, sessões e handoff.
+`domain/` contém mensagens validadas, resultados e estados. `IntentDetector`,
+`KnowledgeRepository` e `ConversationRepository` separam as regras dos adaptadores.
+O contrato `AIProvider` tem o fake determinístico e o adaptador **Google Gemini** (bloqueado
+por trava de código), que só aceita modelos estáveis do registro verificado `ai/models.json`. `persistence/` implementa SQLite sem expor SQL ao domínio.
 `bootstrap.py` compõe adaptadores para CLI e aplicação HTTP.
 
 ## Dependências e atualização do lock
 
-Execução: **FastAPI**, **Pydantic**, **Pydantic Settings** e **Uvicorn**. Testes:
-**pytest** e **httpx2**. `requirements.in` contém as dependências diretas;
+Execução: **FastAPI**, **Pydantic**, **Pydantic Settings**, **Uvicorn**,
+**argon2-cffi** (senhas do painel, Fase 7) e **google-genai** 3.6.1 (SDK oficial da Gemini
+API, Fase 9B; importado só com a trava aberta; traz google-auth, requests, websockets e
+tenacity como dependências transitivas). O SDK `anthropic` (Fase 8) foi removido.
+**httpx2** serve ao `TestClient`, ao adaptador Graph API e ao SDK Gemini. Testes: **pytest**; testes de navegador usam **Playwright** em venv próprio
+(`requirements-e2e.txt`). `requirements.in` contém as dependências diretas;
 `requirements.lock` fixa todas as versões e hashes, incluindo transitivas.
 `pyproject.toml` contém somente a configuração do pytest.
 
@@ -658,10 +642,9 @@ Leia [`AGENTS.md`](AGENTS.md), [`CONTEXTO_MESTRE.md`](docs/CONTEXTO_MESTRE.md),
 [`PLANO_DE_EXECUCAO.md`](docs/PLANO_DE_EXECUCAO.md) e
 [`DADOS_PENDENTES.md`](docs/DADOS_PENDENTES.md).
 
-A skill `.agents/skills/rocha-reis-development/SKILL.md` citada no kit não foi
-encontrada no projeto nem nos diretórios locais de skills pesquisados. As
-instruções de `AGENTS.md` continuam aplicáveis. A pasta também não possui `.git`;
-nenhum commit foi criado. Inicializar/versionar o projeto é uma pendência.
+A skill `.agents/skills/rocha-reis-development/SKILL.md` citada no `AGENTS.md`
+(“quando disponível”) ainda não existe no repositório; as instruções de `AGENTS.md`
+continuam aplicáveis. O projeto é versionado em Git na branch `main`.
 
 A Fase 3 foi autorizada exclusivamente para persistência/estabilidade local e
 está documentada em [STATUS_FASE_3.md](docs/STATUS_FASE_3.md).
@@ -670,5 +653,7 @@ Meta), conforme [STATUS_FASE_4.md](docs/STATUS_FASE_4.md). A Fase 5 (adaptador H
 bloqueado, erros, status, janela, retenção) está em [STATUS_FASE_5.md](docs/STATUS_FASE_5.md).
 A Fase 6A está em [STATUS_FASE_6.md](docs/STATUS_FASE_6.md); a 6B não foi executada.
 A Fase 7 (painel) está em [STATUS_FASE_7.md](docs/STATUS_FASE_7.md) e a Fase 8 (IA
-generativa bloqueada, conhecimento aprovado, avaliações) em [STATUS_FASE_8.md](docs/STATUS_FASE_8.md). Conexão real com a Meta, validação com o salão, dados reais e
+generativa bloqueada, conhecimento aprovado, avaliações) em [STATUS_FASE_8.md](docs/STATUS_FASE_8.md).
+A Fase 9A (homologação offline da IA) está em [STATUS_FASE_9.md](docs/STATUS_FASE_9.md); a 9B
+(avaliação com IA real) não foi executada. Conexão real com a Meta, validação com o salão, dados reais e
 implantação permanecem pendentes e exigem autorização específica.

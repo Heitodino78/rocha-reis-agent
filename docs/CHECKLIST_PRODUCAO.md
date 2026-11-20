@@ -46,7 +46,9 @@ habilitados do salão e da agência.
 ## Custos
 - [ ] Limites de mensagens/mês e alerta. Mensagens de serviço são cobradas desde 01/10/2026 após 1.000/mês por número (conferir tabela vigente).
 - [ ] Orçamento aprovado para IA real (quando autorizada), com limite por conversa. *(Fase 8: limites diários de requisições e de custo estimado implementados; valores pendentes.)*
-- [ ] Tarifas do modelo reconfirmadas na fonte oficial e `ai/pricing.json` atualizado com data.
+- [ ] Tarifas e capacidades do modelo **Gemini** reconfirmadas na fonte oficial e `ai/models.json` (registro verificado) atualizado com data; reajustes programados considerados.
+- [ ] Projeto Google Cloud com faturamento (nível pago), chave com restrição de API, DPA aceito pelo responsável legal.
+- [ ] Homologação real com Gemini aprovada nos critérios pré-registrados de `evals/criteria.json`.
 
 ## Produto
 - [ ] Dados oficiais do salão aprovados (serviços, preços, horários, endereço, profissionais, políticas, link Booksy).
