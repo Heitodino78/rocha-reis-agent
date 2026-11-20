@@ -141,6 +141,31 @@ preços, em 20/11/2026. **Não se declara conformidade com a LGPD.**
    (`evals/criteria.json`).
 7. A trava do Gemini **não** abre a Meta e vice-versa (testado nos dois sentidos).
 
+## 7a. Fase 9C-A — o que mudou para a homologação
+
+- **Contexto oferecido pelo backend:** quando há exatamente um serviço recente em contexto,
+  a mensagem não nomeia outro serviço e as regras não reconheceram outro assunto (intenção
+  desconhecida ou preço sem serviço), o backend envia os fatos aprovados **desse** serviço ao
+  modelo. O modelo pode dizer que a mensagem se refere a ele (`use_context=true`); quem fixa o
+  serviço é o backend. Inventar contexto ou trocar o serviço → falha segura. Minimização
+  testada: perguntas de endereço, horário, agendamento etc. não recebem o contexto.
+- **Saúde:** vocabulário fechado ampliado (irritação, coceira, ferida, descamação…), sempre
+  com encaminhamento humano e sem orientação clínica.
+- **Avaliação real:** experimento pré-registrado por hash (`evals/experiment_9c.json`),
+  etapas `smoke/pilot/e2e/full/repeat`, livro-razão persistente da autorização, arquivo de
+  parada, interrupção em falha crítica e recusa se a Meta estiver habilitada. Ver
+  [`HOMOLOGACAO_IA_FASE9.md`](HOMOLOGACAO_IA_FASE9.md).
+
+## 7b. Fase 9C-B — preparação final (sem execução)
+
+- Autorização **schema 3**: preços confirmados (divergência interrompe), Meta declarada
+  desligada, controles de faturamento e aceitação do risco residual; livro-razão **cumulativo**
+  desde a criação (etapas e autorizações sucessivas não reiniciam contadores).
+- Métricas operacionais em toda avaliação: taxa de encaminhamento humano, causa de cada
+  encaminhamento (regra explícita, regra de saúde, sugestão validada do modelo, falha,
+  operador), encaminhamentos perdidos e desnecessários.
+- Relatório: [`STATUS_FASE_9C_B.md`](STATUS_FASE_9C_B.md).
+
 ## 8. Riscos conhecidos
 
 - O backend restringe o modelo a classificar. Serviço, contexto, agendamento e intenção

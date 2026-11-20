@@ -379,6 +379,25 @@ $PY -m rocha_reis_agent.evaluation --provider gemini --model gemini-3.1-flash-li
 Relatório em [`STATUS_FASE_9.md`](docs/STATUS_FASE_9.md) (parte B); homologação real
 (não autorizada) em [`HOMOLOGACAO_IA_FASE9.md`](docs/HOMOLOGACAO_IA_FASE9.md).
 
+## Homologação real do Gemini — Fase 9C-A (preparada; 9C-B bloqueada)
+
+Experimento pré-registrado por hash ([`evals/experiment_9c.json`](evals/experiment_9c.json)),
+129 cenários (9 prioritários novos), etapas `smoke/pilot/e2e/full/repeat`, livro-razão de
+consumo persistente, arquivo de parada, fluxo de ponta a ponta do canal com
+`FakeWhatsAppTransport`, orçamento calculado a partir dos pedidos reais e patch de ativação
+revisável (não aplicado). Tudo offline; **nenhuma chamada ao Gemini**.
+
+```sh
+PY=/tmp/rocha-reis-agent-venv/bin/python
+$PY -m rocha_reis_agent.evaluation --provider gemini-simulated --prompt v4 --stage pilot
+$PY -m rocha_reis_agent.evaluation --provider gemini-simulated --prompt v4 --stage e2e
+$PY -m rocha_reis_agent.evaluation plan                       # orçamento proposto (estimativa)
+```
+
+Relatório em [`STATUS_FASE_9C.md`](docs/STATUS_FASE_9C.md). **Fase 9C-B: preparada, não autorizada,
+não executada** — guarda schema 3, execução em duas etapas e métricas de encaminhamento por
+causa; ver [`STATUS_FASE_9C_B.md`](docs/STATUS_FASE_9C_B.md).
+
 ## Conhecimento e limites determinísticos
 
 O formato atual está em [salon.versioned.synthetic.json](fixtures/salon.versioned.synthetic.json):

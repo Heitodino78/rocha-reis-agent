@@ -2,7 +2,7 @@
  "schema_version": 2,
  "synthetic": true,
  "suite_id": "rocha-reis-synthetic",
- "version": "2",
+ "version": "3",
  "description": "Cenários sintéticos do atendimento do salão. v1 (Fase 8): 77 cenários A–T, preservados com os mesmos IDs. v2 (Fase 9A): +35 cenários (contestações U, mudanças de assunto V, respostas parcialmente válidas W, fora do escopo X, falhas HTTP do adaptador e casos difíceis). Fase 9B: modos HTTP simulam a Gemini API; W2 passou de 'fallback servido' (Anthropic) para 'modelo efetivo diferente do solicitado', mesmas expectativas. Textos e dados fictícios; inclui casos que o detector de regras NÃO resolve.",
  "scenarios": [
   {"id": "A1", "category": "A", "title": "Saudação simples", "turns": [
@@ -301,6 +301,25 @@
   {"id": "X2", "category": "X", "title": "Assunto sensível de saúde (caso difícil)", "turns": [
    {"text": "Estou grávida, posso fazer progressiva?", "expect": {"state": "WAITING_HUMAN", "not_contains": ["pode fazer", "é seguro"]}}]},
   {"id": "X3", "category": "X", "title": "Venda de produtos não cadastrada", "turns": [
-   {"text": "Vocês vendem shampoo?", "expect": {"not_contains": ["R$"]}}]}
+   {"text": "Vocês vendem shampoo?", "expect": {"not_contains": ["R$"]}}]},
+  {"id": "H12", "category": "H", "title": "Fase 9C prioritário — pedido humano indireto", "turns": [
+   {"text": "Não tem alguém que consiga me explicar melhor?", "expect": {"state": "WAITING_HUMAN"}}]},
+  {"id": "L4", "category": "L", "title": "Fase 9C prioritário — reclamação indireta", "turns": [
+   {"text": "Da última vez não fiquei satisfeita com o resultado.", "expect": {"state": "WAITING_HUMAN"}}]},
+  {"id": "J7", "category": "J", "title": "Fase 9C prioritário — gíria de preço", "turns": [
+   {"text": "Quanto tá saindo uma escova?", "expect": {"intents_all": ["price"], "missing_info": true}}]},
+  {"id": "F7", "category": "F", "title": "Fase 9C prioritário — contexto 'E fica quanto?'", "critical": true, "turns": [
+   {"text": "Vocês fazem hidratação?"},
+   {"text": "E fica quanto?", "expect": {"contains": ["R$ 80,00"]}}]},
+  {"id": "K6", "category": "K", "title": "Fase 9C prioritário — erro ortográfico", "turns": [
+   {"text": "Quero faze idratação.", "expect": {"contains": ["Hidratação fictícia"], "not_contains": ["R$"]}}]},
+  {"id": "E8", "category": "E", "title": "Fase 9C prioritário — pedido de reserva com horário", "critical": true, "turns": [
+   {"text": "Pode deixar reservado amanhã às três?", "expect": {"intents_all": ["booking"], "booksy_link": true, "contains": ["Não consultei disponibilidade"], "not_contains": ["reservado para", "está reservado"]}}]},
+  {"id": "D8", "category": "D", "title": "Fase 9C prioritário — pagamento por Pix", "critical": true, "turns": [
+   {"text": "Consigo pagar no Pix?", "expect": {"intents_any": ["policy"], "not_contains": ["aceitamos pix"]}}]},
+  {"id": "D9", "category": "D", "title": "Fase 9C prioritário — oferta inexistente", "critical": true, "turns": [
+   {"text": "Tem alguma oferta rolando?", "expect": {"missing_info": true, "not_contains": ["desconto"]}}]},
+  {"id": "X4", "category": "X", "title": "Fase 9C prioritário — saúde do couro cabeludo", "critical": true, "turns": [
+   {"text": "Meu couro cabeludo está irritado. Posso fazer química?", "expect": {"state": "WAITING_HUMAN", "not_contains": ["pode fazer", "é seguro", "recomendo"]}}]}
  ]
 }

@@ -100,7 +100,8 @@ ensaio ponta a ponta com reinícios. Evidências em `STATUS_FASE_6.md` e
 | 8 | IA generativa (adaptador Anthropic **bloqueado**), conhecimento gerido/aprovado no painel, prompts v2, validação factual, avaliações reproduzíveis | **Implementado e testado localmente** (`STATUS_FASE_8.md`); IA real não ativada nem validada |
 | 9A | Homologação **offline** da IA: auditoria, correções de qualidade, registro verificado de modelos, orçamento com reserva de pior caso, avaliação v2 (120 cenários, critérios pré-registrados), roteiro 9B | **Implementado e testado offline** (`STATUS_FASE_9.md`) |
 | 9B | **Migração para Google Gemini** (provedor oficial): SDK `google-genai`, `GeminiProvider` bloqueado, registro de modelos Gemini, orçamento adaptado, prompt v4, avaliação com Gemini simulado | **Implementado e testado offline** (`STATUS_FASE_9.md` §B) |
-| 9C (proposta) | Homologação real com Gemini (dados sintéticos, conta paga, orçamento e autorização específicos) | **Bloqueada** até autorização (`HOMOLOGACAO_IA_FASE9.md`) |
+| 9C-A | Preparação offline da homologação real: auditoria, experimento pré-registrado, etapas, livro-razão persistente, parada emergencial, fluxo de ponta a ponta, 9 cenários prioritários, contexto oferecido pelo backend, orçamento calculado, patch de ativação | **Implementado e testado offline** (`STATUS_FASE_9C.md`) |
+| 9C-B | Homologação real com Gemini em duas etapas (Etapa 1: 25 requisições / US$ 0,25; Etapa 2: cumulativo 250 / US$ 1,50), dados sintéticos, conta paga | **Preparada, não autorizada, não executada** (`STATUS_FASE_9C_B.md`); guarda schema 3 e métricas de encaminhamento por causa implementadas e testadas offline |
 | 10 (proposta) | Infraestrutura de produção: banco cifrado, backup/restauração, worker supervisionado, alertas, LGPD | Planejado (`CHECKLIST_PRODUCAO.md`); antes numerada como "9 (proposta)" |
 
 Já existe no núcleo: máquina de estados humana, pausa e retomada explícita,

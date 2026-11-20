@@ -5,7 +5,7 @@ from dataclasses import replace
 
 from rocha_reis_agent.ai.contracts import AIRequest, AuthorizedFact, UntrustedText
 from rocha_reis_agent.ai.prompts import PromptVersion
-from rocha_reis_agent.domain.contracts import Detection, InboundMessage
+from rocha_reis_agent.domain.contracts import Detection, InboundMessage, Intent
 from rocha_reis_agent.domain.conversations import Conversation
 from rocha_reis_agent.intents import contains, normalized
 from rocha_reis_agent.knowledge_catalog import Approval, FactRevision, KnowledgeScope, ServiceFact
@@ -18,11 +18,23 @@ def build_request(
     inherited_from: str | None = None,
 ) -> AIRequest:
     known = {s.id for s in knowledge.base.services}
-    context = tuple(key for key in conversation.service_context if key in known)
-    if not control.use_context or conversation.context_age >= context_turns:
-        context = ()
+    candidate = tuple(key for key in conversation.service_context if key in known)
+    fresh_unique = len(candidate) == 1 and conversation.context_age < context_turns
+    # Fase 9C: além do seguimento reconhecido pelas regras, o backend OFERECE ao modelo o
+    # serviço em contexto quando ele é único e recente e a mensagem não nomeia outro serviço
+    # ("E fica quanto?"). O modelo só pode dizer que a mensagem se refere a ele; quem fixa o
+    # serviço é o backend (AgentService._context), nunca o modelo.
+    # Minimização: só quando as regras NÃO reconheceram outro assunto (intenção desconhecida ou
+    # preço sem serviço). Perguntas de endereço, horário, agendamento etc. não recebem o contexto.
+    offered = (fresh_unique and not control.use_context and not control.service_ids
+               and not control.catalog_requested and set(control.intents) <= {Intent.UNKNOWN, Intent.PRICE})
+    context = candidate if (control.use_context and conversation.context_age < context_turns) or offered else ()
     effective = replace(control, service_ids=context) if control.use_context and len(context) == 1 else control
     selected = {ref.key for ref in knowledge.references_for(effective)}
+    if offered:
+        # Somente os fatos aprovados do serviço em contexto (definição e preço), nada além.
+        selected.update(ref.key for ref in knowledge.references_for(
+            replace(control, intents=(Intent.PRICE,), service_ids=context, use_context=False)))
     # Definições das entidades são necessárias para interpretar nomes/aliases,
     # inclusive em agendamento; preços e outros fatos seguem a intenção consultada.
     selected.update(

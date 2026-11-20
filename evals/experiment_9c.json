@@ -1,0 +1,92 @@
+{
+ "experiment_id": "rocha-reis-9c-gemini-v1",
+ "registered_at": "2026-11-20T00:00:00-03:00",
+ "status": "PRÉ-REGISTRADO — nenhuma execução real autorizada até a assinatura do responsável",
+ "change_policy": "Qualquer mudança em cenários, catálogo, critérios ou prompt invalida os hashes: a execução real é recusada até um NOVO experimento (experiment_id novo), com justificativa escrita.",
+ "pinned_files": {
+  "evals/scenarios.synthetic.json": "91adcff18ca1877c",
+  "evals/catalog.synthetic.json": "5e8de26b2fe63c37",
+  "evals/criteria.json": "e8ba214decc38c0f",
+  "prompts/v4.json": "249511fccf46c6b8"
+ },
+ "suite": {
+  "suite_id": "rocha-reis-synthetic",
+  "version": "3",
+  "scenarios": 129,
+  "data": "synthetic_only"
+ },
+ "prompt_version": "v4",
+ "output_contract": "ai-response-v2",
+ "criteria_id": "rocha-reis-acceptance-v1",
+ "models_in_order": [
+  {
+   "model": "gemini-3.1-flash-lite",
+   "thinking_level": "minimal",
+   "role": "candidato inicial (mais econômico verificado)"
+  },
+  {
+   "model": "gemini-3.5-flash-lite",
+   "thinking_level": "minimal",
+   "role": "comparação somente se o primeiro reprovar ou por justificativa econômica + autorização"
+  },
+  {
+   "model": "gemini-3.8-flash",
+   "thinking_level": "low",
+   "role": "referência de qualidade somente com autorização específica"
+  }
+ ],
+ "stages": {
+  "smoke": {
+   "scenarios": [
+    "A1"
+   ],
+   "purpose": "1 chamada: autenticação, JSON estruturado, consumo, tratamento de resposta"
+  },
+  "pilot": {
+   "scenarios": [
+    "H12",
+    "L4",
+    "J7",
+    "F7",
+    "K6",
+    "E8",
+    "D8",
+    "D9",
+    "X4",
+    "C1",
+    "M1",
+    "N1",
+    "H1",
+    "L1",
+    "P1"
+   ],
+   "purpose": "15 cenários diversos: prioritários, adversariais, reclamações, humano, isolamento"
+  },
+  "e2e": {
+   "scenarios": "fluxo fixo do canal (evaluation/e2e.py)",
+   "purpose": "webhook → inbox → núcleo → Gemini → outbox → FakeWhatsAppTransport"
+  },
+  "full": {
+   "scenarios": "todos (129)",
+   "purpose": "avaliação completa contra os critérios"
+  },
+  "repeat": {
+   "scenarios": "subconjunto relevante escolhido ANTES (prioritários)",
+   "purpose": "consistência, até 3 repetições, dentro do orçamento"
+  }
+ },
+ "max_output_tokens": 2048,
+ "max_retries": 1,
+ "timeout_seconds": 5.0,
+ "failure_policy": [
+  "Qualquer violação de segurança OU cenário crítico reprovado interrompe a execução (run.aborted).",
+  "Orçamento ou requisições esgotados: chamadas seguintes recusadas antes de sair da máquina.",
+  "Arquivo de interrupção (stop_file) presente: nenhuma chamada nova.",
+  "Smoke reprovado: não avançar para o piloto; piloto com violação: não avançar para a avaliação completa.",
+  "Um modelo só é declarado aprovado após a avaliação completa (nunca por smoke ou piloto)."
+ ],
+ "stop_procedure": "touch <stop_file> (ou Ctrl+C); revogar a chave no Google AI Studio/Cloud; registrar o motivo em docs/STATUS_FASE_9C.md.",
+ "proposed_limits_not_approved": {
+  "see": "docs/HOMOLOGACAO_IA_FASE9.md §6 (orçamento proposto; aprovação só por autorização assinada)"
+ }
+}

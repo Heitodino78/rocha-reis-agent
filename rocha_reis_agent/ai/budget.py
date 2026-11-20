@@ -8,6 +8,7 @@ contada como zero. Todos os valores são ESTIMATIVAS pela tabela `ai/models.json
 """
 
 from datetime import timedelta
+from pathlib import Path
 from threading import Lock
 
 from rocha_reis_agent.ai.contracts import AIProviderError
@@ -30,15 +31,24 @@ class RunBudget:
     """Contadores de UMA execução (processo ou avaliação), compartilháveis entre instâncias."""
 
     def __init__(self, max_requests: int | None = None, max_cost_usd: float | None = None,
-                 per_model_max_requests: dict[str, int] | None = None) -> None:
+                 per_model_max_requests: dict[str, int] | None = None, *,
+                 halt_file: "Path | None" = None, spent_micros: int = 0, spent_requests: int = 0,
+                 spent_by_model: dict[str, int] | None = None) -> None:
         self.max_requests = max_requests
         self.max_cost_micros = None if max_cost_usd is None else max_cost_usd * 1e6
         self.per_model_max_requests = dict(per_model_max_requests or {})
+        # Fase 9C: arquivo de interrupção emergencial; existindo, nenhuma chamada nova sai.
+        self.halt_file = halt_file
         self.lock = Lock()
-        self.requests = 0
-        self.requests_by_model: dict[str, int] = {}
-        self.cost_micros = 0
+        # Contadores podem começar com o consumo JÁ registrado no período autorizado
+        # (livro-razão persistente): o teto vale para todas as execuções, não só esta.
+        self.requests = spent_requests
+        self.requests_by_model: dict[str, int] = dict(spent_by_model or {})
+        self.cost_micros = spent_micros
         self.reserved_micros = 0
+
+    def halted(self) -> bool:
+        return self.halt_file is not None and self.halt_file.exists()
 
 
 def micros(tokens: int, rate_per_mtok: float) -> float:
@@ -59,6 +69,8 @@ class BudgetGuard:
             raise BudgetExceeded("Tarifa do modelo desconhecida: orçamento não verificável.")
         window = self.ledger.window(utc_now() - timedelta(days=1))
         run = self.run
+        if run.halted():
+            raise BudgetExceeded("Interrupção emergencial ativa: nenhuma chamada nova.")
         with run.lock:
             if window["requests"] >= self.max_requests_per_day:
                 raise BudgetExceeded("Limite diário de requisições atingido.")

@@ -90,6 +90,14 @@ Antes de importar conversas, telefones ou cadastro de clientes: obter autorizaç
 - [ ] Retenção de prompts/respostas pelo Google no nível pago (os termos dizem "limited period", sem dias) confirmada no Data Processing Addendum; transferência internacional ("any country") avaliada pelo jurídico.
 - [ ] Responsável legal (18+) aceita os termos da Gemini API e contrata o projeto; restrição de API configurada na chave.
 - [ ] Verificar `gemini-2.5-flash-lite` (possivelmente mais barato; tarifa não lida em texto verbatim) e os rate limits por modelo no AI Studio.
+
+## Homologação real com Gemini (Fase 9C-B)
+
+- [ ] Autorização assinada (**schema 3**, Etapa 1: 25 requisições / US$ 0,25; ver `STATUS_FASE_9C_B.md` §16) com conta, projeto **pago**, preços confirmados, declaração de Meta desligada, aceitação do risco residual de cobrança, `experiment_id` `rocha-reis-9c-gemini-v1`, etapas, modelo(s), teto (proposta: US$ 1,50 / 250 requisições só para `gemini-3.1-flash-lite`), período ≤ 7 dias, livro-razão e arquivo de parada fora do repositório.
+- [ ] Alerta/orçamento de faturamento configurado no projeto Google Cloud; chave exclusiva com restrição de API, revogada ao final.
+- [ ] Revisão e aplicação do patch de ativação em branch própria (`docs/homolog/ativacao_gemini_9c.patch`) e compromisso de restaurar a trava.
+- [ ] Decisão sobre a capacidade da equipe para encaminhamentos humanos (taxa aceitável de transferências) — complementa os critérios Q6/Q7; proposta de critério de encaminhamentos desnecessários (≤ 5%) exige nova versão do experimento ANTES da execução.
+- [ ] Verificar no console se a Gemini API é elegível a *spend cap budget*; caso não, aceitar o risco residual (orçamento com alertas não limita gastos).
 - [ ] Latência aceitável para o salão (o critério O1 pré-registrado usa p95 ≤ 8 s; `AI_TIMEOUT_SECONDS` padrão de 2 s é curto para modelos com raciocínio).
 - [ ] Quantas mensagens tem um atendimento típico (para converter custo por mensagem em custo por atendimento).
 - [ ] Como tratar temas sensíveis (saúde, gravidez, alergias): hoje o detector não os reconhece (cenário X2).

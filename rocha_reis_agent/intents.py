@@ -21,6 +21,16 @@ _DOMAIN_LEXICON = frozenset((
     "promocao", "promocoes", "desconto", "descontos", "gerente",
 ))
 _MIN_CORRECTION_LENGTH = 7
+# Vocabulário fechado de SAÚDE (regra de segurança): sempre encaminhado para pessoa.
+HEALTH_TERMS = (
+    r"\b(gravida|gestante|gravidez|amamentando|amamentacao|alergia|alergica|alergico|"
+    r"medicamento|medicamentos|remedio|remedios|quimioterapia|dermatite|queimadura|"
+    r"irritad[oa]|irritacao|coceira|ferida|feridas|descamando|descamacao|sangrando)\b"
+)
+
+
+def is_health_topic(text: str) -> bool:
+    return re.search(HEALTH_TERMS, normalized(text)) is not None
 _ELLIPSIS = re.compile(r"e (?:(?:o|a|os|as|no|na|do|da|pro|pra|para|pela|pelo) )?(?P<rest>.+?)(?: entao)?")
 
 
@@ -80,7 +90,7 @@ class RuleIntentDetector:
         spelling_corrected = bool(set(service_ids) - set(exact_services))
         patterns = {
             Intent.GREETING: r"^(oi|ola|bom dia|boa tarde|boa noite|oie)\b",
-            Intent.PRICE: r"\b(precos?|valor(es)?|custa|custam|custo)\b|\bquanto (e|fica|sai)\b",
+            Intent.PRICE: r"\b(precos?|valor(es)?|custa|custam|custo)\b|\bquanto (e|fica|sai)\b|\b(fica|sai) quanto\b",
             Intent.BOOKING: (
                 # Inclui passado em 1ª pessoa ("já reservei"): o agente nunca confirma; orienta ao Booksy.
                 r"\b(agendar|agendamento|agendei|marcar|marcou|marcado|marquei|reservar|reserva|reservado|reservei|"
@@ -107,12 +117,10 @@ class RuleIntentDetector:
                 # Reclamação explícita escala para humano (ARQUITETURA §6).
                 r"\b(insatisfeit[oa]s?|pessim[oa]s?|horrivel|absurdo)\b|"
                 r"\b(falar|conversar) com alguem\b|\bchama\w* alguem\b|"
-                # Fase 9B — SEGURANÇA, não compreensão: saúde/gravidez/alergia vão para a equipe
-                # (o assistente não orienta sobre saúde; termos do Gemini vedam conselho médico).
-                r"\b(gravida|gestante|gravidez|amamentando|amamentacao|alergia|alergica|alergico|"
-                r"medicamento|medicamentos|remedio|remedios|quimioterapia|dermatite|queimadura)\b|"
                 r"\bnao (quero|vou|gosto de) (falar|conversar) com (um |o |uma |a )?(robo|bot|maquina)\b"
-            ),
+            # Fase 9B — SEGURANÇA, não compreensão: saúde/gravidez/alergia vão para a equipe
+            # (o assistente não orienta sobre saúde; termos do Gemini vedam conselho médico).
+            ) + "|" + HEALTH_TERMS,
         }
         for intent, pattern in patterns.items():
             if re.search(pattern, value):
@@ -137,7 +145,7 @@ class RuleIntentDetector:
         if faq_index is not None:
             intents.append(Intent.FAQ)
         follow_up = re.fullmatch(
-            r"(?:e )?(?:quanto (?:custa|e|fica|sai)|qual (?:o )?(?:preco|valor)|"
+            r"(?:e )?(?:quanto (?:custa|e|fica|sai)|qual (?:o )?(?:preco|valor)|(?:fica|sai|custa) quanto|"
             r"(?:o )?(?:preco|valor))(?: (?:dele|dela|disso|desse servico))?", value
         ) is not None
         catalog = re.fullmatch(

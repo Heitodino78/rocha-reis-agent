@@ -26,7 +26,9 @@ from rocha_reis_agent.knowledge_projection import authorize_knowledge
 # indireta, assunto de saúde): exigem compreensão que regras não oferecem; ficam para a 9B.
 # Fase 9B: X2 (saúde) passou a escalar por regra de SEGURANÇA (vocabulário fechado de saúde),
 # não por compreensão; H9, J6 e L3 continuam dependendo de um modelo real.
-KNOWN_RULE_DETECTOR_GAPS = {"H9", "J6", "L3"}
+# Fase 9C: os cenários prioritários H12 (humano indireto), L4 (reclamação indireta) e J7 (gíria
+# de preço) são da MESMA classe e também dependem do modelo real; F7, K6, E8, D8, D9 e X4 passam.
+KNOWN_RULE_DETECTOR_GAPS = {"H9", "J6", "L3", "H12", "L4", "J7"}
 
 
 @pytest.fixture(scope="module")

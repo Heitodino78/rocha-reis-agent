@@ -379,3 +379,15 @@ recuperação determinística (ADR-075), o conhecimento aprovado (ADR-076), o re
 | ADR-099 | Prompt `v4` (Gemini) registrado e **inativo**: não repete o esquema no prompt (orientação do SDK), prioriza os casos difíceis | v1 continua ativo |
 | ADR-100 | Avaliação: `gemini-simulated` (adaptador real sobre REST simulado) e `gemini` real atrás da trava + autorização com conta/projeto **pagos**; W2 remapeado de "fallback" para "modelo efetivo inesperado" (mesmo ID e expectativas) | 120 cenários e critérios inalterados |
 
+
+## Preparação da homologação real — Fase 9C-A
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-101 | Contexto **oferecido** pelo backend ao modelo: só com um serviço recente único, mensagem sem outro serviço e regras sem outro assunto (desconhecida ou preço sem serviço); o modelo só confirma a referência, o backend fixa o serviço | `test_model_can_resolve_a_followup…`, `test_context_cannot_be_invented…`, `test_context_offer_is_minimized` |
+| ADR-102 | Experimento pré-registrado (`evals/experiment_9c.json`) fixa cenários, catálogo, critérios e prompt por hash; execução real recusada se algo mudar | `test_experiment_is_pinned_by_hash_and_prompt` |
+| ADR-103 | Livro-razão de consumo **persistente** por autorização (fora do repositório): o teto vale para todas as execuções do período; `RunBudget` semeado com o consumo anterior | `test_persistent_ledger_caps_all_runs_of_the_authorization` |
+| ADR-104 | Interrupção emergencial por arquivo (`stop_file`) e interrupção automática em violação de segurança ou cenário crítico reprovado | `test_stop_file_blocks…`, `test_critical_failure_aborts_the_real_run` |
+| ADR-105 | Avaliação de IA real recusada se qualquer trava da Meta estiver aberta (homologação não alcança clientes); etapa e2e usa o canal real com `FakeWhatsAppTransport` | `test_gemini_run_refused_if_any_meta_lock_is_open`, `test_end_to_end_channel_flow` |
+| ADR-106 | Ativação futura como **patch revisável** (`docs/homolog/ativacao_gemini_9c.patch`) em vez de branch com commit (commits não autorizados nesta fase); patch só altera a trava | `test_activation_patch_is_minimal_reversible_and_not_applied` |
+

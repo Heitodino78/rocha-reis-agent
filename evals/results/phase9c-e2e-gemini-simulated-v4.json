@@ -1,0 +1,86 @@
+{
+ "steps": [
+  {
+   "step": 1,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 2,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 3,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 4,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 5,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 6,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 7,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 8,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 9,
+   "action": "assume",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 10,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 11,
+   "action": "resolve",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 12,
+   "action": "resume",
+   "passed": true,
+   "failures": []
+  },
+  {
+   "step": 13,
+   "action": "message",
+   "passed": true,
+   "failures": []
+  }
+ ],
+ "passed": true,
+ "deliveries": 7,
+ "outbox_not_final": 0,
+ "meta_transport": "fake (FakeWhatsAppTransport)"
+}

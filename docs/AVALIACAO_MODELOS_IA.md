@@ -6,6 +6,19 @@
 > ([`HOMOLOGACAO_IA_FASE9.md`](HOMOLOGACAO_IA_FASE9.md)). A avaliação Anthropic da Fase 9A
 > está no apêndice como histórico.
 
+> **Reverificação (Fase 9C-A, 20/11/2026):** páginas de modelos, preços e termos relidas no
+> mesmo dia. Os três modelos registrados continuam **estáveis**, sem data de descontinuação, com
+> as mesmas tarifas Standard (3.1 Flash-Lite também tem tarifa de **áudio**, não usada pelo
+> projeto). Termos: mesma vigência (23/03/2026); mudanças de preço valem 30 dias após publicadas.
+> Limites de tokens de 3.5 Flash-Lite e 3.8 Flash não foram relidos nesta passagem (já
+> verificados na 9B). Orçamento da homologação a partir dos pedidos REAIS do adaptador:
+> [`HOMOLOGACAO_IA_FASE9.md` §6](HOMOLOGACAO_IA_FASE9.md#6-orçamento-proposto-não-aprovado).
+
+> **Fase 9C-B (20/11/2026):** nenhuma chamada real (sem autorização). Faturamento verificado:
+> orçamento só com alertas não limita gastos; a Gemini API tem limite de US$ 10/10 min e
+> limite de nível de US$ 250 (Tier 1), mas nenhum limite de projeto configurável pelo
+> usuário está documentado. Ver [`HOMOLOGACAO_IA_FASE9.md` §8](HOMOLOGACAO_IA_FASE9.md#8-controles-de-faturamento-do-google-verificados-em-20112026).
+
 ## 1. Fontes consultadas (20/11/2026)
 
 `ai.google.dev/gemini-api/docs/*` redireciona (301) para `aistudio.google.com/docs/*`.

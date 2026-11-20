@@ -117,6 +117,13 @@ class AgentService:
                         ):
                             raise AIValidationError("Referência fora do contexto recuperado.")
                         detection = response_detection(response, knowledge)
+                        # Fase 9C: referência ao serviço OFERECIDO pelo backend (único e recente) é
+                        # aceita; o serviço continua vindo do contexto do backend, não do modelo.
+                        offered = (not control.use_context and not control.service_ids
+                                   and len(request.service_context) == 1)
+                        if offered and detection.use_context and detection.service_ids in ((), request.service_context):
+                            control = replace(control, use_context=True)
+                            detection = replace(detection, service_ids=())
                         # Entidades/contexto extraídos pelo backend não podem ser trocados pelo modelo.
                         if (
                             detection.service_ids != control.service_ids

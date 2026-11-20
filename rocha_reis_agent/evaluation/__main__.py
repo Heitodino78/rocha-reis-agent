@@ -2,6 +2,8 @@
 
     python -m rocha_reis_agent.evaluation --provider fake --prompt v1 [--output arquivo.json] [--save]
     python -m rocha_reis_agent.evaluation compare evals/results/A.json evals/results/B.json
+    python -m rocha_reis_agent.evaluation plan [--output plano.json]      # orçamento proposto (offline)
+    python -m rocha_reis_agent.evaluation --provider gemini-simulated --stage pilot|e2e|smoke|full|repeat
 
 Saída 0: nenhum cenário crítico falhou e nenhuma violação de segurança.
 Saída 1: violação crítica/segurança (o relatório indica cenário, turno e causa).
@@ -60,6 +62,17 @@ def compare(paths: list[Path]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["plan"]:
+        from rocha_reis_agent.evaluation.budget_plan import main_plan
+        output = Path(argv[2]) if argv[1:2] == ["--output"] and len(argv) > 2 else None
+        result = main_plan(output)
+        print("Orçamento PROPOSTO (estimativa; não é medição nem fatura). Requisições por etapa:",
+              result["stage_requests"])
+        for model, stages in result["by_model"].items():
+            for stage, v in stages.items():
+                print(f"  {model:24} {stage:7} req={v['requests']:4} esperado=US$ {v['usd_expected']:.4f} "
+                      f"pessimista=US$ {v['usd_pessimistic']:.4f} teto=US$ {v['usd_ceiling_all_retries_full_output']:.4f}")
+        return 0
     if argv[:1] == ["compare"]:
         if len(argv) < 3:
             print("Uso: compare RELATORIO_A.json RELATORIO_B.json [...]", file=sys.stderr)
@@ -75,16 +88,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, help="grava o relatório JSON completo neste caminho")
     parser.add_argument("--save", action="store_true", help="arquiva em evals/results/runs/ sem sobrescrever")
     parser.add_argument("--authorization", type=Path, help="Fase 9B: arquivo privado de autorização (0600)")
-    parser.add_argument("--smoke", action="store_true", help="Fase 9B: só o primeiro cenário (uma requisição)")
+    parser.add_argument("--smoke", action="store_true", help="atalho de --stage smoke (uma requisição)")
+    parser.add_argument("--stage", choices=("smoke", "pilot", "e2e", "full", "repeat"), default=None,
+                        help="etapa pré-registrada em evals/experiment_9c.json (padrão: full)")
     parser.add_argument("--thinking-level", choices=("minimal", "low", "medium", "high"), default=None,
                         help="Fase 9B: nível de raciocínio (padrão: o do modelo no registro)")
     parser.add_argument("--max-output-tokens", type=int, default=2048, help="Fase 9B: teto de saída (inclui thinking)")
     args = parser.parse_args(argv)
+    if args.stage == "e2e":
+        return _e2e(args)
     try:
         report = evaluate(load_scenarios(args.scenarios), provider=args.provider, prompt_version=args.prompt,
                           catalog_path=args.catalog, scenarios_path=args.scenarios, model=args.model,
                           criteria_path=args.criteria, authorization_path=args.authorization, smoke=args.smoke,
-                          thinking_level=args.thinking_level, max_output_tokens=args.max_output_tokens)
+                          thinking_level=args.thinking_level, max_output_tokens=args.max_output_tokens,
+                          stage=args.stage)
     except SimulationError as error:
         print(f"Erro: {error}", file=sys.stderr)
         return 2
@@ -123,6 +141,36 @@ def main(argv: list[str] | None = None) -> int:
             handle.write(payload)
         print(f"  relatório arquivado: {target.relative_to(RESULTS_DIR.parent.parent)}")
     return 1 if metrics["critical_scenarios_failed"] or metrics["safety_violations"] else 0
+
+
+def _e2e(args: argparse.Namespace) -> int:
+    """Fluxo de ponta a ponta do canal (FakeWhatsAppTransport; Meta nunca usada)."""
+    from rocha_reis_agent.evaluation.e2e import run_e2e
+    from rocha_reis_agent.evaluation.providers import simulated_gemini
+    from rocha_reis_agent.evaluation.runner import _real_factory
+    try:
+        if args.provider == "gemini":
+            build = _real_factory(args.authorization, args.model, 1, None, args.thinking_level,
+                                  args.max_output_tokens, args.prompt, "e2e")
+            factory = lambda repo: build(repo)[0]  # noqa: E731
+        elif args.provider == "gemini-simulated":
+            factory = lambda repo: simulated_gemini(repo, model=args.model)[0]  # noqa: E731
+        elif args.provider == "fake":
+            factory = None
+        else:
+            print("Erro: etapa e2e aceita fake, gemini-simulated ou gemini.", file=sys.stderr)
+            return 2
+        report = run_e2e(factory, catalog_path=args.catalog, prompt_version=args.prompt)
+    except SimulationError as error:
+        print(f"Erro: {error}", file=sys.stderr)
+        return 2
+    for step in report["steps"]:
+        print(f"  passo {step['step']:2} {step['action']:8} {'OK' if step['passed'] else 'FALHA ' + '; '.join(step['failures'])}")
+    print(f"Ponta a ponta: {'APROVADO' if report['passed'] else 'REPROVADO'} · entregas={report['deliveries']} · "
+          f"transporte={report['meta_transport']}")
+    if args.output:
+        args.output.write_text(json.dumps(report, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return 0 if report["passed"] else 1
 
 
 if __name__ == "__main__":

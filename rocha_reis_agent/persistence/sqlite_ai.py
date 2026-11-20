@@ -35,8 +35,8 @@ class SQLiteUsageLedger:
                 "FROM ai_usage WHERE at>=?", (since.isoformat(),)).fetchone()
         return {"requests": row[0], "estimated_cost_micros": row[1], "unpriced": row[2] or 0}
 
-    def summary(self, *, days: int = 1) -> dict[str, Any]:
-        since = utc_now() - timedelta(days=days)
+    def summary(self, *, days: int = 1, since: datetime | None = None) -> dict[str, Any]:
+        since = since or utc_now() - timedelta(days=days)
         with self.repository.read() as connection:
             rows = connection.execute(
                 "SELECT provider, model, requested_model, prompt_version, outcome, count(*) AS n, "

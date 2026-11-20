@@ -1,21 +1,42 @@
 {
-  "_comentario": "EXEMPLO FICTÍCIO (Fase 9B, Google Gemini). Copiar para FORA do repositório, preencher, remover esta chave e aplicar chmod 600. Não é uma autorização.",
-  "schema_version": 1,
-  "authorized_by": "NOME DO RESPONSÁVEL (salão + agência), maior de 18 anos",
+  "_comentario": "EXEMPLO FICTÍCIO (Fase 9C-B, Etapa 1 — piloto inicial). Copiar para FORA do repositório, preencher, remover esta chave e aplicar chmod 600. NÃO é uma autorização: os limites são a PROPOSTA de docs/HOMOLOGACAO_IA_FASE9.md. Etapa 2 exige NOVA autorização com o MESMO usage_ledger (contadores cumulativos).",
+  "schema_version": 3,
+  "experiment_id": "rocha-reis-9c-gemini-v1",
+  "stages": [
+    "smoke",
+    "pilot",
+    "e2e"
+  ],
+  "usage_ledger": "/home/RESPONSAVEL/.local/share/rocha-reis-homolog-ai/uso-9c.ai-homolog.synthetic.sqlite3",
+  "stop_file": "/home/RESPONSAVEL/.local/share/rocha-reis-homolog-ai/PARAR",
+  "authorized_by": "NOME DO RESPONSÁVEL (salão + agência), maior de 18 anos, autorizado a aprovar gastos",
   "executor": "NOME DE QUEM EXECUTA",
   "google_account": "conta Google responsável (não colar credenciais)",
   "project_id": "projeto-cloud-com-faturamento",
   "billing": "paid_cloud_project",
   "provider": "gemini",
-  "models": ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash"],
-  "per_model_max_requests": {"gemini-3.1-flash-lite": 300, "gemini-3.5-flash-lite": 300, "gemini-3.8-flash": 300},
-  "max_cost_usd": 3.0,
-  "max_requests": 900,
-  "max_scenarios": 120,
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "per_model_max_requests": {
+    "gemini-3.1-flash-lite": 25
+  },
+  "confirmed_pricing": {
+    "gemini-3.1-flash-lite": {
+      "input": 0.25,
+      "output": 1.5
+    }
+  },
+  "max_cost_usd": 0.25,
+  "max_requests": 25,
+  "max_scenarios": 129,
   "valid_from": "2026-12-01T09:00:00-03:00",
-  "valid_until": "2026-12-03T18:00:00-03:00",
+  "valid_until": "2026-12-02T18:00:00-03:00",
   "data_type": "synthetic_only",
+  "meta_remains_disabled": true,
+  "google_billing_controls": "Orçamento de faturamento do projeto com alertas em 50/90/100% (alertas NÃO bloqueiam gastos); chave exclusiva restrita à Gemini API",
+  "residual_billing_risk_accepted": true,
   "storage": "Relatórios em evals/results/runs/ (sem texto de cliente real); chave no gerenciador de segredos",
-  "stop_procedure": "Ctrl+C no processo; revogar a chave no Google AI Studio/Cloud; registrar o motivo em STATUS_FASE_9",
+  "stop_procedure": "touch no arquivo PARAR ou Ctrl+C; revogar a chave no AI Studio/Cloud; registrar o motivo em docs/STATUS_FASE_9C_B.md",
   "confirmation": "AUTORIZO AVALIACAO SINTETICA COM GEMINI REAL DENTRO DOS LIMITES DESTE ARQUIVO"
 }

@@ -454,7 +454,7 @@ def test_report_has_reproducibility_metadata_denominators_and_criteria():
     report = evaluate(_subset({"C1", "D2", "H1", "H10", "Q3", "W2"}), provider="gemini-simulated",
                       prompt_version="v4", model="gemini-3.5-flash-lite")
     run, metrics = report["run"], report["metrics"]
-    assert run["suite_id"] == "rocha-reis-synthetic" and run["suite_version"] == "2"
+    assert run["suite_id"] == "rocha-reis-synthetic" and run["suite_version"] == "3"
     assert run["model"] == "gemini-3.5-flash-lite" and run["output_contract"] == "ai-response-v2"
     assert run["catalog_sha256_16"] is None or len(run["catalog_sha256_16"]) == 16
     assert {"python", "commit", "uncommitted_changes"} <= set(run["environment"])
@@ -491,13 +491,19 @@ def test_hostile_model_never_reaches_the_client_on_the_new_scenarios():    # ite
 # ------------------------------------------------ Fase 9B: preparada, bloqueada
 def _authorization(tmp_path, **changes):
     now = datetime.now(timezone.utc)
-    data = {"schema_version": 1, "authorized_by": "Responsável fictício", "executor": "Executor fictício",
+    data = {"schema_version": 3,
+            "confirmed_pricing": {MODEL: {"input": 0.25, "output": 1.50}}, "meta_remains_disabled": True,
+            "google_billing_controls": "orçamento de teste com alerta (fictício)", "residual_billing_risk_accepted": True, "authorized_by": "Responsável fictício", "executor": "Executor fictício",
+            "experiment_id": "rocha-reis-9c-gemini-v1", "stages": ["smoke", "pilot", "e2e", "full", "repeat"],
+            "usage_ledger": str(tmp_path / "ledger" / "uso.ai-homolog.synthetic.sqlite3"),
+            "stop_file": str(tmp_path / "PARAR"),
             "google_account": "conta fictícia", "project_id": "projeto-ficticio-teste", "billing": "paid_cloud_project",
             "provider": "gemini", "models": [MODEL], "max_cost_usd": 1.0, "max_requests": 3,
             "max_scenarios": 10, "valid_from": (now - timedelta(hours=1)).isoformat(),
             "valid_until": (now + timedelta(hours=1)).isoformat(), "data_type": "synthetic_only",
             "storage": "temporário de teste", "stop_procedure": "encerrar o processo", "confirmation": CONFIRMATION}
     data.update(changes)
+    (tmp_path / "ledger").mkdir(mode=0o700, exist_ok=True)
     path = tmp_path / "ai_evaluation_authorization.json"
     path.write_text(json.dumps(data))
     os.chmod(path, 0o600)
@@ -510,7 +516,8 @@ def test_real_run_is_refused_while_the_code_lock_is_closed(tmp_path):
 
 
 @pytest.mark.parametrize("changes,path_mode,message", [
-    ({}, 0o644, "0600"), ({"confirmation": "ok"}, 0o600, "inválido"), ({"models": ["gemini-3.8-flash"]}, 0o600, "Modelo"),
+    ({}, 0o644, "0600"), ({"confirmation": "ok"}, 0o600, "inválido"), ({"models": ["gemini-3.8-flash"], "confirmed_pricing": {"gemini-3.8-flash": {"input": 0.75, "output": 3.75}}},
+     0o600, "Modelo"),
     ({"max_scenarios": 1}, 0o600, "cenários"), ({"max_cost_usd": 500}, 0o600, "inválido"),
     ({"data_type": "real"}, 0o600, "inválido"), ({"billing": "free_tier"}, 0o600, "inválido"),
     ({"per_model_max_requests": {"gemini-3.8-flash": 1}}, 0o600, "inválido"),
@@ -532,19 +539,25 @@ def test_authorized_dry_run_respects_request_budget_and_smoke(tmp_path, monkeypa
 
     def handler(request):
         calls.append(1)
-        proposal = fake.generate(ai_request_from(request, "v3"), timeout_seconds=5).model_dump(mode="json")
+        proposal = fake.generate(ai_request_from(request, "v4"), timeout_seconds=5).model_dump(mode="json")
         return httpx2.Response(200, json=gemini_body(proposal))
     http = httpx2.Client(transport=httpx2.MockTransport(handler))
-    subset = _subset({"C1", "C3", "C6", "C7", "D3"})
-    smoke = evaluate(subset, provider="gemini", prompt_version="v3", model=MODEL,
-                     authorization_path=_authorization(tmp_path), smoke=True, http_client=http)
+    authorization = _authorization(tmp_path)
+    # Etapa smoke pré-registrada = cenário A1 do conjunto completo (1 requisição).
+    smoke = evaluate(load_scenarios(DEFAULT_SCENARIOS), provider="gemini", prompt_version="v4", model=MODEL,
+                     authorization_path=authorization, smoke=True, http_client=http)
     assert smoke["metrics"]["scenarios_total"] == 1 and len(calls) == 1 and smoke["metrics"]["safety_violations"] == 0
+    assert smoke["run"]["stage"] == "smoke" and "homolog-ai" in smoke["run"]["environment"]["kind"]
     calls.clear()
-    full = evaluate(subset, provider="gemini", prompt_version="v3", model=MODEL,
-                    authorization_path=_authorization(tmp_path), http_client=http)
-    assert len(calls) == 3                                   # max_requests=3: os demais recusados localmente
-    assert full["metrics"]["safety_violations"] == 0 and full["metrics"]["fallback_rate"] > 0
+    subset = _subset({"C6", "C7", "D3", "C1", "C3"})
+    full = evaluate(subset, provider="gemini", prompt_version="v4", model=MODEL,
+                    authorization_path=authorization, http_client=http)
+    # Fase 9C: livro-razão PERSISTENTE — a requisição do smoke conta no teto da mesma autorização
+    # (max_requests=3), então esta execução só pode fazer mais 2; as demais são recusadas localmente.
+    assert len(calls) == 2
+    assert full["metrics"]["safety_violations"] == 0 and full["run"]["aborted"]   # crítico reprovado interrompe
     assert full["run"]["provider"] == "gemini" and full["run"]["model"] == MODEL
+    assert full["metrics"]["provider_requests"] == 2      # relatório só com o consumo DESTA execução
 
 
 # ------------------------------------------------ Fase 9B: persistência do consumo Gemini

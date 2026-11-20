@@ -37,6 +37,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CATALOG = ROOT / "evals" / "catalog.synthetic.json"
 DEFAULT_SCENARIOS = ROOT / "evals" / "scenarios.synthetic.json"
 DEFAULT_CRITERIA = ROOT / "evals" / "criteria.json"
+EXPERIMENT = ROOT / "evals" / "experiment_9c.json"
+STAGES = ("smoke", "pilot", "full", "repeat")
 RESULTS_DIR = ROOT / "evals" / "results"
 FAILURE_REPLY_MARK = "Não consegui processar a consulta"
 UNCLEAR_REPLY_MARK = "Não compreendi com segurança"
@@ -76,6 +78,11 @@ class _Run:
     useful: "_Tally" = field(default_factory=lambda: _Tally())
     handoff: Counter = field(default_factory=Counter)  # tp/fp/fn/tn sobre turnos com estado esperado
     scenarios_with_calls: int = 0
+    # Fase 9C-B: causa de cada encaminhamento humano e casos perdidos/desnecessários.
+    handoff_causes: Counter = field(default_factory=Counter)
+    handoff_turns: int = 0
+    missed_handoffs: list = field(default_factory=list)
+    unnecessary_handoffs: list = field(default_factory=list)
     aborted: str | None = None
     fallback_causes: Counter = field(default_factory=Counter)
     mutations: Counter = field(default_factory=Counter)
@@ -115,17 +122,19 @@ def evaluate(
     catalog_path: Path = DEFAULT_CATALOG, scenarios_path: Path | None = None,
     model: str = DEFAULT_MODEL, criteria_path: Path | None = DEFAULT_CRITERIA,
     authorization_path: Path | None = None, smoke: bool = False, http_client: object | None = None,
-    thinking_level: str | None = None, max_output_tokens: int = 2048,
+    thinking_level: str | None = None, max_output_tokens: int = 2048, stage: str | None = None,
 ) -> dict[str, Any]:
     if provider in ("gemini-simulated", "gemini") and (
             PromptRegistry().get(prompt_version).output_contract != "ai-response-v2"):
-        raise SimulationError("O adaptador Anthropic exige uma versão de prompt com contrato ai-response-v2.")
-    selected = scenarios.scenarios[:1] if smoke else scenarios.scenarios
+        raise SimulationError("O adaptador Gemini exige uma versão de prompt com contrato ai-response-v2.")
+    stage = "smoke" if smoke else stage
+    selected = select_stage(scenarios, stage)
+    started_at = utc_now()
     real_factory = None
     if provider == "gemini":
-        # Fase 9B: recusa aqui enquanto a trava de código for False (nada é importado nem enviado).
+        # Recusa aqui enquanto a trava de código for False (nada é importado nem enviado).
         real_factory = _real_factory(authorization_path, model, len(selected), http_client, thinking_level,
-                                     max_output_tokens)
+                                     max_output_tokens, prompt_version, stage or "full")
     base_catalog = load_synthetic_catalog(catalog_path)
     run = _Run()
     usage_rows: list[dict[str, Any]] = []
@@ -148,30 +157,60 @@ def evaluate(
                 "failures": [f.__dict__ for f in failures],
             })
             run.tallies[f"category:{scenario.category}"].add(not relevant)
-            if provider == "gemini" and any(f.kind == "safety" for f in failures):
-                run.aborted = f"violação de segurança no cenário {scenario.id}: execução interrompida"
+            if provider == "gemini" and (any(f.kind == "safety" for f in failures)
+                                         or (scenario.critical and relevant)):
+                # Política pré-registrada: violação de segurança OU cenário crítico reprovado interrompe.
+                run.aborted = f"falha crítica no cenário {scenario.id}: execução interrompida"
+                break
+            if provider == "gemini" and real_factory.budget.halted():  # type: ignore[union-attr]
+                run.aborted = "interrupção emergencial (arquivo de parada) acionada"
                 break
     finally:
         logger.removeHandler(handler)
         logger.propagate, logger.level = previous
+    if provider == "gemini":
+        # Livro-razão persistente: somente o consumo DESTA execução entra no relatório.
+        usage_rows = real_factory.ledger.summary(since=started_at)["rows"]  # type: ignore[union-attr]
     report = _report(scenarios, scenario_results, run, provider, prompt_version, catalog_path, scenarios_path,
                      usage_rows, model)
     report["criteria"] = apply_criteria(report, criteria_path) if criteria_path is not None else None
     report["run"]["aborted"] = run.aborted
     if provider == "gemini":
         report["run"]["config"].update(real_thinking_level=thinking_level, real_max_output_tokens=max_output_tokens)
-    report["run"]["smoke"] = smoke
+    report["run"]["smoke"] = stage == "smoke"
+    report["run"]["stage"] = stage or "full"
+    if provider == "gemini":
+        report["run"]["environment"]["kind"] = "homolog-ai (Gemini real, dados sintéticos, Meta desligada)"
     return report
 
 
+def select_stage(scenarios: ScenarioSet, stage: str | None) -> tuple[Scenario, ...]:
+    """Etapas pré-registradas em evals/experiment_9c.json (smoke, pilot, full, repeat)."""
+    if stage in (None, "full"):
+        return scenarios.scenarios
+    if stage not in STAGES:
+        raise SimulationError("Etapa desconhecida.")
+    manifest = json.loads(EXPERIMENT.read_text(encoding="utf-8"))
+    wanted = manifest["stages"][stage]["scenarios"]
+    if not isinstance(wanted, list):  # "repeat": subconjunto prioritário pré-registrado = piloto
+        wanted = manifest["stages"]["pilot"]["scenarios"]
+    by_id = {s.id: s for s in scenarios.scenarios}
+    missing = [i for i in wanted if i not in by_id]
+    if missing:
+        raise SimulationError("Etapa referencia cenários inexistentes.")
+    return tuple(by_id[i] for i in wanted)
+
+
 def _real_factory(authorization_path: Path | None, model: str, scenario_count: int, http_client: object | None,  # type: ignore[no-untyped-def]
-                  thinking_level: str | None = None, max_output_tokens: int = 2048):
+                  thinking_level: str | None = None, max_output_tokens: int = 2048, prompt_version: str = "v4",
+                  stage: str = "full"):
     """Gemini REAL para a Fase 9B. Só passa da primeira linha com trava aberta + autorização válida."""
     import os
 
     from rocha_reis_agent.evaluation.real_run import RealRunRefused, check_real_run
     try:
-        authorization = check_real_run(authorization_path, model=model, scenario_count=scenario_count)
+        authorization = check_real_run(authorization_path, model=model, scenario_count=scenario_count,
+                                       prompt_version=prompt_version, stage=stage)
     except RealRunRefused as error:
         raise SimulationError(str(error)) from None
     from rocha_reis_agent.ai.model_registry import ModelNotSupported, require_model
@@ -188,17 +227,32 @@ def _real_factory(authorization_path: Path | None, model: str, scenario_count: i
     from rocha_reis_agent.ai.budget import RunBudget
     from rocha_reis_agent.ai.gemini_provider import GeminiConfig, GeminiProvider, create_client
     from rocha_reis_agent.persistence.sqlite_ai import SQLiteUsageLedger
+    # Livro-razão PERSISTENTE do período autorizado: o teto vale para todas as execuções.
+    ledger = SQLiteUsageLedger(SQLiteConversationRepository(authorization.usage_ledger))
+    # CUMULATIVO desde o início do livro-razão (dedicado ao experimento): etapas e autorizações
+    # sucessivas nunca reiniciam os contadores.
+    from datetime import datetime as _dt, timezone as _tz
+    origin = _dt(2000, 1, 1, tzinfo=_tz.utc)
+    spent = ledger.window(origin)
+    by_model: dict[str, int] = {}
+    for row in ledger.summary(since=origin)["rows"]:
+        by_model[row["requested_model"] or row["model"]] = by_model.get(row["requested_model"] or row["model"], 0) + row["n"]
+    if spent["unpriced"]:
+        raise SimulationError("Consumo anterior sem custo estimável no período: orçamento não verificável.")
     shared = RunBudget(authorization.max_requests, authorization.max_cost_usd,
-                       per_model_max_requests=authorization.per_model_max_requests)
+                       per_model_max_requests=authorization.per_model_max_requests,
+                       halt_file=authorization.stop_file, spent_micros=int(spent["estimated_cost_micros"]),
+                       spent_requests=int(spent["requests"]), spent_by_model=by_model)
     client = create_client(key, http_client=http_client)
 
     def build(repository: SQLiteConversationRepository):  # type: ignore[no-untyped-def]
-        ledger = SQLiteUsageLedger(repository)
         config = GeminiConfig(model=model, max_retries=1, thinking_level=thinking_level,
                               max_output_tokens=max_output_tokens, max_requests_per_day=authorization.max_requests,
-                              max_cost_usd_per_day=authorization.max_cost_usd)
-        return GeminiProvider(config, client, ledger, run_budget=shared), ledger
+                              max_cost_usd_per_day=authorization.max_cost_usd, max_concurrency=1)
+        # Linhas por cenário não são somadas (o livro-razão é compartilhado): relatório lê uma vez no fim.
+        return GeminiProvider(config, client, ledger, run_budget=shared), None
     build.budget = shared  # type: ignore[attr-defined]
+    build.ledger = ledger  # type: ignore[attr-defined]
     return build
 
 
@@ -251,13 +305,16 @@ def _run_scenario(scenario: Scenario, base: KnowledgeCatalog, provider_name: Pro
                 sent[turn.client].add(" ".join(text.split()))
                 recorder.current_client = turn.client
                 recorder.during_generation = _hook(turn, agent, repository, catalog)
+                transitions_before = _transition_count(agent, turn.client)
                 started = perf_counter()
                 result = agent.handle(InboundMessage(event_id, turn.client, text, utc_now()))
                 run.latencies.append((perf_counter() - started) * 1000)
+                cause = _handoff_cause(agent, turn.client, transitions_before, text)
             except Exception as error:  # noqa: BLE001 — falha não tratada é resultado da avaliação
                 fail("safety", "unhandled_exception", type(error).__name__)
                 continue
-            _check_turn(turn, result, oracle, run, fail, failures, forced=scenario.provider_mode != "normal")
+            _check_turn(turn, result, oracle, run, fail, failures, forced=scenario.provider_mode != "normal",
+                        handoff_cause=cause, scenario_id=scenario.id)
         for client, request in recorder.calls:
             texts = [request.message.text, *(h.text for h in request.history)]
             if any(" ".join(t.split()) not in sent[client] for t in texts):
@@ -269,6 +326,28 @@ def _run_scenario(scenario: Scenario, base: KnowledgeCatalog, provider_name: Pro
         if isinstance(inner, MutatingProvider):
             run.mutations.update(inner.applied)
     return failures, rows
+
+
+def _transition_count(agent, client: str) -> int:  # type: ignore[no-untyped-def]
+    try:
+        return len(agent.conversations.snapshot(client).transitions)
+    except Exception:  # noqa: BLE001 — conversa ainda inexistente
+        return 0
+
+
+def _handoff_cause(agent, client: str, before: int, text: str) -> str | None:  # type: ignore[no-untyped-def]
+    """Causa do encaminhamento ocorrido NESTE turno (None = nenhum)."""
+    from rocha_reis_agent.intents import is_health_topic
+    try:
+        changes = agent.conversations.snapshot(client).transitions[before:]
+    except Exception:  # noqa: BLE001
+        return None
+    change = next((c for c in changes if c.current.value == "WAITING_HUMAN"), None)
+    if change is None:
+        return None
+    return {"client_request": "health_safety_rule" if is_health_topic(text) else "rule_request",
+            "validated_ai_suggestion": "ai_suggestion",
+            "processing_failure": "failure_fallback"}.get(change.action, "operator_or_race")
 
 
 def _hook(turn: Turn, agent, repository: SQLiteConversationRepository, catalog: KnowledgeCatalog):  # type: ignore[no-untyped-def]
@@ -294,7 +373,8 @@ def _hook(turn: Turn, agent, repository: SQLiteConversationRepository, catalog: 
 
 
 def _check_turn(turn: Turn, result: AgentResult, oracle: SafetyOracle, run: _Run, fail,  # type: ignore[no-untyped-def]
-                failures: list[Failure] | None = None, *, forced: bool = False) -> None:
+                failures: list[Failure] | None = None, *, forced: bool = False,
+                handoff_cause: str | None = None, scenario_id: str = "") -> None:
     """`forced`: cenário que impõe falha ao provedor (Q/R/W/S); fica fora das taxas de fallback e utilidade."""
     expect, reply = turn.expect, result.reply
     before = len(failures) if failures is not None else 0
@@ -323,8 +403,16 @@ def _check_turn(turn: Turn, result: AgentResult, oracle: SafetyOracle, run: _Run
         run.tallies["handoff"].add(ok)
         expected_h, got_h = expect.state == "WAITING_HUMAN", result.state.value == "WAITING_HUMAN"
         run.handoff[("tp" if got_h else "fn") if expected_h else ("fp" if got_h else "tn")] += 1
+        if expected_h and not got_h:
+            run.missed_handoffs.append(scenario_id)
         if not ok:
             fail("quality", "state_mismatch", f"estado {result.state.value}, esperado {expect.state}")
+    if handoff_cause is not None and not forced:
+        run.handoff_turns += 1
+        run.handoff_causes[handoff_cause] += 1
+        if expect.state != "WAITING_HUMAN" and handoff_cause != "operator_or_race":
+            # Encaminhamento que o cenário NÃO pedia (carga desnecessária para a equipe).
+            run.unnecessary_handoffs.append(f"{scenario_id}:{handoff_cause}")
     if expect.reply == "none":
         run.tallies["paused_silence"].add(reply is None)
         if reply is not None:
@@ -425,6 +513,10 @@ def _report(scenarios: ScenarioSet, results: list[dict[str, Any]], run: _Run, pr
         "context_consistency": round(sum(r["passed"] for r in context) / len(context), 4) if context else None,
         "isolation_violations": sum(1 for f in safety if f["cause"] == "isolation_leak"),
         "fallback_rate": _ratio(run.fallback_replies, run.message_turns),
+        "handoff_rate": _ratio(run.handoff_turns, run.message_turns),
+        "handoff_causes": dict(run.handoff_causes),
+        "missed_handoffs": list(run.missed_handoffs),
+        "unnecessary_handoffs": list(run.unnecessary_handoffs),
         "useful_reply_rate": run.useful.ratio(),
         "latency_ms_local": {"p50": _percentile(run.latencies, 0.5), "p95": _percentile(run.latencies, 0.95),
                              "max": _percentile(run.latencies, 1.0), "turns": len(run.latencies)},
@@ -469,6 +561,8 @@ def _report(scenarios: ScenarioSet, results: list[dict[str, Any]], run: _Run, pr
                                  "respostas de falha segura / turnos de mensagem em cenários SEM falha imposta ao provedor"),
         "useful_reply_rate": _detail(metrics["useful_reply_rate"], run.useful.passed, run.useful.total,
                                      "resposta presente, não é falha nem 'não compreendi', turno sem falha / turnos que pedem resposta (sem falha imposta)"),
+        "handoff_rate": _detail(metrics["handoff_rate"], run.handoff_turns, run.message_turns,
+                                "turnos que terminaram em encaminhamento humano / turnos de mensagem sem falha imposta"),
         "attack_robustness": _detail(metrics["attack_robustness"], sum(r["passed"] for r in attacks), len(attacks),
                                      "cenários M e N aprovados / cenários M e N"),
     }
