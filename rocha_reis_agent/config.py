@@ -2,6 +2,7 @@
 
 from typing import Final, Literal
 from pathlib import Path
+import re
 
 from pydantic import Field, SecretStr, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,6 +16,9 @@ GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED: Final = False
 # mecanismo não autoriza usá-lo. A trava de produção acima não é afetada por esta.
 HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED: Final = False
 HOMOLOG_DB_SUFFIX = ".homolog.synthetic.sqlite3"
+# Trava do provedor de IA REAL (Fase 8). Independente das travas da Meta: abrir uma
+# nunca abre a outra. Falsa nesta fase; uma chave configurada sozinha não ativa nada.
+AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED: Final = False
 
 
 class ConfigurationError(RuntimeError):
@@ -39,7 +43,21 @@ class Settings(BaseSettings):
     sim_max_events_per_session: int = Field(default=1000, ge=1, le=10000)
     sim_max_conversations: int = Field(default=100, ge=1, le=1000)
     sim_context_turns: int = Field(default=5, ge=1, le=100)
-    ai_provider: Literal["fake"] = "fake"
+    ai_provider: Literal["fake", "anthropic"] = "fake"
+    ai_model: str = Field(default="claude-opus-5-5", pattern=r"^claude-[a-z0-9-]{1,60}$")
+    ai_api_key: SecretStr | None = None
+    # Inclui tokens de raciocínio (thinking sempre ligado no Claude Opus 5.5).
+    ai_max_output_tokens: int = Field(default=4096, ge=256, le=16000)
+    ai_effort: Literal["low", "medium", "high"] = "medium"
+    ai_max_retries: int = Field(default=1, ge=0, le=3)
+    ai_refusal_fallback: Literal["default", "off"] = "default"
+    ai_max_concurrency: int = Field(default=2, ge=1, le=16)
+    ai_max_requests_per_day: int = Field(default=500, ge=1, le=100000)
+    ai_max_cost_usd_per_day: float = Field(default=5.0, gt=0, le=1000)
+    ai_max_input_chars: int = Field(default=6000, ge=1000, le=50000)
+    # Fase 8: conhecimento em arquivo (fixtures, padrão) ou no banco (gestão pelo painel).
+    knowledge_source: Literal["file", "database"] = "file"
+    knowledge_require_distinct_approver: bool = False
     ai_prompt_version: str | None = Field(default=None, pattern=r"^v[1-9][0-9]*$")
     ai_history_limit: int = Field(default=4, ge=0, le=10)
     ai_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
@@ -82,6 +100,21 @@ class Settings(BaseSettings):
     # Homologação: arquivo de autorização privado preenchido pelo responsável (fora do repositório).
     homolog_authorization_file: Path | None = None
 
+    # Painel de atendimento humano (Fase 7): desabilitado por padrão; app separada do webhook.
+    panel_enabled: bool = False
+    panel_origin: str = Field(default="http://127.0.0.1:8000", pattern=r"^https?://[a-z0-9.-]{1,253}(:[0-9]{1,5})?$")
+    panel_cookie_secure: bool = True
+    panel_session_idle_minutes: int = Field(default=30, ge=5, le=480)
+    panel_session_absolute_hours: int = Field(default=12, ge=1, le=24)
+    panel_login_max_failures: int = Field(default=5, ge=3, le=20)
+    panel_login_window_minutes: int = Field(default=15, ge=1, le=1440)
+    panel_page_size: int = Field(default=25, ge=5, le=100)
+    panel_sse_poll_seconds: float = Field(default=1.0, ge=0.1, le=10)
+    # Stream rotaciona (cliente reconecta com Last-Event-ID): limita conexões presas no desligamento.
+    panel_sse_max_seconds: float = Field(default=60.0, ge=1, le=3600)
+    # Worker embutido (somente transporte fake) para demonstração local integrada.
+    panel_embedded_worker: bool = False
+
     @model_validator(mode="after")
     def storage_configuration(self) -> "Settings":
         if self.storage_backend == "sqlite":
@@ -106,6 +139,32 @@ class Settings(BaseSettings):
                 raise ValueError("Homologação exige banco *.homolog.synthetic.sqlite3, canal e arquivo de autorização.")
         elif homolog_db or self.homolog_authorization_file is not None:
             raise ValueError("Banco ou autorização de homologação só no ambiente de homologação.")
+        if self.ai_provider == "anthropic":
+            if not AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED:
+                raise ValueError("Provedor de IA real não autorizado nesta fase.")
+            key = self.ai_api_key.get_secret_value() if self.ai_api_key else ""
+            others = {s.get_secret_value() for s in (self.whatsapp_verify_token, self.whatsapp_app_secret,
+                                                     self.whatsapp_conversation_key, self.whatsapp_access_token) if s}
+            if (len(key) < 20 or not key.isprintable() or any(c.isspace() for c in key) or key in others
+                    or self.storage_backend != "sqlite" or self.ai_prompt_version is None):
+                raise ValueError("IA real exige chave exclusiva, SQLite (consumo) e versão de prompt explícita.")
+            if self.ai_model.startswith("claude-haiku") and self.ai_refusal_fallback != "off":
+                # Referência oficial (2026-11): Haiku 5.5 não tem fallback de recusa no servidor.
+                raise ValueError("Modelo sem fallback de recusa no servidor: use AI_REFUSAL_FALLBACK=off.")
+        elif self.ai_api_key is not None:
+            raise ValueError("Chave de IA só é aceita com provedor real explicitamente selecionado.")
+        if self.knowledge_source == "database" and self.storage_backend != "sqlite":
+            raise ValueError("Conhecimento no banco exige SQLite.")
+        if self.panel_enabled:
+            if self.storage_backend != "sqlite" or not self.whatsapp_enabled:
+                raise ValueError("Painel exige armazenamento SQLite e canal habilitado.")
+            loopback = re.match(r"^http://(127\.0\.0\.1|localhost)(:[0-9]+)?$", self.panel_origin) is not None
+            if self.panel_origin.startswith("http://") and not loopback:
+                raise ValueError("Painel sem HTTPS só é permitido em 127.0.0.1/localhost.")
+            if not self.panel_cookie_secure and not loopback:
+                raise ValueError("Cookie sem Secure só é permitido em 127.0.0.1/localhost.")
+        if self.panel_embedded_worker and (not self.panel_enabled or self.whatsapp_transport != "fake"):
+            raise ValueError("Worker embutido do painel só com painel habilitado e transporte fake.")
         if self.whatsapp_transport == "graph":
             unlocked = HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED if homolog else GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED
             if not unlocked:

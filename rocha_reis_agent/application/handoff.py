@@ -1,6 +1,8 @@
 """Transições explícitas; autorização é apenas local, sem autenticação remota."""
 
+from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 from rocha_reis_agent.domain.contracts import ConversationState as State, SimulationError
 from rocha_reis_agent.domain.conversations import Conversation, StateChange, utc_now
@@ -23,6 +25,23 @@ class OperatorAssurance(StrEnum):
     """
 
     SIMULATED_LOCAL = "simulated_local"
+    # Fase 7: funcionário autenticado no painel (sessão + senha Argon2id + RBAC).
+    VERIFIED_PANEL = "verified_panel"
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedOperator:
+    """Identidade construída SOMENTE pela camada de autenticação do painel.
+
+    Não é derivada de texto de cliente nem de parâmetro livre de requisição.
+    """
+
+    user_id: str
+    role: Literal["ADMIN", "OPERATOR"]
+
+    @property
+    def audit_id(self) -> str:
+        return f"panel:{self.user_id}"
 
 
 LOCAL_SIMULATED_OPERATOR = "operador-local"
@@ -50,6 +69,31 @@ class HumanHandoffManager:
         if conversation.state != State.AUTO:
             raise SimulationError("Encaminhamento indisponível no estado atual.")
         self._change(conversation, State.WAITING_HUMAN, reason, None)
+
+    def act_verified(self, conversation: Conversation, action: HandoffAction, operator: VerifiedOperator) -> None:
+        """Mesmas transições do domínio, com identidade verificada (painel)."""
+        if not isinstance(operator, VerifiedOperator):
+            raise SimulationError("Operação exige identidade verificada.")
+        if conversation.closed:
+            raise SimulationError("Sessão encerrada; ação indisponível.")
+        target = self._transitions.get((conversation.state, action))
+        if target is None:
+            raise SimulationError("Transição inválida para o estado atual.")
+        self._change(conversation, target, action.value, operator.audit_id)
+
+    def request_by_operator(self, conversation: Conversation, operator: VerifiedOperator) -> None:
+        """Transferir do automático para a fila humana (AUTO → WAITING_HUMAN)."""
+        if not isinstance(operator, VerifiedOperator) or conversation.closed:
+            raise SimulationError("Operação indisponível.")
+        if conversation.state != State.AUTO:
+            raise SimulationError("Transição inválida para o estado atual.")
+        self._change(conversation, State.WAITING_HUMAN, "operator_request", operator.audit_id)
+
+    def record_transfer(self, conversation: Conversation, operator: VerifiedOperator) -> None:
+        """Transferência entre funcionários: sem mudança de estado, mas versionada e auditada."""
+        if conversation.state != State.HUMAN_ACTIVE or conversation.closed:
+            raise SimulationError("Transferência só durante atendimento humano ativo.")
+        self._change(conversation, State.HUMAN_ACTIVE, "transfer", operator.audit_id)
 
     def act(
         self, conversation: Conversation, action: HandoffAction, operator_id: str

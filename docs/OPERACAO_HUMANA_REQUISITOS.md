@@ -1,6 +1,6 @@
 # Requisitos da operação humana (para validação com o salão)
 
-**Estado:** PLANEJADO. Nada aqui está implementado como interface para funcionários.
+**Estado (atualizado na Fase 7):** o painel local implementa §2 (exceto notificação externa) e §3 em versão básica — ver `STATUS_FASE_7.md`. Itens **[DECISÃO]** continuam pendentes do salão. Antes da Fase 7 este documento era só planejamento.
 Este é um documento de requisitos para o salão revisar. Não define política
 empresarial nem legal: os itens marcados **[DECISÃO]** dependem do responsável.
 

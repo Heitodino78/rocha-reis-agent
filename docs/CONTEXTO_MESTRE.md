@@ -2,7 +2,7 @@
 
 **Versão:** 0.1 (19/11/2026)  
 **Classificação:** documento de planejamento; sujeito a validação com o salão  
-**Status:** Fases 0 a 5 implementadas e testadas localmente: fundação, simulador, FakeAIProvider, conhecimento versionado/validação, persistência SQLite sintética, integração Meta WhatsApp **offline** (webhook assinado, inbox/outbox, transporte fake) e adaptador HTTP Graph API **bloqueado** por trava de código, com classificação de erros, janela de atendimento e retenção sem bloqueio permanente; Fase 6A: estrutura de homologação controlada (offline). Homologação real (6B) não executada. Nenhuma conexão real com a Meta, IA generativa real, validação com o salão ou implantação. Evidências em `STATUS_FASE_0.md` a `STATUS_FASE_6.md`.
+**Status:** Fases 0 a 5 implementadas e testadas localmente: fundação, simulador, FakeAIProvider, conhecimento versionado/validação, persistência SQLite sintética, integração Meta WhatsApp **offline** (webhook assinado, inbox/outbox, transporte fake) e adaptador HTTP Graph API **bloqueado** por trava de código, com classificação de erros, janela de atendimento e retenção sem bloqueio permanente; Fase 6A: estrutura de homologação controlada (offline); Fase 7: painel web local de atendimento humano (login, RBAC, conversas, respostas pela outbox, tempo real); Fase 8: adaptador de IA generativa (Anthropic) implementado e **bloqueado**, conhecimento gerido e aprovado pelo painel, avaliações reproduzíveis. Homologação real (6B) não executada; painel não validado com a equipe do salão. Nenhuma conexão real com a Meta, chamada a IA generativa real, validação com o salão ou implantação. Evidências em `STATUS_FASE_0.md` a `STATUS_FASE_8.md`.
 
 ## 1. Identidade do projeto
 

@@ -31,7 +31,7 @@ from rocha_reis_agent.domain.conversations import (
 
 logger = logging.getLogger("rocha_reis_agent")
 APPLICATION_ID = 1381126963
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 7
 MIGRATIONS = Path(__file__).parent / "migrations"
 RESULT = TypeAdapter(AgentResult)
 
@@ -47,6 +47,19 @@ class _Work:
 
 def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _statements(sql: str) -> Iterator[str]:
+    """Divide um script em declarações completas (suporta triggers com ';' internos)."""
+    buffer = ""
+    for line in sql.splitlines(keepends=True):
+        buffer += line
+        if sqlite3.complete_statement(buffer):
+            if buffer.strip():
+                yield buffer
+            buffer = ""
+    if buffer.strip():
+        yield buffer  # última declaração sem ';'
 
 
 def _token(value: str) -> str:
@@ -149,6 +162,9 @@ class SQLiteConversationRepository:
                 purpose = connection.execute("SELECT value FROM metadata WHERE key='purpose'").fetchone()
                 if purpose is None or purpose[0] != "rocha-reis-synthetic-only":
                     raise StorageError("Banco fora do escopo sintético permitido.")
+            # Procedimento oficial do SQLite para reconstruir tabelas: FKs desligadas
+            # durante a migração e foreign_key_check obrigatório antes do commit.
+            connection.execute("PRAGMA foreign_keys=OFF")
             connection.execute("BEGIN IMMEDIATE")
             try:
                 version = connection.execute("PRAGMA user_version").fetchone()[0]
@@ -158,15 +174,18 @@ class SQLiteConversationRepository:
                     path = next(MIGRATIONS.glob(f"{number:03d}_*.sql"))
                     # executescript faria COMMIT implícito. Executar cada declaração
                     # separadamente preserva a transação de TODA a migração.
-                    for statement in path.read_text(encoding="utf-8").split(";"):
-                        if statement.strip():
-                            connection.execute(statement)
+                    for statement in _statements(path.read_text(encoding="utf-8")):
+                        connection.execute(statement)
                     connection.execute(f"PRAGMA user_version={number:d}")
+                if connection.execute("PRAGMA foreign_key_check").fetchall():
+                    raise StorageError("Migração violaria a integridade referencial.")
                 connection.execute(f"PRAGMA application_id={APPLICATION_ID:d}")
                 connection.commit()
             except BaseException:
                 connection.rollback()
                 raise
+            finally:
+                connection.execute("PRAGMA foreign_keys=ON")
             if connection.execute("PRAGMA journal_mode=WAL").fetchone()[0].lower() != "wal":
                 raise StorageError("O armazenamento local exige suporte a WAL.")
         os.chmod(self.path, 0o600)
@@ -265,7 +284,7 @@ class SQLiteConversationRepository:
         ).fetchall()
         history = [HistoryEntry(
             entry["role"], entry["content"], datetime.fromisoformat(entry["recorded_at"]), entry["event_id"],
-            tuple(json.loads(entry["fact_references"])), entry["prompt_version"],
+            tuple(json.loads(entry["fact_references"])), entry["prompt_version"], entry["operation_id"],
         ) for entry in connection.execute("SELECT * FROM messages WHERE conversation_id=? ORDER BY ordinal", (key,))]
         changes = [StateChange(
             ConversationState(entry["previous"]), ConversationState(entry["current"]),
@@ -299,9 +318,32 @@ class SQLiteConversationRepository:
         work.effects.append(effect)
 
     @contextmanager
-    def write_transaction(self) -> Iterator[sqlite3.Connection]:
-        """Transação curta independente (BEGIN IMMEDIATE) para adaptadores do mesmo arquivo."""
-        if self._work.get() is not None:
+    def read(self) -> Iterator[sqlite3.Connection]:
+        """Leitura em conexão própria (transação de leitura curta), permitida dentro da
+        unidade de trabalho: decisões tomadas com ela são revalidadas no commit
+        (versão otimista da conversa e efeitos encenados)."""
+        try:
+            with self._connection() as connection:
+                connection.execute("BEGIN")
+                try:
+                    yield connection
+                finally:
+                    connection.rollback()
+        except SimulationError:
+            raise
+        except (sqlite3.Error, OSError) as error:
+            raise self._translate(error) from None
+
+    @contextmanager
+    def write_transaction(self, *, independent: bool = False) -> Iterator[sqlite3.Connection]:
+        """Transação curta independente (BEGIN IMMEDIATE) para adaptadores do mesmo arquivo.
+
+        independent=True permite gravar DENTRO de uma unidade de trabalho de conversa
+        registros que não pertencem a ela e devem persistir mesmo que ela seja
+        revertida (ex.: consumo da IA já incorrido). É seguro porque a unidade de
+        trabalho não mantém transação aberta durante a geração (commit só no fim).
+        """
+        if self._work.get() is not None and not independent:
             raise StorageError("Transações aninhadas não são suportadas.")
         try:
             with self._connection() as connection:
@@ -416,8 +458,8 @@ class SQLiteConversationRepository:
         self.fault_hook("after_events")
         connection.execute("DELETE FROM messages WHERE conversation_id=?", (key,))
         for ordinal, entry in enumerate(value.history[-self.limits.max_history_entries:]):
-            connection.execute("INSERT INTO messages(conversation_id,ordinal,event_id,role,content,recorded_at,fact_references,prompt_version) VALUES(?,?,?,?,?,?,?,?)",
-                               (key, ordinal, entry.event_id, entry.role, entry.text, entry.timestamp.isoformat(), _json(entry.fact_references), entry.prompt_version))
+            connection.execute("INSERT INTO messages(conversation_id,ordinal,event_id,role,content,recorded_at,fact_references,prompt_version,operation_id) VALUES(?,?,?,?,?,?,?,?,?)",
+                               (key, ordinal, entry.event_id, entry.role, entry.text, entry.timestamp.isoformat(), _json(entry.fact_references), entry.prompt_version, entry.operation_id))
         old_changes = original.transitions if original else []
         for change in value.transitions:
             if change not in old_changes:
@@ -545,6 +587,7 @@ class SQLiteConversationRepository:
                                                (RESULT.dump_json(minimal).decode(), key, event["event_id"]))
                         connection.execute("UPDATE channel_inbox SET payload='{}' WHERE conversation_id=? AND status IN ('DONE','FAILED')", (key,))
                         connection.execute("UPDATE channel_outbox SET body='',recipient='{}' WHERE conversation_id=?", (key,))
+                        connection.execute("DELETE FROM channel_contacts WHERE conversation_id=?", (key,))
                         # updated_at preservado (não é atividade do cliente); anonymized_at marca o ciclo.
                         connection.execute("UPDATE conversations SET archived=1,anonymized_at=?,version=version+1 WHERE id=?", (now, key))
                         self._audit(connection, "retention_anonymized", key, "operator", "committed")
@@ -587,6 +630,9 @@ class SQLiteConversationRepository:
                         connection.execute("UPDATE channel_inbox SET payload='{}' WHERE conversation_id=?", (key,))
                         connection.execute("UPDATE channel_outbox SET body='',recipient='{}' WHERE conversation_id=? AND status NOT IN ('SENDING','UNKNOWN')", (key,))
                         connection.execute("UPDATE channel_outbox SET status='SUPPRESSED',outcome='conversation_deleted',body='',recipient='{}',lease_owner=NULL,lease_expires_at=NULL WHERE conversation_id=? AND status IN ('PENDING','RETRY')", (key,))
+                        connection.execute("DELETE FROM panel_assignments WHERE conversation_id=?", (key,))
+                        connection.execute("DELETE FROM channel_contacts WHERE conversation_id=?", (key,))
+                        connection.execute("DELETE FROM panel_read_state WHERE conversation_id=?", (key,))
                         connection.execute("UPDATE conversations SET state='RESOLVED',closed=1,retired=1,version=version+1,updated_at=? WHERE id=?", (utc_now().isoformat(), key))
                         self._audit(connection, "synthetic_deleted", key, "operator", "retired")
                     self.fault_hook("before_retention_commit")

@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Atendimento · Rocha Reis</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Pular para o conteúdo</a>
+  <div id="live" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+  <!-- Login -->
+  <section id="login-view" class="auth-view" hidden>
+    <form id="login-form" class="auth-card" novalidate>
+      <p class="brand-mark" aria-hidden="true">RR</p>
+      <h1>Atendimento</h1>
+      <p class="muted">Painel interno da equipe. Ambiente local de testes com dados fictícios.</p>
+      <label for="login-input">Login</label>
+      <input id="login-input" name="login" autocomplete="username" required maxlength="64" autocapitalize="none" spellcheck="false">
+      <label for="password-input">Senha</label>
+      <input id="password-input" name="password" type="password" autocomplete="current-password" required maxlength="128">
+      <p id="login-error" class="form-error" role="alert"></p>
+      <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+    </form>
+  </section>
+
+  <!-- Troca obrigatória de senha -->
+  <section id="password-view" class="auth-view" hidden>
+    <form id="password-form" class="auth-card" novalidate>
+      <h1>Defina sua senha</h1>
+      <p class="muted">Sua senha é temporária. Escolha uma nova com pelo menos 12 caracteres.</p>
+      <label for="current-password">Senha atual</label>
+      <input id="current-password" type="password" autocomplete="current-password" required maxlength="128">
+      <label for="new-password">Nova senha</label>
+      <input id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
+      <label for="confirm-password">Repita a nova senha</label>
+      <input id="confirm-password" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
+      <p id="password-error" class="form-error" role="alert"></p>
+      <button type="submit" class="btn btn-primary btn-block">Salvar senha</button>
+      <button type="button" class="btn btn-ghost btn-block" data-action="logout">Sair</button>
+    </form>
+  </section>
+
+  <!-- Aplicação -->
+  <div id="app-view" class="shell" hidden>
+    <header class="topbar">
+      <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Abrir menu">☰</button>
+      <span class="brand"><span class="brand-mark small" aria-hidden="true">RR</span> Atendimento</span>
+      <span id="connection" class="connection" data-state="connecting" role="status">Conectando…</span>
+    </header>
+
+    <nav id="sidebar" class="sidebar" aria-label="Navegação principal">
+      <div class="sidebar-head">
+        <span class="brand"><span class="brand-mark small" aria-hidden="true">RR</span> Atendimento</span>
+        <span id="connection-side" class="connection" data-state="connecting" aria-hidden="true">Conectando…</span>
+      </div>
+      <ul class="nav-list">
+        <li><button type="button" class="nav-item" data-view="overview">Visão geral</button></li>
+        <li><button type="button" class="nav-item" data-view="conversations" data-filter="all">Conversas</button></li>
+        <li><button type="button" class="nav-item" data-view="conversations" data-filter="waiting">Aguardando atendimento <span class="count" id="count-waiting" aria-label="conversas aguardando"></span></button></li>
+        <li><button type="button" class="nav-item" data-view="conversations" data-filter="mine">Meus atendimentos <span class="count" id="count-mine"></span></button></li>
+        <li><button type="button" class="nav-item" data-view="conversations" data-filter="resolved">Histórico</button></li>
+        <li class="admin-only"><button type="button" class="nav-item" data-view="team">Equipe</button></li>
+        <li class="admin-only"><button type="button" class="nav-item" data-view="audit">Auditoria</button></li>
+        <li class="admin-only"><button type="button" class="nav-item" data-view="knowledge">Conhecimento <span class="count" id="count-pending" aria-label="pendências de conhecimento"></span></button></li>
+        <li class="admin-only"><button type="button" class="nav-item" data-view="settings">Configurações</button></li>
+      </ul>
+      <div class="sidebar-foot">
+        <p class="user-chip"><span id="user-name"></span><span id="user-role" class="role-tag"></span></p>
+        <button type="button" class="btn btn-ghost btn-block" data-action="logout">Sair</button>
+      </div>
+    </nav>
+
+    <main id="main" class="main" tabindex="-1">
+      <!-- Visão geral -->
+      <section id="overview-view" class="page" hidden aria-labelledby="overview-title">
+        <h2 id="overview-title">Visão geral</h2>
+        <div id="overview-cards" class="cards"></div>
+        <p class="muted small" id="overview-note"></p>
+      </section>
+
+      <!-- Conversas -->
+      <section id="conversations-view" class="workspace" hidden>
+        <div class="list-pane" id="list-pane">
+          <div class="list-head">
+            <h2 id="list-title">Conversas</h2>
+            <form id="search-form" class="search" role="search">
+              <label for="search-input" class="visually-hidden">Buscar conversas</label>
+              <input id="search-input" type="search" placeholder="Buscar mensagem ou código" maxlength="80">
+            </form>
+            <div class="chips" role="group" aria-label="Filtrar conversas">
+              <button type="button" class="chip" data-filter="all">Todas</button>
+              <button type="button" class="chip" data-filter="waiting">Aguardando</button>
+              <button type="button" class="chip" data-filter="mine">Minhas</button>
+              <button type="button" class="chip" data-filter="human_active">Em atendimento</button>
+              <button type="button" class="chip" data-filter="auto">Automáticas</button>
+              <button type="button" class="chip" data-filter="resolved">Encerradas</button>
+            </div>
+          </div>
+          <ul id="conversation-list" class="conversation-list" aria-label="Lista de conversas"></ul>
+          <p id="list-empty" class="empty" hidden>Nenhuma conversa neste filtro.</p>
+          <button type="button" id="load-more" class="btn btn-ghost btn-block" hidden>Carregar mais</button>
+        </div>
+
+        <div class="detail-pane" id="detail-pane" aria-live="off">
+          <div id="detail-empty" class="empty detail-empty">
+            <p>Selecione uma conversa para ver o histórico.</p>
+          </div>
+          <article id="detail" class="detail" hidden aria-labelledby="detail-title">
+            <header class="detail-head">
+              <button type="button" class="icon-btn back-btn" id="back-btn" aria-label="Voltar para a lista">←</button>
+              <div class="detail-id">
+                <h2 id="detail-title"></h2>
+                <p class="detail-meta"><span id="detail-state" class="badge"></span> <span id="detail-automation"></span></p>
+                <p class="detail-meta muted" id="detail-owner"></p>
+              </div>
+              <div class="detail-actions" id="detail-actions"></div>
+            </header>
+            <ol id="messages" class="messages" aria-label="Histórico da conversa" aria-live="polite"></ol>
+            <details class="timeline">
+              <summary>Linha do tempo do atendimento</summary>
+              <ol id="transitions" class="transition-list"></ol>
+            </details>
+            <form id="composer" class="composer" novalidate>
+              <p id="composer-hint" class="composer-hint muted"></p>
+              <label for="composer-input" class="visually-hidden">Resposta ao cliente</label>
+              <textarea id="composer-input" rows="2" maxlength="2000" placeholder="Escreva a resposta ao cliente…"></textarea>
+              <div class="composer-row">
+                <span id="composer-count" class="muted small" aria-live="off">0/2000</span>
+                <button type="submit" id="composer-send" class="btn btn-primary">Enviar</button>
+              </div>
+            </form>
+          </article>
+        </div>
+      </section>
+
+      <!-- Equipe -->
+      <section id="team-view" class="page" hidden aria-labelledby="team-title">
+        <h2 id="team-title">Equipe</h2>
+        <form id="user-form" class="panel-card form-grid" novalidate>
+          <h3>Novo funcionário</h3>
+          <label for="new-login">Login</label>
+          <input id="new-login" required maxlength="64" autocapitalize="none" spellcheck="false">
+          <label for="new-name">Nome de exibição</label>
+          <input id="new-name" required maxlength="80">
+          <label for="new-role">Papel</label>
+          <select id="new-role"><option value="OPERATOR">Atendente</option><option value="ADMIN">Administrador</option></select>
+          <label for="new-user-password">Senha temporária</label>
+          <input id="new-user-password" type="password" required minlength="12" maxlength="128" autocomplete="new-password">
+          <p class="muted small">A pessoa deverá trocar a senha no primeiro acesso.</p>
+          <p id="user-error" class="form-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary">Criar acesso</button>
+        </form>
+        <div class="table-wrap"><table class="data-table" aria-label="Funcionários">
+          <thead><tr><th scope="col">Nome</th><th scope="col">Login</th><th scope="col">Papel</th><th scope="col">Situação</th><th scope="col">Último acesso</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
+          <tbody id="users-body"></tbody>
+        </table></div>
+      </section>
+
+      <!-- Auditoria -->
+      <section id="audit-view" class="page" hidden aria-labelledby="audit-title">
+        <h2 id="audit-title">Auditoria</h2>
+        <p class="muted">Registro somente de inclusão. Sem senhas, tokens ou conteúdo de mensagens.</p>
+        <div class="table-wrap"><table class="data-table" aria-label="Registros de auditoria">
+          <thead><tr><th scope="col">Quando</th><th scope="col">Quem</th><th scope="col">Ação</th><th scope="col">Alvo</th><th scope="col">Resultado</th></tr></thead>
+          <tbody id="audit-body"></tbody>
+        </table></div>
+        <button type="button" id="audit-more" class="btn btn-ghost" hidden>Mais antigos</button>
+      </section>
+
+      <!-- Configurações -->
+      <section id="settings-view" class="page" hidden aria-labelledby="settings-title">
+        <h2 id="settings-title">Configurações</h2>
+        <form id="settings-form" class="panel-card">
+          <h3>Permissões dos atendentes</h3>
+          <label class="switch"><input type="checkbox" id="setting-transfer"> Atendentes podem transferir conversas</label>
+          <label class="switch"><input type="checkbox" id="setting-resume"> Atendentes podem retomar a automação das próprias conversas</label>
+          <button type="submit" class="btn btn-primary">Salvar permissões</button>
+        </form>
+        <div class="panel-card">
+          <h3>Envio de mensagens</h3>
+          <p id="dispatch-status" class="muted"></p>
+          <div class="row-actions">
+            <button type="button" id="halt-btn" class="btn btn-danger">Interromper envios</button>
+            <button type="button" id="resume-dispatch-btn" class="btn btn-ghost">Retomar envios</button>
+          </div>
+          <p class="muted small" id="environment-note"></p>
+        </div>
+      </section>
+
+      <!-- Conhecimento (ADMIN): separado das conversas; a IA nunca usa estas ações -->
+      <section id="knowledge-view" class="page" hidden aria-labelledby="knowledge-title">
+        <h2 id="knowledge-title">Conhecimento do salão</h2>
+        <p class="muted" id="knowledge-scope"></p>
+        <p class="muted small">Só registros <strong>aprovados</strong> são usados no atendimento. Um rascunho novo sobre um dado aprovado suspende o uso desse dado até a nova aprovação.</p>
+        <div class="panel-card" id="knowledge-pending-card">
+          <h3>Pendências</h3>
+          <ul id="knowledge-pending" class="plain-list"></ul>
+        </div>
+        <form id="knowledge-filter" class="knowledge-filter" role="search">
+          <label for="knowledge-search" class="visually-hidden">Buscar registros</label>
+          <input id="knowledge-search" type="search" placeholder="Buscar por texto ou identificador" maxlength="80">
+          <label for="knowledge-kind-filter" class="visually-hidden">Tipo</label>
+          <select id="knowledge-kind-filter"><option value="">Todos os tipos</option></select>
+          <label for="knowledge-status-filter" class="visually-hidden">Situação</label>
+          <select id="knowledge-status-filter">
+            <option value="">Todas as situações</option><option value="DRAFT">Rascunho</option>
+            <option value="APPROVED">Aprovado</option><option value="REJECTED">Rejeitado</option><option value="ARCHIVED">Revogado</option>
+          </select>
+        </form>
+        <div class="table-wrap"><table class="data-table" aria-label="Registros de conhecimento">
+          <thead><tr><th scope="col">Tipo</th><th scope="col">Identificador</th><th scope="col">Conteúdo</th><th scope="col">Versão</th><th scope="col">Situação</th><th scope="col">Em uso</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
+          <tbody id="knowledge-body"></tbody>
+        </table></div>
+        <p id="knowledge-empty" class="empty" hidden>Nenhum registro neste filtro.</p>
+
+        <form id="knowledge-form" class="panel-card form-grid" novalidate>
+          <h3 id="knowledge-form-title">Novo registro (rascunho)</h3>
+          <p class="muted small" id="knowledge-form-note">O rascunho só passa a valer depois de aprovado.</p>
+          <label for="knowledge-kind">Tipo</label>
+          <select id="knowledge-kind"></select>
+          <div data-fields="key"><label for="knowledge-key">Identificador do serviço</label>
+            <input id="knowledge-key" maxlength="64" autocapitalize="none" spellcheck="false" placeholder="ex.: corte"></div>
+          <div data-fields="text"><label for="knowledge-text">Texto</label><input id="knowledge-text" maxlength="240"></div>
+          <div data-fields="items"><label for="knowledge-items">Itens (um por linha)</label><textarea id="knowledge-items" rows="3"></textarea></div>
+          <div data-fields="url"><label for="knowledge-url">Link Booksy oficial</label><input id="knowledge-url" type="url" maxlength="2048" placeholder="https://booksy.com/…"></div>
+          <div data-fields="name"><label for="knowledge-name">Nome do serviço</label><input id="knowledge-name" maxlength="240"></div>
+          <div data-fields="aliases"><label for="knowledge-aliases">Outros nomes (separados por vírgula)</label><input id="knowledge-aliases" maxlength="600"></div>
+          <div data-fields="description"><label for="knowledge-description">Descrição</label><input id="knowledge-description" maxlength="240"></div>
+          <div data-fields="amount"><label for="knowledge-amount">Valor (R$)</label><input id="knowledge-amount" inputmode="decimal" maxlength="12" placeholder="0,00"></div>
+          <div data-fields="note"><label for="knowledge-note">Condição do preço (opcional)</label><input id="knowledge-note" maxlength="240"></div>
+          <div data-fields="questions"><label for="knowledge-questions">Perguntas (uma por linha)</label><textarea id="knowledge-questions" rows="3"></textarea></div>
+          <div data-fields="answer"><label for="knowledge-answer">Resposta</label><input id="knowledge-answer" maxlength="240"></div>
+          <label for="knowledge-source">Origem da informação</label>
+          <input id="knowledge-source" maxlength="240" required placeholder="ex.: tabela de preços entregue pela gerência em 20/11">
+          <p id="knowledge-error" class="form-error" role="alert"></p>
+          <div class="row-actions">
+            <button type="submit" class="btn btn-primary">Salvar rascunho</button>
+            <button type="button" id="knowledge-cancel-edit" class="btn btn-ghost" hidden>Cancelar edição</button>
+          </div>
+        </form>
+
+        <div class="panel-card" id="knowledge-history-card" hidden>
+          <h3 id="knowledge-history-title">Histórico</h3>
+          <ol id="knowledge-history" class="plain-list"></ol>
+        </div>
+
+        <form id="knowledge-preview-form" class="panel-card form-grid" novalidate>
+          <h3>Prévia no atendimento</h3>
+          <p class="muted small">Mostra o trecho factual que o atendimento automático usaria hoje. Não envia nada e não chama a IA.</p>
+          <label for="knowledge-question">Pergunta de exemplo</label>
+          <input id="knowledge-question" maxlength="500" placeholder="ex.: Quanto custa o corte?">
+          <button type="submit" class="btn btn-ghost">Ver prévia</button>
+          <p id="knowledge-preview" class="preview-box" aria-live="polite"></p>
+        </form>
+
+        <div class="panel-card">
+          <h3>Inteligência artificial</h3>
+          <p id="ai-status" class="muted"></p>
+          <ul id="ai-usage" class="plain-list small"></ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="confirm-dialog" class="dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <div id="confirm-extra"></div>
+      <div class="row-actions">
+        <button value="cancel" class="btn btn-ghost">Cancelar</button>
+        <button value="ok" id="confirm-ok" class="btn btn-primary">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

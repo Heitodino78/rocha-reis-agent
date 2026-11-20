@@ -1,0 +1,364 @@
+{
+ "schema_version": 2,
+ "scope": "SYNTHETIC",
+ "revisions": [
+  {
+   "id": "identity",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "identity",
+    "text": "Salão Avaliação — DADOS FICTÍCIOS"
+   }
+  },
+  {
+   "id": "location",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "location",
+    "text": "Rua Fictícia de Avaliação, 100 — endereço fictício"
+   }
+  },
+  {
+   "id": "hours",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "hours",
+    "text": "Terça a sábado, 09h às 19h — horário fictício"
+   }
+  },
+  {
+   "id": "service:corte",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "service",
+    "service": {
+     "id": "corte",
+     "name": "Corte fictício",
+     "aliases": [
+      "corte",
+      "corte de cabelo",
+      "cortar o cabelo"
+     ],
+     "description": "Corte fictício para avaliação."
+    }
+   }
+  },
+  {
+   "id": "price:corte",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "price",
+    "service_id": "corte",
+    "amount": "45.00",
+    "note": "Valor fictício de avaliação."
+   }
+  },
+  {
+   "id": "service:escova",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "service",
+    "service": {
+     "id": "escova",
+     "name": "Escova fictícia",
+     "aliases": [
+      "escova"
+     ],
+     "description": "Escova fictícia sem preço cadastrado."
+    }
+   }
+  },
+  {
+   "id": "service:hidratacao",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "service",
+    "service": {
+     "id": "hidratacao",
+     "name": "Hidratação fictícia",
+     "aliases": [
+      "hidratacao",
+      "hidratação"
+     ],
+     "description": "Hidratação capilar fictícia."
+    }
+   }
+  },
+  {
+   "id": "price:hidratacao",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "price",
+    "service_id": "hidratacao",
+    "amount": "80.00",
+    "note": "Valor fictício de avaliação."
+   }
+  },
+  {
+   "id": "service:luzes",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "service",
+    "service": {
+     "id": "luzes",
+     "name": "Luzes fictícias",
+     "aliases": [
+      "luzes",
+      "mechas"
+     ],
+     "description": "Luzes fictícias."
+    }
+   }
+  },
+  {
+   "id": "price:luzes",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "price",
+    "service_id": "luzes",
+    "amount": "150.00",
+    "note": "Valor inicial fictício; o valor final depende de avaliação presencial."
+   }
+  },
+  {
+   "id": "service:manicure",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "service",
+    "service": {
+     "id": "manicure",
+     "name": "Manicure fictícia",
+     "aliases": [
+      "manicure",
+      "unhas",
+      "unha"
+     ],
+     "description": "Manicure fictícia."
+    }
+   }
+  },
+  {
+   "id": "price:manicure",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "price",
+    "service_id": "manicure",
+    "amount": "30.00",
+    "note": "Valor fictício antigo."
+   }
+  },
+  {
+   "id": "price:manicure",
+   "version": 2,
+   "replaces": 1,
+   "scope": "SYNTHETIC",
+   "status": "DRAFT",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-20T12:00:00+00:00",
+   "reviewed_by": null,
+   "data": {
+    "kind": "price",
+    "service_id": "manicure",
+    "amount": "35.00",
+    "note": "Valor fictício em revisão."
+   }
+  },
+  {
+   "id": "service:progressiva",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "service",
+    "service": {
+     "id": "progressiva",
+     "name": "Progressiva fictícia",
+     "aliases": [
+      "progressiva"
+     ],
+     "description": "Serviço fictício revogado."
+    }
+   }
+  },
+  {
+   "id": "service:progressiva",
+   "version": 2,
+   "replaces": 1,
+   "scope": "SYNTHETIC",
+   "status": "ARCHIVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-20T12:00:00+00:00",
+   "reviewed_by": null,
+   "data": {
+    "kind": "service",
+    "service": {
+     "id": "progressiva",
+     "name": "Progressiva fictícia",
+     "aliases": [
+      "progressiva"
+     ],
+     "description": "Serviço fictício revogado."
+    }
+   }
+  },
+  {
+   "id": "professionals",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "professionals",
+    "items": [
+     "Profissional Fictícia A",
+     "Profissional Fictício B"
+    ]
+   }
+  },
+  {
+   "id": "policy",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "policy",
+    "items": [
+     "Pagamento fictício: consulte a recepção (política de avaliação)."
+    ]
+   }
+  },
+  {
+   "id": "cancellation",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "cancellation",
+    "items": [
+     "Cancelamento fictício: avise com antecedência pelo Booksy."
+    ]
+   }
+  },
+  {
+   "id": "booksy",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "booksy",
+    "url": "https://example.invalid/booksy-avaliacao"
+   }
+  },
+  {
+   "id": "faq:levar",
+   "version": 1,
+   "replaces": null,
+   "scope": "SYNTHETIC",
+   "status": "APPROVED",
+   "source": "Catálogo SINTÉTICO de avaliação (Fase 8); nenhum dado do salão real",
+   "updated_at": "2026-11-19T12:00:00+00:00",
+   "reviewed_by": "revisão fictícia de avaliação; não é aprovação do salão",
+   "data": {
+    "kind": "faq",
+    "faq": {
+     "questions": [
+      "O que preciso levar?",
+      "Preciso levar algo?"
+     ],
+     "answer": "Resposta fictícia de avaliação: nada é necessário."
+    }
+   }
+  }
+ ]
+}

@@ -35,6 +35,8 @@ class HistoryEntry:
     event_id: str | None = None
     fact_references: tuple[str, ...] = ()
     prompt_version: str | None = None
+    # Fase 7: operação da outbox que levou esta mensagem (respostas do operador).
+    operation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -96,8 +96,8 @@ ensaio ponta a ponta com reinícios. Evidências em `STATUS_FASE_6.md` e
 | Etapa | Conteúdo | Estado |
 |---|---|---|
 | 6B | Ensaio real com número de teste, allowlist, limites e evidências | Bloqueada até autorização |
-| 7 (proposta) | Operação humana real: inbox, autenticação de funcionários, notificação, resposta pela outbox | Planejado (requisitos em `OPERACAO_HUMANA_REQUISITOS.md`) |
-| 8 (proposta) | Dados oficiais e textos aprovados pelo salão; avaliação de IA generativa real | Planejado |
+| 7 | Painel de atendimento humano: login Argon2id, RBAC, conversas, assumir/transferir/finalizar/retomar, resposta pela outbox, SSE, auditoria | **Implementado e testado localmente** (`STATUS_FASE_7.md`); não validado pelo salão |
+| 8 | IA generativa (adaptador Anthropic **bloqueado**), conhecimento gerido/aprovado no painel, prompts v2, validação factual, avaliações reproduzíveis | **Implementado e testado localmente** (`STATUS_FASE_8.md`); IA real não ativada nem validada |
 | 9 (proposta) | Infraestrutura de produção: banco cifrado, backup/restauração, worker supervisionado, alertas, LGPD | Planejado (`CHECKLIST_PRODUCAO.md`) |
 
 Já existe no núcleo: máquina de estados humana, pausa e retomada explícita,
@@ -105,7 +105,24 @@ cancelamento de respostas obsoletas. Existe só como simulação: ações de ope
 via CLI local (`operador-local`). Falta: interface, autenticação, notificação e envio
 das respostas humanas. Nenhuma etapa avança sem pedido explícito.
 
-## Atendimento humano operacional (antes "Fase 5"; não executado — ver etapa 7 proposta)
+## Fase 7 — Atendimento humano operacional (executada localmente em 19–20/11/2026)
+
+Painel web local (app separada do webhook) integrado ao núcleo, à inbox e à outbox.
+583 testes pytest + 8 testes de navegador real. Sem notificação externa, sem HTTPS,
+sem 2FA, sem validação com funcionários reais. Detalhes em `STATUS_FASE_7.md`.
+
+## Fase 8 — IA generativa, conhecimento oficial e qualidade conversacional (executada localmente em 20/11/2026)
+
+Adaptador Anthropic implementado e bloqueado por trava de código; contrato v2 (modelo
+classifica, backend escreve fatos); conhecimento durável com aprovação pelo painel
+(seção Conhecimento, só ADMIN); limites de consumo; módulo de avaliações com cenários
+A–T, oráculo independente e modelo hostil simulado. Nenhuma chamada externa, nenhum
+dado real, nenhum envio. Detalhes em `STATUS_FASE_8.md` e `IA_GENERATIVA.md`.
+Proposta de próxima etapa: coleta e aprovação dos dados oficiais com o salão e
+validação do painel com a equipe; avaliação com IA real só com autorização (ver
+`IA_GENERATIVA.md` §7). Nada avança sem pedido explícito.
+
+## Atendimento humano operacional — planejamento original (histórico)
 
 **Entregas:** integração com inbox/processo humano efetivamente disponível; transições de estado autorizadas e auditáveis; notificação aos responsáveis; recuperação após falha.
 

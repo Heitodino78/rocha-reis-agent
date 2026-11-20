@@ -1,13 +1,16 @@
 # Rocha Reis Agent
 
 Fundação e simulador local de atendimento em português para o **Salão de Beleza
-Rocha Reis**, projeto da agência de **Heitor e Renan**. Fases 0 a 5 e 6A
+Rocha Reis**, projeto da agência de **Heitor e Renan**. Fases 0 a 5, 6A, 7 e 8
 implementadas e testadas localmente: API com `GET /health`, núcleo de conversas por CLI,
 conhecimento versionado, arquitetura de IA com **FakeAIProvider determinístico**,
 persistência SQLite sintética e **preparação offline do webhook oficial Meta
 WhatsApp Cloud API** com inbox/outbox duráveis e transporte **fake**, e o
 **adaptador HTTP Graph API** (Fase 5) implementado porém **bloqueado** por trava de
-código. Nenhum modelo generativo real, conta Meta ou envio real está conectado.
+código. A Fase 8 acrescentou o **adaptador generativo Anthropic** (também
+**bloqueado** por trava de código própria), conhecimento gerido e aprovado pelo
+painel e um **módulo de avaliações** reproduzível. Nenhum modelo generativo real,
+conta Meta ou envio real está conectado.
 
 **Booksy:** somente orientação por link configurado, sem consultar disponibilidade
 ou realizar operações sobre reservas. O link oficial e os dados do salão continuam
@@ -281,6 +284,53 @@ humana em [`OPERACAO_HUMANA_REQUISITOS.md`](docs/OPERACAO_HUMANA_REQUISITOS.md) 
 pendências de produção em [`CHECKLIST_PRODUCAO.md`](docs/CHECKLIST_PRODUCAO.md).
 **Nenhum teste real com a Meta foi feito (Fase 6B bloqueada).**
 
+## Painel de atendimento humano — Fase 7 (somente local)
+
+App web separada do webhook para a equipe: login (Argon2id), papéis ADMIN/ATENDENTE,
+fila, assumir, transferir, responder (pela outbox, envio simulado), finalizar,
+retomar a automação, auditoria e atualização ao vivo (SSE). Roteiro completo,
+APIs e limitações em [`STATUS_FASE_7.md`](docs/STATUS_FASE_7.md).
+
+```sh
+# Variáveis: ver bloco PANEL_* do .env.example e o roteiro em STATUS_FASE_7.md §D
+/tmp/rocha-reis-agent-venv/bin/python -m rocha_reis_agent.panel.admin_cli create-admin --login dona --name "Responsável"
+/tmp/rocha-reis-agent-venv/bin/python -m rocha_reis_agent.panel.admin_cli seed-demo
+/tmp/rocha-reis-agent-venv/bin/python -m uvicorn rocha_reis_agent.panel.app:create_panel_app --factory \
+    --host 127.0.0.1 --port 8000 --no-access-log --timeout-graceful-shutdown 5
+# http://127.0.0.1:8000/panel/  — nunca expor em rede nesta fase
+```
+
+Testes de navegador (Chromium headless) ficam em `tests_e2e/`, com venv próprio
+descrito em `requirements-e2e.txt`.
+
+## IA generativa, conhecimento aprovado e avaliações — Fase 8 (somente local)
+
+- **Provedor real:** `ai/anthropic_provider.py` (SDK oficial `anthropic`), contrato
+  `ai-response-v2`: o modelo só **classifica** e pode propor uma abertura curta; todos
+  os fatos (preços, horários, endereço, link Booksy) são escritos pelo backend a partir
+  de registros aprovados. **Bloqueado** por `AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED=False`
+  em `config.py`; uma chave configurada nunca ativa nada. Detalhes e condições de
+  ativação em [`IA_GENERATIVA.md`](docs/IA_GENERATIVA.md).
+- **Conhecimento no banco** (`KNOWLEDGE_SOURCE=database`): revisões imutáveis,
+  rascunho → aprovação → revogação pela seção **Conhecimento** do painel (somente
+  ADMIN), histórico, pendências e prévia. Um rascunho novo suspende o dado anterior.
+- **Avaliações:** cenários sintéticos A–T contra o núcleo real, com oráculo
+  independente e um "modelo hostil" simulado.
+
+```sh
+PY=/tmp/rocha-reis-agent-venv/bin/python
+# Base de conhecimento no banco (variáveis do painel + KNOWLEDGE_SOURCE=database)
+$PY -m rocha_reis_agent.panel.admin_cli knowledge-init --scope synthetic --confirm KNOWLEDGE_SCOPE:SYNTHETIC
+$PY -m rocha_reis_agent.panel.admin_cli knowledge-import-fixture
+# Avaliações offline (sem rede): fake | hostile | anthropic-simulated; prompt v1 | v2
+$PY -m rocha_reis_agent.evaluation --provider fake --prompt v1
+$PY -m rocha_reis_agent.evaluation --provider hostile --prompt v2 --output /tmp/avaliacao.json
+```
+
+Resultados de referência em `evals/results/`; roteiro completo e métricas em
+[`STATUS_FASE_8.md`](docs/STATUS_FASE_8.md). Resultados com provedores simulados
+medem o backend; **não validam a qualidade de um modelo generativo real**.
+
 ## Conhecimento e limites determinísticos
 
 O formato atual está em [salon.versioned.synthetic.json](fixtures/salon.versioned.synthetic.json):
@@ -397,7 +447,10 @@ cp .env.example .env
 | `SIM_MAX_EVENTS_PER_SESSION` | `1000` | 1 a 10000 eventos; no SQLite o limite é por conversa, incluindo resets |
 | `SIM_MAX_CONVERSATIONS` | `100` | 1 a 1000 conversas por processo em memória, ou por arquivo SQLite |
 | `SIM_CONTEXT_TURNS` | `5` | 1 a 100 turnos automáticos; pausa humana preserva o contexto |
-| `AI_PROVIDER` | `fake` | Somente `fake`; nenhum SDK ou credencial |
+| `AI_PROVIDER` | `fake` | `fake`; `anthropic` é recusado enquanto a trava de código da Fase 8 for `False` |
+| `AI_MODEL`, `AI_EFFORT`, `AI_MAX_*`, `AI_REFUSAL_FALLBACK` | ver `.env.example` | Somente com o provedor real (bloqueado); limites de tokens, tentativas, concorrência, requisições e custo estimado por dia |
+| `KNOWLEDGE_SOURCE` | `file` | `file` (fixtures) ou `database` (gestão pelo painel; exige SQLite) |
+| `KNOWLEDGE_REQUIRE_DISTINCT_APPROVER` | `false` | `true` exige outro administrador para aprovar |
 | `AI_PROMPT_VERSION` | Ausente | Versão ativa do registro; pode selecionar uma versão `vN` registrada |
 | `AI_HISTORY_LIMIT` | `4` | 0 a 10 mensagens relevantes, até 500 caracteres cada |
 | `AI_TIMEOUT_SECONDS` | `2` | Maior que 0 e até 30; contrato do provedor, timeout simulado no fake |
@@ -437,7 +490,11 @@ A Fase 5 (`test_graph_transport.py`, `test_delivery_status_and_policy.py`,
 classificação de erros, status de entrega, janela, retenção e controles administrativos. Os testes da Fase 1 também cobrem atendimento,
 contexto, duas conversas, estados humanos, deduplicação concorrente, limites,
 carga de fixtures e CLI. A Fase 2 cobre aprovação, versões, contratos, prompts,
-saídas sem suporte factual, ataques, privacidade e falhas do fake. Evidências em
+saídas sem suporte factual, ataques, privacidade e falhas do fake. A Fase 8
+(`test_ai_generative.py`, `test_knowledge_management.py`, `test_evaluation.py`,
+`test_phase8_integration.py`, `tests_e2e/test_knowledge_browser.py`) cobre o adaptador
+Anthropic com `httpx2.MockTransport`, travas, falhas, limites de consumo, gestão do
+conhecimento, avaliações reproduzíveis e o fluxo webhook → IA → outbox. Evidências em
 [`STATUS_FASE_2.md`](docs/STATUS_FASE_2.md), [`STATUS_FASE_4.md`](docs/STATUS_FASE_4.md) e nos registros históricos
 [`STATUS_FASE_1.md`](docs/STATUS_FASE_1.md) e [`STATUS_FASE_0.md`](docs/STATUS_FASE_0.md).
 
@@ -489,7 +546,14 @@ saídas sem suporte factual, ataques, privacidade e falhas do fake. Evidências 
 │   │       ├── 002_audit_correlation.sql
 │   │       ├── 003_whatsapp_channel.sql
 │   │       ├── 004_lifecycle_delivery.sql
-│   │       └── 005_homologation_controls.sql
+│   │       ├── 005_homologation_controls.sql
+│   │       ├── 006_operator_panel.sql
+│   │       └── 007_knowledge_and_ai_usage.sql  # Fase 8
+│   ├── evaluation/                  # avaliações offline (Fase 8)
+│   │   ├── scenarios.py · oracle.py · providers.py · runner.py · __main__.py
+│   ├── panel/                       # painel de atendimento (Fase 7) + conhecimento (Fase 8)
+│   │   ├── security.py · store.py · service.py · api.py · app.py · admin_cli.py · knowledge.py
+│   │   └── static/ (index.html, styles.css, app.js)
 │   ├── channels/                    # Meta WhatsApp offline (Fase 4)
 │   │   ├── __init__.py
 │   │   ├── contracts.py
@@ -505,6 +569,9 @@ saídas sem suporte factual, ataques, privacidade e falhas do fake. Evidências 
 │   │   ├── contracts.py
 │   │   ├── context.py
 │   │   ├── fake.py
+│   │   ├── anthropic_provider.py    # provedor real, BLOQUEADO (Fase 8)
+│   │   ├── pricing.json             # tarifas para ESTIMATIVA de custo
+│   │   ├── privacy.py               # minimização antes de provedor externo
 │   │   ├── prompts.py
 │   │   └── validation.py
 │   ├── application/
@@ -601,5 +668,7 @@ está documentada em [STATUS_FASE_3.md](docs/STATUS_FASE_3.md).
 A Fase 4 foi executada somente offline (auditoria + preparação da integração
 Meta), conforme [STATUS_FASE_4.md](docs/STATUS_FASE_4.md). A Fase 5 (adaptador HTTP
 bloqueado, erros, status, janela, retenção) está em [STATUS_FASE_5.md](docs/STATUS_FASE_5.md).
-A Fase 6A está em [STATUS_FASE_6.md](docs/STATUS_FASE_6.md); a 6B não foi executada. Conexão real com a Meta, validação com o salão, dados reais e
+A Fase 6A está em [STATUS_FASE_6.md](docs/STATUS_FASE_6.md); a 6B não foi executada.
+A Fase 7 (painel) está em [STATUS_FASE_7.md](docs/STATUS_FASE_7.md) e a Fase 8 (IA
+generativa bloqueada, conhecimento aprovado, avaliações) em [STATUS_FASE_8.md](docs/STATUS_FASE_8.md). Conexão real com a Meta, validação com o salão, dados reais e
 implantação permanecem pendentes e exigem autorização específica.

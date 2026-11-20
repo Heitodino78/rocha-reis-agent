@@ -21,7 +21,7 @@ habilitados do salão e da agência.
 - [ ] Procedimento de atendimento a pedidos de titulares (acesso, correção, exclusão).
 
 ## Acesso e segredos
-- [ ] Autenticação individual forte de operadores e papéis (ver documento de operação humana).
+- [ ] Autenticação individual forte de operadores e papéis. *(Fase 7: login individual Argon2id + RBAC implementados localmente; faltam 2FA/SSO e HTTPS.)*
 - [ ] Gerenciador de segredos para App Secret, Verify Token, token de acesso e chave de pseudonimização; rotação documentada.
 - [ ] Token Meta de usuário de sistema com permissões mínimas; nunca token temporário.
 - [ ] Acesso ao servidor e ao banco restrito e auditado.
@@ -45,12 +45,15 @@ habilitados do salão e da agência.
 
 ## Custos
 - [ ] Limites de mensagens/mês e alerta. Mensagens de serviço são cobradas desde 01/10/2026 após 1.000/mês por número (conferir tabela vigente).
-- [ ] Orçamento aprovado para IA real (quando autorizada), com limite por conversa.
+- [ ] Orçamento aprovado para IA real (quando autorizada), com limite por conversa. *(Fase 8: limites diários de requisições e de custo estimado implementados; valores pendentes.)*
+- [ ] Tarifas do modelo reconfirmadas na fonte oficial e `ai/pricing.json` atualizado com data.
 
 ## Produto
 - [ ] Dados oficiais do salão aprovados (serviços, preços, horários, endereço, profissionais, políticas, link Booksy).
 - [ ] Textos finais aprovados (sem rótulos de simulação).
-- [ ] Operação humana real (inbox, notificação, autenticação).
+- [ ] Operação humana real. *(Fase 7: painel local implementado e testado; falta notificação externa, validação com a equipe e implantação segura.)*
 - [ ] Homologação Meta (Fase 6B) concluída com evidências.
-- [ ] Avaliação de modelo generativo real (se adotado) com testes adversariais.
+- [ ] Avaliação de modelo generativo real (se adotado) com testes adversariais. *(Fase 8: módulo `evaluation` pronto; executado só com provedores simulados.)*
+- [ ] Condições de `IA_GENERATIVA.md` §7 cumpridas (autorização, LGPD, segredo, trava de código revisada).
+- [ ] Retenção de dados no provedor de IA e transferência internacional avaliadas juridicamente.
 - [ ] Aprovação explícita de go-live pelo responsável.

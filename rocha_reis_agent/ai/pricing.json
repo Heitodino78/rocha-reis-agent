@@ -1,0 +1,18 @@
+{
+  "currency": "USD",
+  "unit": "per_million_tokens",
+  "source": "Tabela de modelos da referência oficial claude-api (cache de 2026-11-03). Reconfirmar em https://platform.claude.com/docs/en/about-claude/pricing antes de qualquer ativação.",
+  "verified_at": "2026-11-03",
+  "status": "ESTIMATIVA — não é valor faturado; tarifas podem mudar",
+  "models": {
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.20},
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00, "cache_read": 0.10},
+    "claude-haiku-5-5": {"input": 0.10, "output": 0.50}
+  },
+  "notes": [
+    "Tokens de raciocínio (thinking) são cobrados como saída e entram em output_tokens.",
+    "Escrita em cache (5 min) custa cerca de 1,25x a entrada; sem tarifa confirmada aqui, é estimada como entrada x 1,25.",
+    "Haiku 5.5: preços acima valem até 100K tokens de entrada; cache_read não informado (estimado como entrada).",
+    "Modelo ausente desta tabela: custo NÃO estimado e o orçamento em dinheiro bloqueia a chamada."
+  ]
+}

@@ -82,11 +82,19 @@ def test_network_client_is_confined_to_the_disabled_graph_adapter():
     """Fase 5: só channels/graph_transport.py usa cliente HTTP, e ele não é carregado
     pela aplicação, pela CLI ou pelo worker enquanto a trava de ativação for falsa."""
     allowed = ROOT / "rocha_reis_agent" / "channels" / "graph_transport.py"
+    # Fase 8: a avaliação offline importa httpx2 SOMENTE para o transporte em memória
+    # (MockTransport). Nenhum cliente com transporte real; a execução bloqueia sockets
+    # (tests/test_evaluation.py::offline).
+    in_memory = ROOT / "rocha_reis_agent" / "evaluation" / "providers.py"
+    source = in_memory.read_text(encoding="utf-8")
+    used = set(re.findall(r"httpx2\.([A-Za-z_]+)", source))
+    assert used <= {"MockTransport", "Request", "Response"}, used
+    assert "base_url" not in source and "http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(" in source
     for path in (ROOT / "rocha_reis_agent").rglob("*.py"):
         source = path.read_text(encoding="utf-8")
         for forbidden in ("import httpx2", "import httpx\n", "import requests", "urllib.request", "http.client",
                           "import aiohttp", "socket.create_connection"):
-            if path != allowed:
+            if path != allowed and not (path == in_memory and forbidden == "import httpx2"):
                 assert forbidden not in source, (path.name, forbidden)
         if path != allowed:
             assert "graph.facebook.com" not in source

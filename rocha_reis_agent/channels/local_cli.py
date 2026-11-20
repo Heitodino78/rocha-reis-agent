@@ -24,8 +24,8 @@ from uuid import uuid4
 
 from rocha_reis_agent import config as config_module
 from rocha_reis_agent.bootstrap import (
-    build_agent, configured_channel, configured_dispatcher, configured_limits, configured_repository,
-    homologation_authorization, queue_policy,
+    build_agent, build_ai_provider, configured_channel, configured_dispatcher, configured_knowledge, configured_limits,
+    configured_repository, homologation_authorization, queue_policy,
 )
 from rocha_reis_agent.channels.contracts import ChannelError
 from rocha_reis_agent.observability import configure_private_log
@@ -94,11 +94,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"webhook: HTTP {response.status_code}")
         elif args.command == "work":
             root = Path(__file__).resolve().parents[2]
+            knowledge_repository = configured_knowledge(settings, repository)
             knowledge = (load_synthetic_catalog(root / "fixtures" / "salon.versioned.synthetic.json")
-                         if args.fixture else KnowledgeBase())
+                         if args.fixture and knowledge_repository is None else KnowledgeBase())
             agent = build_agent(knowledge, configured_limits(settings), prompt_version=settings.ai_prompt_version,
                                 ai_history_limit=settings.ai_history_limit,
-                                ai_timeout_seconds=settings.ai_timeout_seconds, conversation_repository=repository)
+                                ai_timeout_seconds=settings.ai_timeout_seconds, conversation_repository=repository,
+                                knowledge_repository=knowledge_repository,
+                                provider=build_ai_provider(settings, repository))
             transport = FakeWhatsAppTransport(args.behavior)
             policy = queue_policy(settings)
             # Em homologação, a guarda (allowlist, limites, período) é obrigatória mesmo no fake.

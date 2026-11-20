@@ -32,6 +32,17 @@ class LeaseLost(StorageError):
     """O item foi reivindicado por outro worker; a tentativa inteira é descartada."""
 
 
+class AssignmentLost(StorageError):
+    """O operador perdeu a responsabilidade pela conversa antes do commit."""
+
+
+@dataclass(frozen=True, slots=True)
+class ContactWindow:
+    business_number_id: str
+    recipient: Sender = field(repr=False)
+    last_inbound_at: datetime
+
+
 def iso(value: datetime) -> str:
     """Formato fixo e ordenável lexicograficamente (UTC, microssegundos)."""
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -186,6 +197,15 @@ class SQLiteChannelStore:
 
         def effect(connection: sqlite3.Connection) -> None:
             self._complete(connection, item.id, worker, "DONE", outcome, now, redact=True)
+            if item.payload.get("wa_id") or item.payload.get("user_id"):
+                # Endereço e janela da última mensagem do cliente (resposta humana futura).
+                connection.execute(
+                    "INSERT INTO channel_contacts(conversation_id,business_number_id,recipient,last_inbound_at,updated_at) "
+                    "VALUES(?,?,?,?,?) ON CONFLICT(conversation_id) DO UPDATE SET recipient=excluded.recipient,"
+                    "business_number_id=excluded.business_number_id,"
+                    "last_inbound_at=max(last_inbound_at,excluded.last_inbound_at),updated_at=excluded.updated_at",
+                    (conversation_id, item.business_number_id, recipient, window, now),
+                )
             if reply is None:
                 return
             too_long = len(reply) > 4096
@@ -197,6 +217,51 @@ class SQLiteChannelStore:
                  event_id, state.value, "{}" if too_long else recipient, "" if too_long else reply, window,
                  "FAILED" if too_long else "PENDING", "body_too_long" if too_long else None, now, now, now),
             )
+
+        self.repository.stage_effect(effect)
+
+    def contact_window(self, conversation_id: str) -> ContactWindow | None:
+        with self.repository.read() as connection:
+            row = connection.execute("SELECT * FROM channel_contacts WHERE conversation_id=?", (conversation_id,)).fetchone()
+        if row is None:
+            return None
+        recipient = json.loads(row["recipient"])
+        if not (recipient.get("wa_id") or recipient.get("user_id")):
+            return None
+        return ContactWindow(row["business_number_id"], Sender(wa_id=recipient.get("wa_id"), user_id=recipient.get("user_id")),
+                             parse_iso(row["last_inbound_at"]))
+
+    def operator_message(self, idempotency_key: str) -> dict[str, object] | None:
+        with self.repository.read() as connection:
+            row = connection.execute("SELECT id,conversation_id,operator_user_id,status FROM channel_outbox "
+                                     "WHERE idempotency_key=?", (idempotency_key,)).fetchone()
+            return dict(row) if row else None
+
+    def stage_operator_message(
+        self, *, operation_id: str, idempotency_key: str, conversation_id: str, session_id: str,
+        operator_user_id: str, body: str, contact: ContactWindow,
+    ) -> None:
+        """Encenar, no commit da conversa, a resposta humana na outbox (origem operador).
+
+        Reconfere no próprio commit que o operador continua responsável pela conversa.
+        """
+        now = iso(self.clock())
+        recipient = _json({"wa_id": contact.recipient.wa_id, "user_id": contact.recipient.user_id})
+
+        def effect(connection: sqlite3.Connection) -> None:
+            row = connection.execute("SELECT user_id FROM panel_assignments WHERE conversation_id=?",
+                                     (conversation_id,)).fetchone()
+            if row is None or row["user_id"] != operator_user_id:
+                raise AssignmentLost("Responsabilidade pela conversa mudou; mensagem não registrada.")
+            connection.execute(
+                "INSERT INTO channel_outbox(id,channel,business_number_id,conversation_id,session_id,source_inbox_id,"
+                "source_event_id,required_state,recipient,body,window_opened_at,status,attempts,next_attempt_at,"
+                "created_at,updated_at,origin,operator_user_id,idempotency_key) "
+                "VALUES(?,?,?,?,?,NULL,NULL,'HUMAN_ACTIVE',?,?,?,'PENDING',0,?,?,?,'operator',?,?)",
+                (operation_id, self.channel, contact.business_number_id, conversation_id, session_id, recipient, body,
+                 iso(contact.last_inbound_at), now, now, now, operator_user_id, idempotency_key),
+            )
+            self._bump(connection, "operator_messages_queued")
 
         self.repository.stage_effect(effect)
 
@@ -301,8 +366,10 @@ class SQLiteChannelStore:
             )
             while True:
                 row = connection.execute(
-                    "SELECT o.*, c.state AS current_state, c.session_id AS current_session, c.retired "
-                    "FROM channel_outbox AS o LEFT JOIN conversations AS c ON c.id=o.conversation_id "
+                    "SELECT o.*, c.state AS current_state, c.session_id AS current_session, c.retired, "
+                    "a.user_id AS assigned_user FROM channel_outbox AS o "
+                    "LEFT JOIN conversations AS c ON c.id=o.conversation_id "
+                    "LEFT JOIN panel_assignments AS a ON a.conversation_id=o.conversation_id "
                     "WHERE o.status IN ('PENDING','RETRY') AND o.next_attempt_at<=? AND NOT EXISTS ("
                     "SELECT 1 FROM channel_outbox AS p WHERE p.conversation_id=o.conversation_id "
                     "AND p.rowid<o.rowid AND p.status IN ('PENDING','RETRY','SENDING')) "
@@ -325,6 +392,9 @@ class SQLiteChannelStore:
                     has_body=bool(row["body"]),
                 ))
                 reason = None if decision.allowed else decision.reason
+                if reason is None and row["origin"] == "operator" and row["assigned_user"] != row["operator_user_id"]:
+                    # Resposta humana só sai enquanto o autor continua responsável pela conversa.
+                    reason = "operator_assignment_changed"
                 ledger_hash = None
                 if reason is None and guard is not None:
                     sender = Sender(wa_id=recipient.get("wa_id"), user_id=recipient.get("user_id"))

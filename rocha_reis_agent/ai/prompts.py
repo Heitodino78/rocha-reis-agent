@@ -13,7 +13,9 @@ class PromptVersion(Record):
     objective: Text
     instructions: tuple[Text, ...] = Field(min_length=1, max_length=16)
     changes: tuple[Text, ...] = Field(min_length=1, max_length=20)
-    output_contract: str = Field(pattern=r"^ai-response-v1$")
+    output_contract: str = Field(pattern=r"^ai-response-v[12]$")
+    # Fase 8: data de criação registrada no próprio arquivo (opcional nas versões antigas).
+    created: Text | None = None
 
 
 class PromptManifest(Record):

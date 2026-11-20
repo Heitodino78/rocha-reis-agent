@@ -1,0 +1,7 @@
+# Testes de navegador do painel (Fase 7). NÃO faz parte do runtime nem do requirements.lock.
+# Instalar num venv separado, depois do requirements.lock:
+#   python3 -m venv /tmp/rocha-reis-e2e-venv
+#   /tmp/rocha-reis-e2e-venv/bin/pip install --require-hashes -r requirements.lock
+#   /tmp/rocha-reis-e2e-venv/bin/pip install -r requirements-e2e.txt
+#   /tmp/rocha-reis-e2e-venv/bin/python -m playwright install chromium-headless-shell
+playwright==1.65.2

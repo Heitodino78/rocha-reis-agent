@@ -3,6 +3,10 @@ fastapi>=0.115,<1
 pydantic>=2.9,<3
 pydantic-settings>=2.6,<3
 uvicorn>=0.32,<1
+# Fase 7: hash de senha Argon2id do painel (biblioteca consolidada; sem criptografia própria).
+argon2-cffi>=25.1,<26
+# Fase 8: SDK oficial Anthropic para o adaptador generativo (DESATIVADO por trava de código).
+anthropic>=2.11,<3
 
 # httpx2: transporte do TestClient do Starlette e cliente do adaptador Graph API
 # (channels/graph_transport.py, desativado). Mesma versão travada; nenhum pacote novo.

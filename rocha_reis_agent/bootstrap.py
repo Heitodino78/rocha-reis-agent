@@ -51,10 +51,14 @@ def build_agent(
     *, provider: AIProvider | None = None, prompt_version: str | None = None,
     ai_history_limit: int = 4, ai_timeout_seconds: float = 2.0,
     conversation_repository: ConversationRepository | None = None,
+    knowledge_repository: object | None = None,
 ) -> AgentService:
     value = knowledge if knowledge is not None else KnowledgeBase()
     repository = VersionedKnowledgeRepository(value) if isinstance(value, KnowledgeCatalog) else InMemoryKnowledgeRepository(value)
-    if isinstance(conversation_repository, SQLiteConversationRepository):
+    if knowledge_repository is not None:
+        # Fase 8: conhecimento no banco (revisões aprovadas pelo painel); sem vínculo por hash de arquivo.
+        repository = knowledge_repository  # type: ignore[assignment]
+    elif isinstance(conversation_repository, SQLiteConversationRepository):
         catalog = value if isinstance(value, KnowledgeCatalog) else legacy_synthetic_catalog(value)
         conversation_repository.bind_knowledge(catalog.model_dump_json())
     return AgentService(
@@ -142,3 +146,38 @@ def build_transport(settings: Settings, *, http_transport: object | None = None)
         read_timeout_seconds=settings.whatsapp_send_timeout_seconds,
     )
     return GraphAPITransport(config, build_client(http_transport))  # type: ignore[arg-type]
+
+
+def configured_knowledge(settings: Settings, repository: ConversationRepository):  # type: ignore[no-untyped-def]
+    """Conhecimento no banco (Fase 8) ou None para o modo de arquivo/fixture existente."""
+    if settings.knowledge_source != "database":
+        return None
+    from rocha_reis_agent.persistence.sqlite_knowledge import SQLiteKnowledgeRepository
+    assert isinstance(repository, SQLiteConversationRepository)
+    return SQLiteKnowledgeRepository(repository)
+
+
+def build_ai_provider(settings: Settings, repository: ConversationRepository, *, http_client: object | None = None):  # type: ignore[no-untyped-def]
+    """None = FakeAIProvider (padrão). O real exige a trava de código E configuração validada."""
+    if settings.ai_provider == "fake":
+        return None
+    if not config_module.AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED:
+        raise ValueError("Provedor de IA real não autorizado nesta fase.")
+    from rocha_reis_agent.ai.prompts import PromptRegistry
+    if PromptRegistry().get(settings.ai_prompt_version).output_contract != "ai-response-v2":
+        raise ValueError("Provedor real exige versão de prompt com contrato ai-response-v2.")
+    # Importação tardia: o SDK só é carregado quando a IA real é autorizada.
+    import anthropic
+    from rocha_reis_agent.ai.anthropic_provider import AnthropicConfig, AnthropicProvider
+    from rocha_reis_agent.persistence.sqlite_ai import SQLiteUsageLedger
+
+    assert settings.ai_api_key is not None and isinstance(repository, SQLiteConversationRepository)
+    client = anthropic.Anthropic(api_key=settings.ai_api_key.get_secret_value(), max_retries=settings.ai_max_retries,
+                                 timeout=settings.ai_timeout_seconds, http_client=http_client)  # type: ignore[arg-type]
+    config = AnthropicConfig(
+        model=settings.ai_model, max_output_tokens=settings.ai_max_output_tokens, effort=settings.ai_effort,
+        max_retries=settings.ai_max_retries, refusal_fallback=settings.ai_refusal_fallback,
+        max_concurrency=settings.ai_max_concurrency, max_requests_per_day=settings.ai_max_requests_per_day,
+        max_cost_usd_per_day=settings.ai_max_cost_usd_per_day, max_input_chars=settings.ai_max_input_chars,
+    )
+    return AnthropicProvider(config, client, SQLiteUsageLedger(repository))

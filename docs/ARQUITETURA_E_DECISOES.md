@@ -298,3 +298,41 @@ durável") para o canal WhatsApp.
 | ADR-058 | Interrupção emergencial persistida (`channel_control`), auditada, válida em todos os ambientes; `CHANNEL_DISPATCH_HALTED` só interrompe | Retomada exige `RESUME_DISPATCH` |
 | ADR-059 | Métricas em `channel_metrics` + agregados derivados; rastreamento por IDs técnicos; log privado 0600 com campos permitidos | Sem PII (testado) |
 | ADR-060 | Graph API v26.0 mantida; v27.0 citada no guia sem changelog acessível → reavaliar na 6B | Página de versões consultada em 19/11/2026 |
+
+
+## Painel de atendimento humano — Fase 7
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-061 | Painel em app FastAPI separada do webhook; mesmo SQLite como fonte única | Rotas cruzadas inexistentes (testado nos dois sentidos) |
+| ADR-062 | Frontend em JS puro (ES modules) + CSS, sem build/npm; CSP `'self'` sem inline; DOM só por `textContent` | XSS testado em Chromium real |
+| ADR-063 | Senhas Argon2id (`argon2-cffi`); sessões com token aleatório (só hash no banco); CSRF derivado por HMAC + Origin | Força bruta 5/15 min por login e IP |
+| ADR-064 | RBAC ADMIN/OPERATOR no backend; visibilidade no SQL (fila sem responsável + próprias para OPERATOR) | Inexistente e proibido respondem 404 |
+| ADR-065 | Ações humanas via ConversationManager (versão otimista) com atribuição/outbox/auditoria no mesmo commit; `VerifiedOperator` substitui `operador-local` no painel | Corridas de assumir/transferir/responder testadas |
+| ADR-066 | Outbox reconstruída (migração 6) para `origin=operator` com chave de idempotência; claim cancela se o responsável mudou | Migração 5→6 real testada; FKs conferidas |
+| ADR-067 | `channel_contacts`: endereço e última mensagem do cliente por conversa (janela da resposta humana); removido em exclusão/anonimização | Minimização: nunca exibido no painel |
+| ADR-068 | Tempo real por SSE + `change_log` por triggers; stream só com IDs visíveis; reconexão por `Last-Event-ID`; rotação 60 s | Sem estado em memória como fonte de verdade |
+| ADR-069 | Auditoria do painel somente inclusão (triggers abortam UPDATE/DELETE) | Retenção da auditoria a definir |
+| ADR-070 | Migrações com `sqlite3.complete_statement` e procedimento oficial de reconstrução (FKs off + `foreign_key_check`) | Triggers suportados |
+
+
+## IA generativa, conhecimento aprovado e avaliações — Fase 8
+
+Referência técnica completa em [`IA_GENERATIVA.md`](IA_GENERATIVA.md); evidências em
+[`STATUS_FASE_8.md`](STATUS_FASE_8.md). O ADR-017 ("aceitar apenas AI_PROVIDER=fake")
+passa a valer como **efeito da trava de código** do ADR-073: `anthropic` existe na
+configuração, mas é recusado enquanto a trava for `False`.
+
+| ID | Decisão | Evidência/limite |
+|---|---|---|
+| ADR-071 | Provedor inicial **Anthropic** (SDK oficial `anthropic` 2.11, já no lock, sobre `httpx2`); modelo configurável, padrão `claude-opus-5-5`; sem segundo SDK (OpenAI não implementado) | Parâmetros conferidos na referência oficial (20/11/2026): sem `temperature`, `effort` em `output_config`, `fallbacks: "default"`; Haiku 5.5 exige fallback desligado |
+| ADR-072 | Contrato `ai-response-v2`: o modelo classifica e propõe só uma abertura cordial; **todos os fatos são montados pelo backend**; abertura sanitizada por regras e descartada ao menor sinal factual | Modelo hostil simulado: 0 violações; aberturas maliciosas descartadas sem perder a resposta |
+| ADR-073 | Trava `AI_REAL_PROVIDER_ACTIVATION_AUTHORIZED=False` independente das travas Meta; SDK importado só quando autorizado; chave sozinha nunca ativa | Testes cruzados: abrir uma trava não abre a outra |
+| ADR-074 | Prompt `v2` registrado e **inativo**; `v1` segue ativo no manifesto; troca só por configuração confiável (`AI_PROMPT_VERSION`) e comparação pela avaliação | `test_fake_provider_unchanged_for_v1_and_offline` |
+| ADR-075 | Recuperação **determinística** por intenção/serviço; sem embeddings nem banco vetorial | Catálogo ≤128 registros ativos e estruturado; RAG vetorial só se o volume/forma mudar |
+| ADR-076 | Conhecimento no SQLite (`knowledge_revisions`, somente inclusão, escopo SYNTHETIC/OFFICIAL fixado uma vez); rascunho → aprovação → revogação pelo painel, só ADMIN; opção de aprovador distinto | Os mesmos validadores da Fase 2 rodam a cada inclusão; conflito de preço aprovado é impossível |
+| ADR-077 | Consumo em `ai_usage` (só metadados); orçamento diário por requisições e custo **estimado**; modelo sem tarifa bloqueia; gravação independente da conversa | Estimativa ≠ fatura |
+| ADR-078 | Minimização antes do provedor externo (telefone, e-mail, CPF/CNPJ, dígitos longos) e nenhum identificador interno no pedido | Nomes e dados livres não são removidos: decisão jurídica pendente |
+| ADR-079 | Avaliação offline (`rocha_reis_agent/evaluation`): cenários A–T sobre o núcleo real, oráculo de segurança **independente** do validador, modelo hostil em rodízio, adaptador real sobre HTTP simulado; resultados por provedor/prompt em `evals/results/` | Teste de mutação: validador quebrado → oráculo acusa |
+| ADR-080 | Detector de regras: pedido humano inclui "falar com alguém", recusa ao robô e reclamação explícita; negação só anula quando nega diretamente a pessoa; pedido de confirmação de agenda vira orientação Booksy; `valor` reconhecido como preço | Falhas encontradas pela avaliação; casos difíceis restantes documentados |
+| ADR-081 | Resposta do operador: se as retentativas de conflito do SQLite se esgotam, a chave de idempotência é conferida antes de devolver erro | Corrige falha intermitente do clique quádruplo (Fase 7) |

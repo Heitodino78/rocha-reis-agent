@@ -9,7 +9,10 @@ from rocha_reis_agent.ai.context import build_request
 from rocha_reis_agent.ai.contracts import AIProvider, AIProviderError, AIProviderTimeout, AIValidationError
 from rocha_reis_agent.ai.fake import FakeAIProvider
 from rocha_reis_agent.ai.prompts import PromptRegistry
-from rocha_reis_agent.ai.validation import parse_response, response_detection, validate_candidate
+from rocha_reis_agent.ai.validation import (
+    compose_reply, parse_response, parse_response_v2, response_detection, sanitize_preface, validate_candidate,
+    validate_structure_v2,
+)
 from rocha_reis_agent.application.conversations import ConversationManager
 from rocha_reis_agent.application.handoff import HandoffAction, HumanHandoffManager
 from rocha_reis_agent.application.ports import IntentDetector, KnowledgeRepository
@@ -19,7 +22,7 @@ from rocha_reis_agent.domain.contracts import (
     SimulationError, normalize_message,
 )
 from rocha_reis_agent.domain.conversations import Conversation, HistoryEntry, utc_now
-from rocha_reis_agent.responses import ResponseGenerator
+from rocha_reis_agent.responses import SYNTHETIC_LABEL, ResponseGenerator
 from rocha_reis_agent.knowledge_projection import authorize_knowledge
 
 logger = logging.getLogger("rocha_reis_agent")
@@ -103,7 +106,9 @@ class AgentService:
                             history_limit=self.ai_history_limit,
                         )
                         provider = self.provider if self.provider is not None else FakeAIProvider(self.detector)
-                        response = parse_response(provider.generate(request, timeout_seconds=self.ai_timeout_seconds))
+                        raw = provider.generate(request, timeout_seconds=self.ai_timeout_seconds)
+                        v2 = request.output_contract == "ai-response-v2"
+                        response = parse_response_v2(raw) if v2 else parse_response(raw)
                         available = {fact.reference.key for fact in request.facts}
                         cited = {ref.key for ref in response.fact_references}
                         if not cited <= available or (
@@ -121,7 +126,16 @@ class AgentService:
                             raise AIValidationError("Proposta diverge do escopo autorizado da consulta.")
                         detection = self._context(conversation, detection)
                         reply = self.responses.render(detection, knowledge.base)
-                        validate_candidate(response, detection, knowledge, reply)
+                        if v2:
+                            # Fatos SEMPRE do backend; só a abertura cordial pode vir do modelo.
+                            validate_structure_v2(response, detection, knowledge)  # type: ignore[arg-type]
+                            preface, rejected = sanitize_preface(response.preface, knowledge)  # type: ignore[union-attr]
+                            if rejected:
+                                logger.warning("ai_preface_rejected", extra={"failure_kind": rejected})
+                            label = SYNTHETIC_LABEL if knowledge.base.synthetic else "[SIMULAÇÃO LOCAL] "
+                            reply = compose_reply(reply, preface, label)
+                        else:
+                            validate_candidate(response, detection, knowledge, reply)  # type: ignore[arg-type]
                         if authorize_knowledge(self.knowledge.get()).facts != knowledge.facts:
                             raise AIValidationError("Conhecimento mudou durante a consulta.")
                         if response.human_handoff_suggested:

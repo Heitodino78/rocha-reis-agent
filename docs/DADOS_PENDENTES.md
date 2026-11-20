@@ -52,6 +52,14 @@
 - [ ] Túnel/infraestrutura HTTPS aprovados para expor o webhook temporariamente.
 - [ ] Confirmar v27.0 vs v26.0 e a tabela de preços vigente.
 
+## Painel de atendimento (Fase 7)
+
+- [ ] Quem terá acesso (nomes e papéis ADMIN/ATENDENTE) e quem é o administrador responsável.
+- [ ] Atendentes devem ver conversas automáticas? Podem retomar a automação? (hoje: não e não).
+- [ ] Como avisar a equipe de um novo pedido de atendimento (som, push, e-mail) e em quais horários.
+- [ ] Retenção da auditoria do painel e de quem pode consultá-la.
+- [ ] Validação de usabilidade com funcionários reais (sem dados reais de clientes).
+
 ## Booksy
 
 - [x] O salão utiliza Booksy.
@@ -63,3 +71,37 @@
 ## Condição para uso de dados reais
 
 Antes de importar conversas, telefones ou cadastro de clientes: obter autorização do responsável e definir finalidade, acesso, retenção e segurança adequados. Antes de comercializar/implantar, verificar as condições jurídicas aplicáveis à prestação do serviço e à responsabilidade pelo tratamento dos dados.
+
+## IA generativa (Fase 8)
+
+- [ ] Autorização para usar provedor de IA externo, com fornecedor escolhido (Anthropic implementado; outro exige novo adaptador).
+- [ ] Orçamento mensal e limites diários (`AI_MAX_REQUESTS_PER_DAY`, `AI_MAX_COST_USD_PER_DAY`).
+- [ ] Avaliação jurídica: retenção e uso para treinamento pelo provedor, transferência internacional, contrato de tratamento, aviso ao cliente sobre IA.
+- [ ] Decisão sobre minimização: nomes e dados livres digitados pelos clientes hoje não são removidos antes do envio.
+- [ ] Quem cria e guarda a chave de API (gerenciador de segredos) e quem autoriza a troca da trava de código.
+- [ ] Modelo e nível de esforço escolhidos após medição real (Opus 5.5 / Sonnet 5.5 / Haiku 5.5).
+- [ ] Ativação do prompt `v2` (hoje registrado e inativo) após avaliação com o modelo escolhido.
+
+## Checklist de coleta junto ao Salão Rocha Reis (para a base de conhecimento)
+
+> Nada abaixo existe ainda como dado oficial. Fixtures (`fixtures/`, `evals/`) são
+> fictícias e **nunca** contam como confirmação. Cada item entra no painel como
+> rascunho, com a **origem** registrada, e só vale depois de aprovado por um
+> administrador do salão (base com escopo OFFICIAL).
+
+| Categoria | O que pedir | Formato para o cadastro | Quem confirma |
+|---|---|---|---|
+| Identidade | Nome público exato e como o assistente deve se apresentar | Texto (até 240 caracteres) | Proprietária |
+| Endereço | Endereço completo e ponto de referência | Texto | Proprietária |
+| Horário | Dias e horários de funcionamento, feriados e exceções | Texto | Gerência |
+| Serviços | Lista de serviços com nome, outros nomes usados pelos clientes (ex.: "mechas" = luzes) e descrição curta | Um registro por serviço | Gerência |
+| Preços | Valor por serviço; se variar (comprimento, avaliação, profissional), a condição exata; data de vigência | Um registro por serviço, valor + condição | Proprietária |
+| Profissionais | Quem atende e quais serviços (se for para divulgar) | Lista | Proprietária + consentimento de cada profissional |
+| Políticas | Pagamento, atraso/tolerância, crianças, acompanhantes etc. | Lista de frases aprovadas | Gerência |
+| Cancelamento | Prazo, multa (se houver), como cancelar | Lista | Proprietária |
+| FAQ | As 10–20 perguntas mais comuns e a resposta aprovada de cada | Pergunta(s) + resposta | Recepção + gerência |
+| Booksy | Link oficial do perfil, testado em celular | URL `https://…booksy.com/…` | Proprietária |
+| Complementares | Promoções vigentes (com validade), estacionamento, acessibilidade | Somente se forem divulgadas oficialmente | Gerência |
+
+Pendências que a interface mostra automaticamente: categorias sem registro aprovado
+e serviços sem preço aprovado (seção **Conhecimento** → Pendências).

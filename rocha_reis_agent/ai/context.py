@@ -44,7 +44,7 @@ def build_request(
         facts=tuple(AuthorizedFact(reference=f.reference, data=f.data) for f in knowledge.facts if f.reference.key in selected),
         scope=KnowledgeScope.SYNTHETIC if knowledge.base.synthetic else KnowledgeScope.OFFICIAL,
         prompt_version=prompt.version, objective=prompt.objective,
-        system_instructions=prompt.instructions,
+        system_instructions=prompt.instructions, output_contract=prompt.output_contract,
     )
 
 

@@ -45,7 +45,7 @@ class AIRequest(AIModel):
     prompt_version: str = Field(pattern=r"^v[1-9][0-9]*$")
     objective: str = Field(max_length=240, repr=False)
     system_instructions: tuple[str, ...] = Field(min_length=1, max_length=16, repr=False)
-    output_contract: Literal["ai-response-v1"] = "ai-response-v1"
+    output_contract: Literal["ai-response-v1", "ai-response-v2"] = "ai-response-v1"
     backend_policy: Literal["backend-v1"] = "backend-v1"
 
     @model_validator(mode="after")
@@ -70,9 +70,32 @@ class AIResponse(AIModel):
     human_handoff_suggested: bool = Field(strict=True)
 
 
+class AIResponseV2(AIModel):
+    """Contrato v2 (Fase 8): o modelo CLASSIFICA e pode propor uma abertura curta.
+
+    Não há texto factual livre: preços, horários, endereço, serviços, políticas e o
+    link Booksy são montados pelo backend a partir dos registros aprovados. A
+    abertura (`preface`) passa por validação determinística e é descartada se
+    contiver qualquer afirmação factual ou compromisso.
+    """
+
+    contract: Literal["ai-response-v2"]
+    intents: tuple[Intent, ...] = Field(min_length=1, max_length=12)
+    service_ids: tuple[Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")], ...] = Field(max_length=20)
+    use_context: bool = Field(strict=True)
+    catalog_requested: bool = Field(strict=True)
+    faq_reference: FactReference | None
+    fact_references: tuple[FactReference, ...] = Field(max_length=128)
+    needs_clarification: bool = Field(strict=True)
+    human_handoff_suggested: bool = Field(strict=True)
+    # Opinião do modelo; o backend decide com base nos registros aprovados.
+    information_missing: bool = Field(strict=True)
+    preface: str | None = Field(default=None, max_length=240, repr=False)
+
+
 class AIProvider(Protocol):
     def generate(
         self, request: AIRequest, *, timeout_seconds: float
-    ) -> AIResponse | dict[str, object] | str:
+    ) -> AIResponse | AIResponseV2 | dict[str, object] | str:
         """Retornar proposta ou falhar; adaptadores reais devem impor o timeout."""
         ...
