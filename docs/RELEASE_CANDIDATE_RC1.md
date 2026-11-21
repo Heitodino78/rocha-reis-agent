@@ -3,10 +3,11 @@
 **Versão candidata à homologação interna e aos testes com o salão. NÃO é versão de produção.**
 Funciona só nesta máquina (127.0.0.1), com dados fictícios, IA e WhatsApp simulados.
 
-> **Atualização (Fase 15):** a candidata em uso é **`0.14.0rc1.post1`**, congelada no manifesto
-> `docs/homologacao/RC1_MANIFESTO.json` (impressão digital `92597a901d64a153`, 278 arquivos). Confira
-> com `python -m rocha_reis_agent.ops verificar-rc`. Diferenças e resultados em
-> `RELATORIO_PRONTIDAO_RC1.md`. A tabela abaixo é o registro original da Fase 14.
+> **Atualização (Fase 16):** a candidata em uso é **`0.14.0rc1.post2`** (redesign do painel e correções
+> da auditoria), congelada no manifesto `docs/homologacao/RC1_MANIFESTO.json`. Confira com
+> `python -m rocha_reis_agent.ops verificar-rc`. Diferenças e resultados em
+> `RELATORIO_PRONTIDAO_RC1.md`. Histórico: `0.14.0rc1.post1` (Fase 15, impressão `92597a901d64a153`).
+> A tabela abaixo é o registro original da Fase 14.
 
 ## 1. Identificação (registrada em 20/11/2026)
 

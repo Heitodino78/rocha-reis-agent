@@ -25,12 +25,14 @@
       <input id="password-input" name="password" type="password" autocomplete="current-password" required maxlength="128">
       <p id="login-error" class="form-error" role="alert"></p>
       <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+      <p class="auth-foot">Salão Rocha Reis · acesso restrito à equipe</p>
     </form>
   </section>
 
   <!-- Segunda etapa do login (Fase 13): código do aplicativo autenticador ou de recuperação -->
   <section id="mfa-view" class="auth-view" hidden>
     <form id="mfa-form" class="auth-card" novalidate>
+      <p class="brand-mark" aria-hidden="true">RR</p>
       <h1>Verificação em duas etapas</h1>
       <p class="muted" id="mfa-hint">Abra o aplicativo autenticador do seu celular e digite o código de 6 números.</p>
       <div id="mfa-code-block">
@@ -52,6 +54,7 @@
   <!-- Cadastro obrigatório do segundo fator (política do ambiente) -->
   <section id="mfa-setup-view" class="auth-view" hidden>
     <div class="auth-card" id="mfa-setup-host">
+      <p class="brand-mark" aria-hidden="true">RR</p>
       <h1>Ative a verificação em duas etapas</h1>
       <p class="muted">Neste ambiente ela é obrigatória para acessar o painel.</p>
       <button type="button" class="btn btn-ghost btn-block" data-action="logout">Sair</button>
@@ -90,6 +93,7 @@
   <!-- Troca obrigatória de senha -->
   <section id="password-view" class="auth-view" hidden>
     <form id="password-form" class="auth-card" novalidate>
+      <p class="brand-mark" aria-hidden="true">RR</p>
       <h1>Defina sua senha</h1>
       <p class="muted">Sua senha é temporária. Escolha uma nova com pelo menos 12 caracteres.</p>
       <label for="current-password">Senha atual</label>
@@ -108,44 +112,61 @@
   <div id="app-view" class="shell" hidden>
     <header class="topbar">
       <button type="button" class="icon-btn menu-toggle" id="menu-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Abrir menu">☰</button>
-      <span class="brand"><span class="brand-mark small" aria-hidden="true">RR</span> Atendimento</span>
+      <span class="brand"><span class="brand-mark small" aria-hidden="true">RR</span><span class="brand-text">Rocha Reis<small>Atendimento</small></span></span>
       <span id="connection" class="connection" data-state="connecting" role="status">Conectando…</span>
       <button type="button" class="icon-btn notif-toggle" data-notif-toggle aria-controls="notif-panel" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="visually-hidden">Avisos</span><span class="notif-count" data-notif-count></span></button>
     </header>
 
     <nav id="sidebar" class="sidebar" aria-label="Navegação principal">
       <div class="sidebar-head">
-        <span class="brand"><span class="brand-mark small" aria-hidden="true">RR</span> Atendimento</span>
+        <span class="brand"><span class="brand-mark small" aria-hidden="true">RR</span><span class="brand-text">Rocha Reis<small>Atendimento</small></span></span>
         <span class="sidebar-status"><span id="connection-side" class="connection" data-state="connecting" aria-hidden="true">Conectando…</span>
         <button type="button" class="icon-btn notif-toggle" data-notif-toggle aria-controls="notif-panel" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="visually-hidden">Avisos</span><span class="notif-count" data-notif-count></span></button></span>
       </div>
-      <ul class="nav-list">
-        <li><button type="button" class="nav-item" data-view="overview">Visão geral</button></li>
-        <li><button type="button" class="nav-item" data-view="conversations" data-filter="all">Conversas</button></li>
-        <li><button type="button" class="nav-item" data-view="conversations" data-filter="waiting">Aguardando atendimento <span class="count" id="count-waiting" aria-label="conversas aguardando"></span></button></li>
-        <li><button type="button" class="nav-item" data-view="conversations" data-filter="mine">Meus atendimentos <span class="count" id="count-mine"></span></button></li>
-        <li><button type="button" class="nav-item" data-view="conversations" data-filter="auto">Automáticas</button></li>
-        <li class="admin-only"><button type="button" class="nav-item" data-view="conversations" data-filter="others">Com outros funcionários</button></li>
-        <li><button type="button" class="nav-item" data-view="conversations" data-filter="resolved">Encerradas</button></li>
-        <li class="admin-only"><button type="button" class="nav-item" data-view="team">Equipe</button></li>
-        <li class="admin-only"><button type="button" class="nav-item" data-view="audit">Auditoria</button></li>
-        <li class="admin-only"><button type="button" class="nav-item" data-view="knowledge">Conhecimento <span class="count" id="count-pending" aria-label="pendências de conhecimento"></span></button></li>
-        <li class="admin-only"><button type="button" class="nav-item" data-view="settings">Configurações</button></li>
-        <li><button type="button" class="nav-item" data-view="account">Minha conta</button></li>
-        <li><button type="button" class="nav-item" data-view="help">Ajuda</button></li>
-        <li class="admin-only"><button type="button" class="nav-item" data-view="system">Sistema <span class="count danger" id="count-system" aria-label="alertas do sistema"></span></button></li>
-      </ul>
+      <div class="nav-group">
+        <p class="nav-heading" id="nav-heading-service">Atendimento</p>
+        <ul class="nav-list" aria-labelledby="nav-heading-service">
+          <li><button type="button" class="nav-item" data-view="overview"><span class="nav-label">Visão geral</span></button></li>
+          <li><button type="button" class="nav-item" data-view="conversations" data-filter="all"><span class="nav-label">Conversas</span></button></li>
+          <li><button type="button" class="nav-item" data-view="conversations" data-filter="waiting"><span class="nav-label">Aguardando atendimento</span> <span class="count" id="count-waiting" aria-label="conversas aguardando"></span></button></li>
+          <li><button type="button" class="nav-item" data-view="conversations" data-filter="mine"><span class="nav-label">Meus atendimentos</span> <span class="count" id="count-mine"></span></button></li>
+          <li><button type="button" class="nav-item" data-view="conversations" data-filter="auto"><span class="nav-label">Automáticas</span></button></li>
+          <li class="admin-only"><button type="button" class="nav-item" data-view="conversations" data-filter="others"><span class="nav-label">Com outros funcionários</span></button></li>
+          <li><button type="button" class="nav-item" data-view="conversations" data-filter="resolved"><span class="nav-label">Encerradas</span></button></li>
+        </ul>
+      </div>
+      <div class="nav-group admin-only">
+        <p class="nav-heading" id="nav-heading-admin">Gestão</p>
+        <ul class="nav-list" aria-labelledby="nav-heading-admin">
+          <li><button type="button" class="nav-item" data-view="knowledge"><span class="nav-label">Conhecimento</span> <span class="count" id="count-pending" aria-label="pendências de conhecimento"></span></button></li>
+          <li><button type="button" class="nav-item" data-view="team"><span class="nav-label">Equipe</span></button></li>
+          <li><button type="button" class="nav-item" data-view="audit"><span class="nav-label">Auditoria</span></button></li>
+          <li><button type="button" class="nav-item" data-view="settings"><span class="nav-label">Configurações</span></button></li>
+          <li><button type="button" class="nav-item" data-view="system"><span class="nav-label">Sistema</span> <span class="count danger" id="count-system" aria-label="alertas do sistema"></span></button></li>
+        </ul>
+      </div>
+      <div class="nav-group">
+        <p class="nav-heading" id="nav-heading-account">Conta</p>
+        <ul class="nav-list" aria-labelledby="nav-heading-account">
+          <li><button type="button" class="nav-item" data-view="account"><span class="nav-label">Minha conta</span></button></li>
+          <li><button type="button" class="nav-item" data-view="help"><span class="nav-label">Ajuda</span></button></li>
+        </ul>
+      </div>
       <div class="sidebar-foot">
-        <p class="user-chip"><span id="user-name"></span><span id="user-role" class="role-tag"></span></p>
+        <p class="user-chip"><span class="avatar" id="user-avatar" aria-hidden="true"></span><span class="user-meta"><span id="user-name"></span><span id="user-role" class="role-tag"></span></span></p>
         <button type="button" class="btn btn-ghost btn-block" data-action="logout">Sair</button>
       </div>
     </nav>
+    <div id="scrim" class="scrim" hidden></div>
 
     <main id="main" class="main" tabindex="-1">
       <p id="env-banner" class="env-banner" role="note" hidden></p>
       <!-- Visão geral -->
       <section id="overview-view" class="page" hidden aria-labelledby="overview-title">
-        <h2 id="overview-title">Visão geral</h2>
+        <header class="page-head">
+          <h2 id="overview-title">Visão geral</h2>
+          <p class="muted">O que precisa da equipe agora e como está o atendimento.</p>
+        </header>
         <div id="overview-attention" class="panel-card attention" aria-live="polite">
           <h3>Precisa de atenção</h3>
           <ul id="attention-list" class="plain-list"></ul>
@@ -215,31 +236,38 @@
 
       <!-- Equipe -->
       <section id="team-view" class="page" hidden aria-labelledby="team-title">
-        <h2 id="team-title">Equipe</h2>
-        <form id="user-form" class="panel-card form-grid" novalidate>
-          <h3>Novo funcionário</h3>
-          <label for="new-login">Login</label>
-          <input id="new-login" required maxlength="64" autocapitalize="none" spellcheck="false">
-          <label for="new-name">Nome de exibição</label>
-          <input id="new-name" required maxlength="80">
-          <label for="new-role">Papel</label>
-          <select id="new-role"><option value="OPERATOR">Atendente</option><option value="ADMIN">Administrador</option></select>
-          <label for="new-user-password">Senha temporária</label>
-          <input id="new-user-password" type="password" required minlength="12" maxlength="128" autocomplete="new-password">
-          <p class="muted small">A pessoa deverá trocar a senha no primeiro acesso.</p>
-          <p id="user-error" class="form-error" role="alert"></p>
-          <button type="submit" class="btn btn-primary">Criar acesso</button>
-        </form>
-        <div class="table-wrap"><table class="data-table" aria-label="Funcionários">
-          <thead><tr><th scope="col">Nome</th><th scope="col">Login</th><th scope="col">Papel</th><th scope="col">Situação</th><th scope="col">Duas etapas</th><th scope="col">Último acesso</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
-          <tbody id="users-body"></tbody>
-        </table></div>
+        <header class="page-head">
+          <h2 id="team-title">Equipe</h2>
+          <p class="muted">Quem acessa o painel. Desativar encerra as sessões abertas da pessoa na hora.</p>
+        </header>
+        <div class="team-layout">
+          <div class="table-wrap"><table class="data-table" aria-label="Funcionários">
+            <thead><tr><th scope="col">Nome</th><th scope="col">Login</th><th scope="col">Papel</th><th scope="col">Situação</th><th scope="col">Duas etapas</th><th scope="col">Último acesso</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
+            <tbody id="users-body"></tbody>
+          </table></div>
+          <form id="user-form" class="panel-card form-grid" novalidate>
+            <h3>Novo funcionário</h3>
+            <label for="new-login">Login</label>
+            <input id="new-login" required maxlength="64" autocapitalize="none" spellcheck="false">
+            <label for="new-name">Nome de exibição</label>
+            <input id="new-name" required maxlength="80">
+            <label for="new-role">Papel</label>
+            <select id="new-role"><option value="OPERATOR">Atendente</option><option value="ADMIN">Administrador</option></select>
+            <label for="new-user-password">Senha temporária</label>
+            <input id="new-user-password" type="password" required minlength="12" maxlength="128" autocomplete="new-password">
+            <p class="muted small">A pessoa deverá trocar a senha no primeiro acesso.</p>
+            <p id="user-error" class="form-error" role="alert"></p>
+            <button type="submit" class="btn btn-primary">Criar acesso</button>
+          </form>
+        </div>
       </section>
 
       <!-- Auditoria -->
       <section id="audit-view" class="page" hidden aria-labelledby="audit-title">
-        <h2 id="audit-title">Auditoria</h2>
-        <p class="muted">Registro somente de inclusão. Sem senhas, tokens ou conteúdo de mensagens.</p>
+        <header class="page-head">
+          <h2 id="audit-title">Auditoria</h2>
+          <p class="muted">Registro somente de inclusão. Sem senhas, tokens ou conteúdo de mensagens.</p>
+        </header>
         <div class="table-wrap"><table class="data-table" aria-label="Registros de auditoria">
           <thead><tr><th scope="col">Quando</th><th scope="col">Quem</th><th scope="col">Ação</th><th scope="col">Alvo</th><th scope="col">Resultado</th></tr></thead>
           <tbody id="audit-body"></tbody>
@@ -248,8 +276,11 @@
       </section>
 
       <!-- Configurações -->
-      <section id="settings-view" class="page" hidden aria-labelledby="settings-title">
-        <h2 id="settings-title">Configurações</h2>
+      <section id="settings-view" class="page narrow" hidden aria-labelledby="settings-title">
+        <header class="page-head">
+          <h2 id="settings-title">Configurações</h2>
+          <p class="muted">Regras de trabalho da equipe e controle de envios. Valem para todos ao salvar.</p>
+        </header>
         <form id="settings-form" class="panel-card" novalidate>
           <h3>Permissões dos atendentes</h3>
           <label class="switch"><input type="checkbox" id="setting-transfer"> Atendentes podem transferir conversas</label>
@@ -279,8 +310,11 @@
       </section>
 
       <!-- Minha conta (Fase 13): segundo fator -->
-      <section id="account-view" class="page" hidden aria-labelledby="account-title">
-        <h2 id="account-title">Minha conta</h2>
+      <section id="account-view" class="page narrow" hidden aria-labelledby="account-title">
+        <header class="page-head">
+          <h2 id="account-title">Minha conta</h2>
+          <p class="muted">Segurança do seu acesso a este painel.</p>
+        </header>
         <div class="panel-card">
           <h3>Verificação em duas etapas</h3>
           <p id="mfa-status" class="muted"></p>
@@ -291,8 +325,11 @@
 
       <!-- Ajuda: resumo do manual da equipe (docs/MANUAL_PAINEL.md) -->
       <section id="help-view" class="page help" hidden aria-labelledby="help-title">
-        <h2 id="help-title">Ajuda</h2>
-        <p class="muted">Resumo rápido. O manual completo está com a administração.</p>
+        <header class="page-head">
+          <h2 id="help-title">Ajuda</h2>
+          <p class="muted">Resumo rápido. O manual completo está com a administração.</p>
+        </header>
+        <div class="help-grid">
         <div class="panel-card">
           <h3>Atender um cliente</h3>
           <ol>
@@ -322,15 +359,28 @@
             <li>Dúvidas ou erro que se repete: fale com a administração do salão, que aciona o suporte técnico.</li>
           </ul>
         </div>
+        </div>
         <p class="muted small" id="release-info"></p>
       </section>
 
       <!-- Sistema (ADMIN): estado local, travas somente leitura, contatos excluídos -->
       <section id="system-view" class="page" hidden aria-labelledby="system-title">
-        <h2 id="system-title">Sistema</h2>
-        <p class="muted">Somente leitura, exceto a reativação de contatos. As integrações reais não podem ser ligadas por aqui.</p>
-        <div class="panel-card"><h3>Estado</h3><ul id="system-status" class="plain-list"></ul></div>
-        <div class="panel-card"><h3>Travas de integração real</h3><ul id="system-locks" class="plain-list"></ul></div>
+        <header class="page-head">
+          <h2 id="system-title">Sistema</h2>
+          <p class="muted">Somente leitura, exceto a reativação de contatos. As integrações reais não podem ser ligadas por aqui.</p>
+        </header>
+        <div class="system-grid">
+          <div class="panel-card"><h3>Estado</h3><ul id="system-status" class="plain-list kv-list"></ul></div>
+          <div class="stack">
+            <div class="panel-card"><h3>Travas de integração real</h3>
+              <p class="muted small">Só podem ser liberadas por mudança de código revisada e autorizada.</p>
+              <ul id="system-locks" class="plain-list lock-list"></ul></div>
+            <div class="panel-card">
+              <h3>Cópias de segurança</h3>
+              <p class="muted small">Feitas fora do painel, pelo comando local <code>python -m rocha_reis_agent.ops backup</code> (criptografadas; a chave fica separada). Veja o manual do painel.</p>
+            </div>
+          </div>
+        </div>
         <div class="panel-card">
           <h3>Contatos com dados excluídos</h3>
           <p class="muted small">Tentativas de contato posteriores à exclusão. Reativar começa uma conversa nova e vazia; nada do que foi excluído volta.</p>
@@ -340,17 +390,15 @@
           </table></div>
           <p id="retired-empty" class="empty" hidden>Nenhum contato excluído.</p>
         </div>
-        <div class="panel-card">
-          <h3>Cópias de segurança</h3>
-          <p class="muted small">Feitas fora do painel, pelo comando local <code>python -m rocha_reis_agent.ops backup</code> (criptografadas; a chave fica separada). Veja o manual do painel.</p>
-        </div>
       </section>
 
       <!-- Conhecimento (ADMIN): separado das conversas; a IA nunca usa estas ações -->
       <section id="knowledge-view" class="page" hidden aria-labelledby="knowledge-title">
-        <h2 id="knowledge-title">Conhecimento do salão</h2>
-        <p class="muted" id="knowledge-scope"></p>
-        <p class="muted small">Só registros <strong>aprovados</strong> são usados no atendimento. Um rascunho novo sobre um dado aprovado suspende o uso desse dado até a nova aprovação.</p>
+        <header class="page-head">
+          <h2 id="knowledge-title">Conhecimento do salão</h2>
+          <p class="muted" id="knowledge-scope"></p>
+          <p class="muted small">Só registros <strong>aprovados</strong> são usados no atendimento. Um rascunho novo sobre um dado aprovado suspende o uso desse dado até a nova aprovação.</p>
+        </header>
         <div class="panel-card" id="knowledge-pending-card">
           <h3>Pendências</h3>
           <ul id="knowledge-pending" class="plain-list"></ul>
@@ -372,6 +420,7 @@
         </table></div>
         <p id="knowledge-empty" class="empty" hidden>Nenhum registro neste filtro.</p>
 
+        <div class="knowledge-grid">
         <form id="knowledge-form" class="panel-card form-grid" novalidate>
           <h3 id="knowledge-form-title">Novo registro (rascunho)</h3>
           <p class="muted small" id="knowledge-form-note">O rascunho só passa a valer depois de aprovado.</p>
@@ -419,6 +468,7 @@
           </div>
         </form>
 
+        <div class="stack">
         <div class="panel-card" id="knowledge-history-card" hidden>
           <h3 id="knowledge-history-title">Histórico</h3>
           <ol id="knowledge-history" class="plain-list"></ol>
@@ -437,6 +487,8 @@
           <h3>Inteligência artificial</h3>
           <p id="ai-status" class="muted"></p>
           <ul id="ai-usage" class="plain-list small"></ul>
+        </div>
+        </div>
         </div>
       </section>
     </main>

@@ -36,6 +36,10 @@ parou.
 
 ## 2. O menu
 
+O menu é dividido em três grupos: **Atendimento** (conversas), **Gestão** (só a administração) e
+**Conta** (sua conta e a ajuda). No tablet e no celular ele abre pelo botão ☰; toque fora dele para
+fechar.
+
 | Item | Para que serve |
 |---|---|
 | **Visão geral** | Resumo do momento e a lista **Precisa de atenção** |
@@ -60,6 +64,9 @@ O sino mostra quantos **avisos novos** existem. Eles aparecem **somente dentro d
 - **Nova mensagem em um atendimento seu** — o cliente respondeu.
 - **Falha no envio** / **Envio com resultado INCERTO** — veja a seção 6.
 - **Envios INTERROMPIDOS** — a administração parou todos os envios.
+
+Ao entrar no painel, os avisos que já estavam pendentes aparecem num **único** lembrete
+("N aviso(s) pendente(s) — veja no sino"); a lista completa fica no sino.
 
 Clique em um aviso para ir direto à conversa. Os avisos **nunca mostram o texto do
 cliente**, só o código da conversa (por exemplo, `Cliente ··a1b2c3`).

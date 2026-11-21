@@ -124,6 +124,10 @@ def create_panel_app(settings: Settings | None = None) -> FastAPI:
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path.startswith("/panel"):
+            # Fase 16: HTML, JS e CSS sempre revalidados (ETag); sem isso, após uma atualização o navegador
+            # podia combinar um app.js antigo com um index.html novo e o painel quebrava.
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
     app.middleware("http")(handle_unexpected_errors)

@@ -1,7 +1,7 @@
 # Pacote de homologação — Salão Rocha Reis (RC1 Offline)
 
 **Para:** Heitor e Renan (agência), ao apresentar e validar o sistema com o salão.
-**Versão:** Rocha Reis Agent — RC1 Offline `0.14.0rc1.post1` (confira com `ops verificar-rc`).
+**Versão:** Rocha Reis Agent — RC1 Offline `0.14.0rc1.post2` (confira com `ops verificar-rc`).
 Este documento é o índice: cada item aponta o material completo.
 
 ## 1. O que é o Rocha Reis Agent (apresentação honesta)

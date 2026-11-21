@@ -8,10 +8,10 @@ prontidão para produção.
 
 | Campo | Valor |
 |---|---|
-| Versão | Rocha Reis Agent — RC1 Offline `0.14.0rc1.post1` |
-| Commit base | `c59b934` (`main`) — **árvore não versionada** (80 caminhos sem commit) |
-| Impressão digital | `92597a901d64a153` (278 arquivos) |
-| Manifesto | `docs/homologacao/RC1_MANIFESTO.json` (hash de cada arquivo; congelado em 2026-11-20T21:58:15Z) |
+| Versão | Rocha Reis Agent — RC1 Offline `0.14.0rc1.post2` (Fase 16) |
+| Commit | Versionada no commit da Fase 16 sobre `f406641` (`main`); hash em `git log -1` / `ops versao`. O campo `commit_base` do manifesto registra a base no momento do congelamento |
+| Impressão digital | `b67636df59849361` (281 arquivos) |
+| Manifesto | `docs/homologacao/RC1_MANIFESTO.json` (hash de cada arquivo; congelado em 2026-11-20T22:58:05Z) |
 | Esquema do banco | 11 (migrações 001–011, hashes no manifesto) |
 | Travas | Meta Graph, Meta homologação, Gemini real, dados reais: **todas `False`** |
 | Demonstração | Perfil isolado `demo` (dados, contas e segredos fictícios gerados a cada criação; 2FA opcional) |
@@ -19,6 +19,15 @@ prontidão para produção.
 **Antes de cada sessão:** `python -m rocha_reis_agent.ops verificar-rc` precisa mostrar
 `"identica": true`. Qualquer correção depois disso exige nova revisão da versão, `ops congelar-rc` e
 o registro da mudança aqui.
+
+### Diferença para a 0.14.0rc1.post1 (Fase 16)
+
+Redesign do painel (sistema de design, temas claro/escuro, navegação agrupada, telas responsivas) e
+correções da auditoria: um único lembrete de avisos ao entrar, contraste do erro no tema escuro, linha
+da Equipe alinhada, ações do Conhecimento visíveis, `Cache-Control: no-cache` nos arquivos do painel,
+gaveta do menu com fundo, avisos longe do botão Enviar, botões que não alargam a tela no celular.
+Fluxos, textos operacionais, permissões e segurança: **sem mudança de comportamento**. Detalhes em
+`STATUS_FASE_16.md`.
 
 ### Diferença para a 0.14.0rc1 (Fase 14)
 
@@ -30,8 +39,8 @@ Painel, atendimento, conhecimento e segurança: **sem mudança de comportamento*
 
 | Verificação | Resultado |
 |---|---|
-| pytest (unidade, integração, segurança, autenticação, 2FA, painel, conhecimento, envio, estado humano, recuperação, demonstração, isolamento, travas) | **964 aprovados** |
-| Chromium (desktop, notebook, tablet, celular emulado) | **39 aprovados** |
+| pytest (unidade, integração, segurança, autenticação, 2FA, painel, conhecimento, envio, estado humano, recuperação, demonstração, isolamento, travas) | **969 aprovados** |
+| Chromium (desktop, notebook, tablet, celular emulado; contraste AA claro e escuro) | **44 aprovados** |
 | Roteiro automático da demonstração (13 jornadas) | **13/13** |
 | Avaliação offline — regras (configuração ativa) | 123/129; segurança OK; **Q2 reprovado** (recall de pedido humano 0,902 < 0,95) |
 | Avaliação offline — modelo adversário simulado | 129/129 |
@@ -63,29 +72,23 @@ Nenhum desses resultados é homologação externa nem validação humana.
 4. Árvore sem commit: perda de trabalho se a máquina falhar antes do versionamento (mitigação:
    commit autorizado; o manifesto ajuda a conferir o conteúdo).
 
-## 5. Versionamento recomendado (não executado)
+## 5. Versionamento da Fase 16 (autorizado pelo responsável em 20/11/2026; sem tag)
 
-**Um único commit consolidado das Fases 10–15.** As fases alteraram os mesmos arquivos em camadas;
-separar exigiria `git add -p` em dezenas de trechos e criaria commits intermediários que não passam
-nos testes. Diff auditado: sem bancos, backups, chaves, certificados, credenciais, logs, temporários,
-arquivos grandes ou padrões de segredo.
-
-Antes do commit: (1) `ops verificar-rc` idêntico; (2) `pytest` e `tests_e2e` aprovados;
-(3) `git status --short --ignored` sem arquivos sensíveis fora dos ignorados; (4) `git apply --check
-docs/homolog/ativacao_gemini_9c.patch`; (5) `git update-index --chmod=+x iniciar.sh` depois do
-`git add` (o volume não guarda o bit de execução).
-
-Mensagem sugerida (seguindo o padrão de autoria do histórico do repositório):
+As Fases 10–15 já estão no commit `f406641`. A Fase 16 cabe num **único commit** (redesign e correções
+tocam os mesmos três arquivos do painel). Antes: (1) `ops verificar-rc` idêntico; (2) `pytest` e
+`tests_e2e` aprovados; (3) `git status --short --ignored` sem arquivos sensíveis; (4) `git apply
+--check docs/homolog/ativacao_gemini_9c.patch`.
 
 ```
-feat: consolida Fases 10-14 e prepara RC1 offline para homologação
+feat: Fase 16 — redesign do painel, auditoria e RC1 0.14.0rc1.post2
 
-Inclui a Fase 15 (congelamento verificável da RC1 0.14.0rc1.post1, registro da
-homologação 11B, iniciador com aviso de prontidão). Integrações reais desativadas;
-quatro travas em False; dados exclusivamente fictícios.
+Sistema de design (tokens, temas claro/escuro, ícones locais, navegação agrupada,
+layout responsivo) aplicado a todas as telas; correções da auditoria (avisos ao
+entrar, contraste no tema escuro, tabela da Equipe, ações do Conhecimento, cache
+dos arquivos do painel, gaveta do menu). Integrações reais desativadas; quatro
+travas em False; dados exclusivamente fictícios.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ```
 
-Depois do commit, `ops versao` passa a mostrar `versionada: true`; tag (`v0.14.0-rc1.post1`) e push
-**somente com autorização**.
+Tag (`v0.14.0-rc1.post2`) e push **somente com autorização**.

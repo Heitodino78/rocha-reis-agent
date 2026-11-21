@@ -54,11 +54,24 @@ function el(tag, options = {}, children = []) {
 
 function announce(message) { $("live").textContent = message; }
 
+const TOAST_LIMIT = 3;  // Fase 16: nunca mais que 3 avisos flutuantes cobrindo a tela
 function toast(message, kind = "info") {
   const node = el("div", { className: `toast ${kind}`, text: message });
-  $("toasts").append(node);
+  const host = $("toasts");
+  host.append(node);
+  while (host.children.length > TOAST_LIMIT) host.firstElementChild.remove();
   setTimeout(() => node.remove(), 5000);
 }
+
+function initials(name) {
+  const words = String(name || "").trim().split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w));
+  if (!words.length) return "?";
+  const first = [...words[0]].find((c) => /[\p{L}\p{N}]/u.test(c)) || "";
+  const last = words.length > 1 ? ([...words[words.length - 1]].find((c) => /[\p{L}\p{N}]/u.test(c)) || "") : "";
+  return (first + last).toUpperCase();
+}
+
+function pill(text, tone = "") { return el("span", { className: `cell-pill${tone ? ` ${tone}` : ""}`, text }); }
 
 function formatTime(iso) {
   if (!iso) return "";
@@ -150,11 +163,13 @@ function applySession(data) {
   document.body.classList.toggle("is-admin", state.user.role === "ADMIN");
   for (const node of document.querySelectorAll(".admin-only")) node.hidden = state.user.role !== "ADMIN";
   $("user-name").textContent = state.user.display_name;
+  $("user-avatar").textContent = initials(state.user.display_name);
   $("user-role").textContent = state.user.role === "ADMIN" ? "Admin" : "Atendente";
   state.environmentLabel = data.environment_label || null;
   $("env-banner").hidden = !state.environmentLabel;
   $("env-banner").textContent = state.environmentLabel ? `${state.environmentLabel} · dados fictícios · nenhuma mensagem real é enviada` : "";
   loadNotifPrefs();
+  state.notif.synced = false;  // primeira leitura dos avisos desta sessão: resumir, não inundar a tela
   startEvents();
   const reopen = state.selected;
   navigate(state.view, state.filter);
@@ -194,7 +209,12 @@ function navigate(view, filter) {
   refreshCounts();
 }
 
-function closeMenu() { $("sidebar").classList.remove("open"); $("menu-toggle").setAttribute("aria-expanded", "false"); }
+function setMenu(open) {
+  $("sidebar").classList.toggle("open", open);
+  $("menu-toggle").setAttribute("aria-expanded", String(open));
+  $("scrim").hidden = !open;  // Fase 16: fundo escurecido; tocar fora fecha a gaveta (antes ficava aberta sobre a página)
+}
+function closeMenu() { setMenu(false); }
 
 // -------------------------------------------------------------- conversas
 let listTimer = null;
@@ -242,6 +262,7 @@ function renderList() {
 function renderItem(item) {
   const stateKey = item.closed ? "CLOSED" : item.state;
   const button = el("button", { className: `conv${item.needs_human ? " needs-human" : ""}`, attrs: { type: "button" } }, [
+    el("span", { className: "conv-avatar", text: initials(item.label), attrs: { "aria-hidden": "true" } }),
     el("span", { className: "conv-name", text: item.label }),
     el("span", { className: "conv-time", text: formatTime(item.last_message ? item.last_message.at : item.updated_at) }),
     el("span", { className: "conv-preview", text: item.last_client_text
@@ -567,19 +588,24 @@ async function loadOverview() {
   try {
     const data = await api("/overview");
     const c = data.conversations;
+    // [rótulo, valor, tela, filtro, tom, ícone]; o tom só "acende" o número quando há algo a fazer.
     const cards = [
-      ["Aguardando sem responsável", data.waiting_unassigned, "conversations", "waiting"],
-      ["Comigo agora", data.assigned_to_me, "conversations", "mine"],
-      ["Em atendimento humano", c.HUMAN_ACTIVE || 0, "conversations", "human_active"],
-      ["No automático", c.AUTO || 0, "conversations", "auto"],
-      ["Encerradas", (c.RESOLVED || 0) + (c.CLOSED || 0), "conversations", "resolved"],
+      ["Aguardando sem responsável", data.waiting_unassigned, "conversations", "waiting", "warning", "clock"],
+      ["Comigo agora", data.assigned_to_me, "conversations", "mine", "accent", "me"],
+      ["Em atendimento humano", c.HUMAN_ACTIVE || 0, "conversations", "human_active", "accent", "people"],
+      ["No automático", c.AUTO || 0, "conversations", "auto", "success", "bot"],
+      ["Encerradas", (c.RESOLVED || 0) + (c.CLOSED || 0), "conversations", "resolved", "neutral", "done"],
     ];
     if (data.outbox) {
-      cards.push(["Envios incertos", data.outbox.UNKNOWN || 0, "system"], ["Envios com falha", data.outbox.FAILED || 0, "system"],
-        ["Envios na fila", (data.outbox.PENDING || 0) + (data.outbox.RETRY || 0) + (data.outbox.SENDING || 0), "system"]);
+      cards.push(["Envios incertos", data.outbox.UNKNOWN || 0, "system", undefined, "danger", "question"],
+        ["Envios com falha", data.outbox.FAILED || 0, "system", undefined, "danger", "x"],
+        ["Envios na fila", (data.outbox.PENDING || 0) + (data.outbox.RETRY || 0) + (data.outbox.SENDING || 0), "system", undefined, "info", "send"]);
     }
-    $("overview-cards").replaceChildren(...cards.map(([label, value, view, filter]) => {
-      const card = el("button", { className: "card card-link", attrs: { type: "button" } }, [
+    const alerting = new Set(["warning", "danger"]);
+    $("overview-cards").replaceChildren(...cards.map(([label, value, view, filter, tone, icon]) => {
+      const card = el("button", { className: "card card-link", attrs: { type: "button", "data-tone": tone, "data-icon": icon,
+        "data-attention": String(alerting.has(tone) && Number(value) > 0) } }, [
+        el("span", { className: "card-icon", attrs: { "aria-hidden": "true" } }),
         el("span", { className: "card-value", text: String(value) }), el("span", { className: "card-label", text: label })]);
       card.addEventListener("click", () => { closeDetail(); navigate(view, filter); });
       return card;
@@ -643,8 +669,18 @@ async function loadNotifications() {
   try { data = await api("/notifications"); } catch { return; }
   state.notif.items = data.items;
   const fresh = visibleNotifs().filter((n) => !state.notif.announced.has(n.key));
-  for (const n of fresh.slice(0, 3)) toast(`${n.label ? `${n.label}: ` : ""}${n.text}`, n.severity === "critical" ? "error" : "info");
-  if (fresh.length > 3) toast(`Mais ${fresh.length - 3} aviso(s) no painel de avisos.`);
+  if (!state.notif.synced) {
+    // Fase 16: logo após entrar, os avisos já pendentes viravam até 4 toasts por 5 s, cobrindo a fila e o
+    // campo de resposta (no celular, quase a tela toda). Agora: um único resumo; o sino mostra o resto.
+    state.notif.synced = true;
+    if (fresh.length) {
+      const critical = fresh.some((n) => n.severity === "critical");
+      toast(`${fresh.length} aviso(s) pendente(s) — veja no sino de avisos.`, critical ? "error" : "info");
+    }
+  } else {
+    for (const n of fresh.slice(0, 2)) toast(`${n.label ? `${n.label}: ` : ""}${n.text}`, n.severity === "critical" ? "error" : "info");
+    if (fresh.length > 2) toast(`Mais ${fresh.length - 2} aviso(s) no painel de avisos.`);
+  }
   if (fresh.length) {
     announce(`${fresh.length} aviso(s) novo(s).`);
     if (state.notif.prefs.sound) beep();
@@ -718,27 +754,31 @@ async function loadSystem() {
   try {
     const data = await api("/system");
     const mb = (data.database_bytes / 1024 / 1024).toFixed(1);
-    $("system-status").replaceChildren(...[
-      `Ambiente: ${data.environment}${data.environment_label ? ` (${data.environment_label})` : ""}`,
-      `Transporte: ${data.transport} · IA: ${data.ai_provider}`,
-      data.dispatch_halted ? `Envios INTERROMPIDOS: ${data.dispatch_halted.reason}` : "Envios liberados",
-      `Banco: esquema v${data.schema_version}, ${mb} MB · ${data.counts.conversations} conversas (${data.archived} arquivadas, ${data.retired} excluídas)`,
-      `Mensagens: ${data.counts.messages} · entrada: ${data.counts.channel_inbox} · saída: ${data.counts.channel_outbox} · auditoria: ${data.counts.panel_audit}`,
-      `Versão: ${data.release}`,
-      `Perfil do ambiente: ${data.storage.environment_profile} · dados: ${data.storage.data_classification === "synthetic" ? "somente FICTÍCIOS" : data.storage.data_classification}`,
-      `Proteção do banco em repouso: ${data.storage.protection}`,
-      data.backup
-        ? `Backup automático: ${data.backup.saudavel ? "em dia" : "ATENÇÃO"} · último sucesso: ${formatTime(data.backup.ultimo_sucesso) || "nunca"}`
+    // [rótulo, valor, chama atenção?]
+    const rows = [
+      ["Versão", data.release],
+      ["Ambiente", `${data.environment}${data.environment_label ? ` (${data.environment_label})` : ""}`],
+      ["Transporte e IA", `Transporte: ${data.transport} · IA: ${data.ai_provider}`],
+      ["Envios", data.dispatch_halted ? `INTERROMPIDOS: ${data.dispatch_halted.reason}` : "Liberados", Boolean(data.dispatch_halted)],
+      ["Banco", `Esquema v${data.schema_version}, ${mb} MB · ${data.counts.conversations} conversas (${data.archived} arquivadas, ${data.retired} excluídas)`],
+      ["Volume", `Mensagens: ${data.counts.messages} · entrada: ${data.counts.channel_inbox} · saída: ${data.counts.channel_outbox} · auditoria: ${data.counts.panel_audit}`],
+      ["Perfil do ambiente", `${data.storage.environment_profile} · dados: ${data.storage.data_classification === "synthetic" ? "somente FICTÍCIOS" : data.storage.data_classification}`],
+      ["Proteção em repouso", data.storage.protection],
+      ["Backup automático", data.backup
+        ? `${data.backup.saudavel ? "Em dia" : "ATENÇÃO"} · último sucesso: ${formatTime(data.backup.ultimo_sucesso) || "nunca"}`
           + ` · falhas seguidas: ${data.backup.falhas_consecutivas} · cópias: ${data.backup.copias_primario ?? 0}`
           + ` (secundária simulada: ${data.backup.copias_secundario ?? 0})`
           + (data.backup.ultimo_teste_restauracao && data.backup.ultimo_teste_restauracao.resultado
             ? ` · último teste de restauração: ${data.backup.ultimo_teste_restauracao.resultado}` : "")
-        : "Backup automático: ainda não executado neste ambiente",
-    ].map((text) => el("li", { text })));
+        : "Ainda não executado neste ambiente", Boolean(data.backup && !data.backup.saudavel)],
+    ];
+    $("system-status").replaceChildren(...rows.map(([key, value, warn]) => el("li", {}, [
+      el("span", { className: "kv-key", text: key }), el("span", { className: `kv-value${warn ? " attention-text" : ""}`, text: value })])));
     const lockText = { meta_graph: "Envio real pela Meta (Graph API)", meta_homologation: "Homologação real Meta",
       gemini_real: "Google Gemini real", real_data: "Uso de dados reais de clientes" };
-    $("system-locks").replaceChildren(...Object.entries(data.locks).map(([key, on]) => el("li", {
-      className: on ? "lock-on" : "lock-off", text: `${lockText[key] || key}: ${on ? "LIBERADA NO CÓDIGO" : "bloqueada"}` })));
+    $("system-locks").replaceChildren(...Object.entries(data.locks).map(([key, on]) => el("li", { className: on ? "lock-on" : "lock-off" }, [
+      el("span", { text: lockText[key] || key }),
+      el("span", { className: "lock-pill", text: on ? "LIBERADA NO CÓDIGO" : "bloqueada" })])));
     const retired = await api("/retired-contacts");
     $("retired-body").replaceChildren(...retired.map((r) => {
       const button = el("button", { className: "btn btn-ghost btn-small", text: "Reativar", attrs: { type: "button" } });
@@ -822,6 +862,7 @@ async function loadAccount() {
   try {
     const mfa = await api("/auth/mfa/status");
     state.mfa = mfa;
+    $("mfa-status").dataset.on = String(Boolean(mfa.enabled));
     $("mfa-status").textContent = mfa.enabled
       ? `Ativada. Códigos de recuperação restantes: ${mfa.recovery_codes_left}.${mfa.required ? " Obrigatória neste ambiente." : ""}`
       : (mfa.available ? "Desativada. Recomendada para proteger o acesso às conversas." : "Indisponível neste ambiente (chave de proteção não configurada).");
@@ -901,18 +942,23 @@ async function loadTeam() {
           catch (error) { toast(error.message, "error"); }
           loadTeam();
         }));
-      const cell = el("td", { className: "row-actions" }, [toggle]);
+      // Fase 16: a célula era a própria caixa flexível (td.row-actions), o que a tirava do modelo de tabela
+      // e desalinhava a linha; agora os botões ficam num contêiner dentro da célula.
+      const buttons = el("div", { className: "row-actions" }, [toggle]);
       if (u.mfa_enabled && u.id !== state.user.id) {
         const reset = el("button", { className: "btn btn-ghost", text: "Redefinir duas etapas", attrs: { type: "button" } });
         reset.addEventListener("click", () => resetMfaDialog(u));
-        cell.append(reset);
+        buttons.append(reset);
       }
+      toggle.classList.add("btn-small");
+      for (const b of buttons.children) b.classList.add("btn-small");
       return el("tr", {}, [
         el("td", { text: u.display_name }), el("td", { text: u.login }),
-        el("td", { text: u.role === "ADMIN" ? "Administrador" : "Atendente" }),
-        el("td", { text: u.active ? (u.must_change_password ? "Ativo · senha temporária" : "Ativo") : "Desativado" }),
-        el("td", { text: u.mfa_enabled ? "Ativa" : "—" }),
-        el("td", { text: formatTime(u.last_login_at) || "—" }), cell,
+        el("td", {}, [pill(u.role === "ADMIN" ? "Administrador" : "Atendente", u.role === "ADMIN" ? "accent" : "")]),
+        el("td", {}, [pill(u.active ? (u.must_change_password ? "Ativo · senha temporária" : "Ativo") : "Desativado",
+          u.active ? (u.must_change_password ? "warn" : "ok") : "")]),
+        el("td", {}, [u.mfa_enabled ? pill("Ativa", "ok") : el("span", { className: "muted", text: "—" })]),
+        el("td", { text: formatTime(u.last_login_at) || "—" }), el("td", { className: "actions" }, [buttons]),
       ]);
     }));
   } catch (error) { toast(error.message, "error"); }
@@ -954,7 +1000,8 @@ async function loadAudit() {
       el("td", { text: formatTime(r.at) }), el("td", { text: r.actor || "—" }),
       el("td", { text: ACTION_LABEL[r.action] || r.action }),
       el("td", { text: r.entity_type === "conversation" && r.entity_id ? `Cliente ··${r.entity_id.slice(-6)}` : r.entity_type }),
-      el("td", { text: { success: "Sucesso", denied: "Negado", failed: "Falhou" }[r.outcome] || r.outcome }),
+      el("td", {}, [pill({ success: "Sucesso", denied: "Negado", failed: "Falhou" }[r.outcome] || r.outcome,
+        { success: "ok", denied: "warn", failed: "bad" }[r.outcome] || "")]),
     ])));
     state.auditBefore = rows.length ? rows[rows.length - 1].id : state.auditBefore;
     $("audit-more").hidden = rows.length < 100;
@@ -1105,8 +1152,9 @@ function renderKnowledge() {
     return el("tr", {}, [
       el("td", { text: state.knowledge.labels[record.kind] || record.kind }), el("td", { text: record.fact_id }),
       el("td", { className: "wrap", text: summarize(record.data) }), el("td", { text: `v${record.version}` }),
-      el("td", { text: KNOWLEDGE_STATUS[record.status] || record.status }),
-      el("td", { text: record.in_use ? "Sim" : "Não" }), el("td", {}, [actions]),
+      el("td", {}, [pill(KNOWLEDGE_STATUS[record.status] || record.status,
+        { DRAFT: "warn", APPROVED: "ok", REJECTED: "bad" }[record.status] || "")]),
+      el("td", { text: record.in_use ? "Sim" : "Não" }), el("td", { className: "actions" }, [actions]),
     ]);
   }));
   $("knowledge-empty").hidden = rows.length > 0;
@@ -1349,8 +1397,10 @@ function bindUi() {
   });
   $("menu-toggle").addEventListener("click", () => {
     const open = !$("sidebar").classList.contains("open");
-    $("sidebar").classList.toggle("open", open); $("menu-toggle").setAttribute("aria-expanded", String(open));
+    setMenu(open);
+    if (open) { const current = document.querySelector(".sidebar .nav-item[aria-current='page']") || document.querySelector(".sidebar .nav-item"); if (current) current.focus(); }
   });
+  $("scrim").addEventListener("click", () => { closeMenu(); $("menu-toggle").focus(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") { closeMenu(); closeNotifications(); } });
   $("user-form").addEventListener("submit", createUser);
   $("knowledge-form").addEventListener("submit", submitKnowledge);

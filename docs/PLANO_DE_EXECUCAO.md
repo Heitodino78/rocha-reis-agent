@@ -202,6 +202,15 @@ AT-16 cobrindo recuperação de erro e sessão encerrada; critérios de aceitaç
 salão confirmar; pacote de homologação para a agência. Evidências em `STATUS_FASE_15.md` e
 `RELATORIO_PRONTIDAO_RC1.md`. **A 11B continua pendente até a participação real da equipe.**
 
+## Fase 16 — Redesign do painel, auditoria e refinamento (executada localmente em 20/11/2026)
+
+Sistema de design (tokens, temas claro/escuro, ícones locais, navegação agrupada, responsivo) aplicado
+a todas as telas, sem mudar fluxos, textos operacionais ou contratos de segurança. Auditoria corrigiu:
+excesso de avisos flutuantes ao entrar, contraste do erro no tema escuro, linha desalinhada na Equipe,
+ações do Conhecimento escondidas, cache dos arquivos do painel após atualização, gaveta do menu sem
+fundo, avisos sobre o botão Enviar e botões longos alargando a tela no celular. Revisão
+`0.14.0rc1.post2`. Evidências em `STATUS_FASE_16.md`. **A 11B continua pendente.**
+
 ## Atendimento humano operacional — planejamento original (histórico)
 
 **Entregas:** integração com inbox/processo humano efetivamente disponível; transições de estado autorizadas e auditáveis; notificação aos responsáveis; recuperação após falha.

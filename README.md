@@ -465,6 +465,11 @@ em [`deploy/`](deploy/README.md). Documentos: [`STATUS_FASE_13.md`](docs/STATUS_
 [`OPERACAO_BACKUP_AUTOMATICO.md`](docs/OPERACAO_BACKUP_AUTOMATICO.md),
 [`PLANO_RECUPERACAO_DESASTRES.md`](docs/PLANO_RECUPERACAO_DESASTRES.md).
 
+## Redesign do painel — Fase 16
+
+Interface revista (sistema de design, temas claro e escuro, celular/tablet/desktop) e auditoria com
+correções; RC1 na revisão `0.14.0rc1.post2`. Detalhes em [`STATUS_FASE_16.md`](docs/STATUS_FASE_16.md).
+
 ## Homologação com o salão — Fase 15
 
 Comece por [`PACOTE_HOMOLOGACAO_SALAO.md`](docs/PACOTE_HOMOLOGACAO_SALAO.md). Antes de cada sessão:
