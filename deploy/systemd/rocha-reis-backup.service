@@ -1,16 +1,46 @@
-# REFERÊNCIA (Fase 13) — não instalado. Uma rodada do backup automático; acionada pelo timer.
+# REFERÊNCIA (Fases 13 e 17) — não instalado. Uma rodada do backup automático; acionada pelo timer.
 [Unit]
 Description=Rocha Reis — backup cifrado verificado (uma rodada)
+OnFailure=rocha-reis-alerta@%n.service
 
 [Service]
 Type=oneshot
 User=rocha-reis
-WorkingDirectory=/opt/rocha-reis-agent
+Group=rocha-reis
+WorkingDirectory=/opt/rocha-reis-agent/current
 # Só o caminho do perfil vai na linha de comando; a chave fica em arquivo 0600 indicado no perfil.
-ExecStart=/opt/rocha-reis-agent/.venv/bin/python -m rocha_reis_agent.ops backup-agendado --perfil /var/lib/rocha-reis/perfil
+ExecStart=/opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops backup-agendado --perfil /etc/rocha-reis-agent
+ReadWritePaths=/var/lib/rocha-reis-agent
+ReadOnlyPaths=/etc/rocha-reis-agent
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=true
+MemoryMax=512M
+# Endurecimento (Fase 17): validado com `systemd-analyze verify` e `systemd-analyze security --offline`.
+# Fase 18 (achado no systemd REAL: o watchdog abortou o worker com core dump): sem core dump — a memória do
+# processo tem texto de conversas e segredos da instância.
+LimitCORE=0
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/rocha-reis
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
 UMask=0077

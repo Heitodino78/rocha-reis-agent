@@ -1,24 +1,61 @@
-# REFERÊNCIA (Fase 13) — não instalado. Painel só em 127.0.0.1; o proxy (Caddy) faz o HTTPS na VPN.
+# REFERÊNCIA (Fases 13 e 17) — não instalado. Painel só em 127.0.0.1; o Caddy publica SOMENTE no IP da VPN.
 # X-Forwarded-For é aceito SOMENTE do proxy local (127.0.0.1): sem isso todos pareceriam o mesmo IP e o
 # limitador de login por IP bloquearia a equipe inteira; com confiança ampla, o IP poderia ser forjado.
 [Unit]
 Description=Rocha Reis — painel da equipe (somente rede interna)
 After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=rocha-reis-alerta@%n.service
 
 [Service]
-Type=simple
+Type=exec
 User=rocha-reis
-WorkingDirectory=/opt/rocha-reis-agent
-# Configuração e segredos em arquivo 0600 fora do repositório (nunca na linha de comando).
-EnvironmentFile=/etc/rocha-reis/painel.env
-ExecStart=/opt/rocha-reis-agent/.venv/bin/python -m uvicorn rocha_reis_agent.panel.app:create_panel_app --factory --host 127.0.0.1 --port 8000 --no-access-log --timeout-graceful-shutdown 5 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Group=rocha-reis
+WorkingDirectory=/opt/rocha-reis-agent/current
+Environment=ROCHA_REIS_PROFILE=/etc/rocha-reis-agent
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStartPre=/opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops validar-instalacao --raiz /
+ExecStart=/opt/rocha-reis-agent/current/.venv/bin/python -m uvicorn rocha_reis_agent.panel.app:create_panel_app --factory --host 127.0.0.1 --port 8000 --no-access-log --timeout-graceful-shutdown 5 --proxy-headers --forwarded-allow-ips 127.0.0.1 --limit-concurrency 128
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=20
+KillMode=mixed
+ReadWritePaths=/var/lib/rocha-reis-agent /var/log/rocha-reis-agent
+ReadOnlyPaths=/etc/rocha-reis-agent
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=384M
+TasksMax=128
+LimitNOFILE=4096
+# Endurecimento (Fase 17): validado com `systemd-analyze verify` e `systemd-analyze security --offline`.
+# Fase 18 (achado no systemd REAL: o watchdog abortou o worker com core dump): sem core dump — a memória do
+# processo tem texto de conversas e segredos da instância.
+LimitCORE=0
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/rocha-reis
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
 UMask=0077
 
 [Install]

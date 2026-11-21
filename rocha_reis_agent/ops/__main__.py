@@ -24,6 +24,19 @@
   python -m rocha_reis_agent.ops desempenho [--conversas 1000] [--mensagens 400]
   python -m rocha_reis_agent.ops mensagem   "texto" [--de 55119000002NN] [--perfil DIR]   (cliente FICTÍCIO)
 
+Servidor (Fase 17; RAIZ = / no servidor ou um diretório descartável para ensaio):
+  python -m rocha_reis_agent.ops empacotar          --destino DIR              pacote reproduzível da versão
+  python -m rocha_reis_agent.ops instalar           --pacote ARQ --raiz RAIZ   instala e ativa a 1ª versão
+  python -m rocha_reis_agent.ops preparar-servidor  --raiz RAIZ [--origem https://painel.interno]
+  python -m rocha_reis_agent.ops validar-instalacao --raiz RAIZ              recusa configuração insegura (ExecStartPre)
+  python -m rocha_reis_agent.ops atualizar          --pacote ARQ --raiz RAIZ --confirmacao ATUALIZAR:<versão>
+  python -m rocha_reis_agent.ops reverter           --raiz RAIZ [--restaurar-banco BACKUP --confirmacao RESTAURAR:BACKUP]
+  python -m rocha_reis_agent.ops verificar-migracao --banco COPIA.synthetic.sqlite3   (usado pela atualização)
+  python -m rocha_reis_agent.ops alertas            --perfil DIR [--batimento ARQ] [--externo ESTADO]   saída 0/1/2
+  python -m rocha_reis_agent.ops backup-externo     --perfil DIR --destino-falso DIR [--manter 14]   (SIMULADO)
+  python -m rocha_reis_agent.ops ensaio-operacional --destino DIR_NOVO   ensaio completo (volume cifrado)
+  python -m rocha_reis_agent.ops carga --destino DIR_NOVO [--conversas 1000] [--operadores 4] [--segundos 30]
+
 A frase-senha é lida de ROCHA_REIS_BACKUP_PASSPHRASE ou digitada (sem eco). Nunca é impressa.
 """
 
@@ -155,8 +168,57 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--conversas", type=int, default=1000)
     p.add_argument("--mensagens", type=int, default=400)
     p.add_argument("--repeticoes", type=int, default=30)
+    # ---- Fase 17: servidor
+    p = sub.add_parser("empacotar", help="pacote reproduzível da versão (código de execução + manifesto)")
+    p.add_argument("--destino", required=True)
+    p = sub.add_parser("instalar", help="instala um pacote verificado na árvore do servidor e ativa se for o 1º")
+    p.add_argument("--pacote", required=True)
+    p.add_argument("--raiz", required=True)
+    p.add_argument("--python", help="interpretador (padrão: cria .venv da versão a partir do requirements.lock)")
+    p.add_argument("--sem-venv", action="store_true", help="não cria ambiente virtual (ensaio local)")
+    p.add_argument("--pip-arg", action="append", default=[], help="ex.: --no-index --find-links DIR (sem rede)")
+    p = sub.add_parser("preparar-servidor", help="cria a instância de PRÉ-PRODUÇÃO SINTÉTICA no layout do servidor")
+    p.add_argument("--raiz", required=True)
+    p.add_argument("--origem", default="https://painel.interno")
+    p = sub.add_parser("validar-instalacao", help="checa permissões, perfil, cifragem e travas (sai 1 se inseguro)")
+    p.add_argument("--raiz", required=True)
+    p = sub.add_parser("atualizar", help="atualização com backup verificado, ensaio de migração e reversão automática")
+    p.add_argument("--pacote", required=True)
+    p.add_argument("--raiz", required=True)
+    p.add_argument("--confirmacao", required=True)
+    p.add_argument("--parar", default="systemctl stop rocha-reis-worker rocha-reis-webhook rocha-reis-panel")
+    p.add_argument("--iniciar", default="systemctl start rocha-reis-webhook rocha-reis-panel rocha-reis-worker")
+    p.add_argument("--prontidao", action="append", default=None,
+                   help="URL local de /ready (padrão: webhook 8080 e painel 8000)")
+    p.add_argument("--python")
+    p.add_argument("--sem-venv", action="store_true")
+    p.add_argument("--pip-arg", action="append", default=[])
+    p = sub.add_parser("reverter", help="volta à versão anterior; banco só com restauração confirmada")
+    p.add_argument("--raiz", required=True)
+    p.add_argument("--restaurar-banco")
+    p.add_argument("--confirmacao")
+    p = sub.add_parser("verificar-migracao", help="abre uma CÓPIA do banco com este código e confere integridade")
+    p.add_argument("--banco", required=True)
+    p = sub.add_parser("alertas", help="alertas operacionais locais (0 OK, 1 atenção, 2 crítico)")
+    p.add_argument("--perfil", required=True)
+    p.add_argument("--batimento", help="arquivo de batimento do worker")
+    p.add_argument("--externo", help="estado da cópia externa")
+    p = sub.add_parser("carga", help="mede operação com N conversas e operadores simultâneos (servidor simulado)")
+    p.add_argument("--destino", required=True)
+    p.add_argument("--conversas", type=int, default=1000)
+    p.add_argument("--operadores", type=int, default=4)
+    p.add_argument("--segundos", type=float, default=30.0)
+    p = sub.add_parser("ensaio-operacional", help="ensaio completo do servidor simulado (instala, derruba, restaura)")
+    p.add_argument("--destino", required=True)
+    p = sub.add_parser("backup-externo", help="envia backups cifrados ao destino externo (somente SIMULADO nesta fase)")
+    p.add_argument("--perfil", required=True)
+    p.add_argument("--destino-falso", required=True, help="diretório que SIMULA o armazenamento externo")
+    p.add_argument("--manter", type=int, default=14)
     args = parser.parse_args(argv)
     try:
+        if args.command in ("empacotar", "instalar", "preparar-servidor", "validar-instalacao", "atualizar", "reverter",
+                            "verificar-migracao", "alertas", "backup-externo", "ensaio-operacional", "carga"):
+            return _server(args)
         if args.command == "chave":
             _print({"chave_criada": str(generate_key(Path(args.arquivo).expanduser())),
                     "aviso": "Guarde a chave FORA do diretório de backups. Sem ela o backup é irrecuperável."})
@@ -244,6 +306,117 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERRO: {error}", file=sys.stderr)
         return 2
     return 0
+
+
+def _server(args) -> int:  # type: ignore[no-untyped-def]
+    """Comandos de servidor (Fase 17). Nenhum acessa a rede; `atualizar` só chama os comandos informados."""
+    from rocha_reis_agent.ops import deploy
+    try:
+        if args.command == "empacotar":
+            package = deploy.build_package(Path(args.destino).expanduser())
+            _print({"pacote": str(package), "sha256": deploy._sha(package.read_bytes())})
+        elif args.command == "instalar":
+            result = deploy.install_release(Path(args.pacote), Path(args.raiz), python=args.python,
+                                            create_venv=not args.sem_venv, pip_args=tuple(args.pip_arg))
+            if deploy.current_release(Path(args.raiz)) is None:
+                deploy.activate(Path(args.raiz), str(result["id"]))
+                result["ativada"] = True
+            result.pop("manifesto", None)
+            _print(result)
+        elif args.command == "preparar-servidor":
+            _print(deploy.prepare_instance(Path(args.raiz), panel_origin=args.origem))
+        elif args.command == "validar-instalacao":
+            result = deploy.validate_installation(Path(args.raiz))
+            _print(result)
+            return 0 if result["ok"] else 1
+        elif args.command == "verificar-migracao":
+            _print(_rehearse(Path(args.banco)))
+        elif args.command == "atualizar":
+            root = Path(args.raiz)
+            from rocha_reis_agent.ops.demo import profile_settings
+            settings = profile_settings(deploy.layout(root)["config"])
+            urls = args.prontidao or ["http://127.0.0.1:8080/ready", "http://127.0.0.1:8000/ready"]
+            from urllib.parse import urlsplit
+            host = urlsplit(settings.panel_origin).hostname or "127.0.0.1"
+            hosts = {u: host for u in urls if ":8000/" in u}
+            report = deploy.update(
+                Path(args.pacote), root, database=Path(settings.storage_path),  # type: ignore[arg-type]
+                key_file=deploy.layout(root)["chaves"] / "backup.key", confirmation=args.confirmacao,
+                stop=lambda: deploy.run_commands([deploy.split_command(args.parar)]),
+                start=lambda: deploy.run_commands([deploy.split_command(args.iniciar)]),
+                ready=lambda: deploy.probe_http(urls, hosts=hosts), python=args.python,
+                create_venv=not args.sem_venv, pip_args=tuple(args.pip_arg))
+            _print(report)
+            return 0 if report.get("resultado") == "ATUALIZADA" else 1
+        elif args.command == "reverter":
+            root = Path(args.raiz)
+            if args.restaurar_banco:
+                from rocha_reis_agent.ops.demo import profile_settings
+                settings = profile_settings(deploy.layout(root)["config"])
+                _print(deploy.restore_database(root, database=Path(settings.storage_path),  # type: ignore[arg-type]
+                                               key_file=deploy.layout(root)["chaves"] / "backup.key",
+                                               backup_name=args.restaurar_banco, confirmation=args.confirmacao or ""))
+            else:
+                _print(deploy.rollback_code(root))
+        elif args.command == "alertas":
+            from rocha_reis_agent.ops import alerts
+            from rocha_reis_agent.ops.backup_job import job_config, load_status
+            from rocha_reis_agent.ops.demo import profile_settings
+            profile = Path(args.perfil).expanduser().absolute()
+            settings = profile_settings(profile)
+            backups = profile / str(job_config(profile)["primario"])
+            result = alerts.evaluate(Path(settings.storage_path), backups=backups,  # type: ignore[arg-type]
+                                     heartbeat=Path(args.batimento) if args.batimento else None,
+                                     offsite_state=Path(args.externo) if args.externo else None,
+                                     database_limit_bytes=settings.storage_max_bytes,
+                                     backup_status=load_status(profile))
+            print(alerts.dumps(result))
+            return alerts.exit_code(result)
+        elif args.command == "ensaio-operacional":
+            from rocha_reis_agent.ops.opsdrill import run_drill
+            report = run_drill(Path(args.destino).expanduser())
+            _print(report)
+            return 0 if report.get("resultado") == "OK" else 1
+        elif args.command == "carga":
+            from rocha_reis_agent.ops.loadtest import run_load
+            _print(run_load(Path(args.destino).expanduser(), conversations=args.conversas, operators=args.operadores,
+                            seconds=args.segundos))
+        elif args.command == "backup-externo":
+            from rocha_reis_agent.ops import offsite
+            from rocha_reis_agent.ops.backup_job import job_config
+            profile = Path(args.perfil).expanduser().absolute()
+            backups = profile / str(job_config(profile)["primario"])
+            state = backups.parent / "estado-copia-externa.json"
+            _print(offsite.sync(backups, offsite.FakeExternalStore(Path(args.destino_falso)), state, keep=args.manter))
+    except (deploy.DeployError, BackupError) as error:
+        print(f"ERRO: {error}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _rehearse(database: Path) -> dict[str, object]:
+    """Abre a cópia com ESTE código (aplica migrações) e roda integrity_check; nunca o banco em uso."""
+    from contextlib import closing
+    import sqlite3
+    from rocha_reis_agent.persistence.sqlite import SCHEMA_VERSION, SQLiteConversationRepository
+    database = Path(database).absolute()
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
+        before = connection.execute("PRAGMA user_version").fetchone()[0]
+        try:
+            marked = dict(connection.execute("SELECT key,value FROM metadata").fetchall()).get("environment_profile")
+        except sqlite3.Error:
+            marked = None
+    # Abre como o ambiente gravado no próprio banco (a marcação impede abrir com outro perfil); a cópia de
+    # pré-produção continua exigindo volume cifrado verificado.
+    SQLiteConversationRepository(database, environment=marked,
+                                 require_encrypted_volume=marked == "preproduction")  # migrações transacionais
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        foreign = connection.execute("PRAGMA foreign_key_check").fetchall()
+        after = connection.execute("PRAGMA user_version").fetchone()[0]
+    if integrity != "ok" or foreign or after != SCHEMA_VERSION:
+        raise BackupError("Cópia do banco reprovada após a migração (integridade ou versão).")
+    return {"esquema_antes": before, "esquema_depois": after, "integridade": integrity}
 
 
 if __name__ == "__main__":

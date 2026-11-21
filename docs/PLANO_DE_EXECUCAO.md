@@ -211,6 +211,27 @@ ações do Conhecimento escondidas, cache dos arquivos do painel após atualiza�
 fundo, avisos sobre o botão Enviar e botões longos alargando a tela no celular. Revisão
 `0.14.0rc1.post2`. Evidências em `STATUS_FASE_16.md`. **A 11B continua pendente.**
 
+## Fase 17 — Infraestrutura, implantação e operação contínua (executada localmente em 20/11/2026)
+
+Worker contínuo com watchdog; `/ready`; pacote reprodutível, instalação em árvore Linux, atualização com
+backup e ensaio de migração em cópia, reversão automática e restauração confirmada; unidades systemd
+endurecidas e verificadas; proxy corrigido (XFF), VPN e firewall de referência; alertas locais; cópia
+externa (adaptador falso); ensaio operacional e medição de carga em servidor simulado. Revisão
+`0.14.0rc1.post4`. Evidências em `STATUS_FASE_17.md`. **Nada instalado em servidor; 11B adiada.**
+
+## Fase 18 — Versionamento, instalação de pré-produção e validação da infraestrutura (21/11/2026)
+
+**18A concluída no limite do ambiente disponível:** unidades systemd REAIS executadas no systemd do
+usuário (sem root) a partir do fluxo oficial `empacotar → instalar → preparar-servidor →
+validar-instalacao`; Caddy 2.11.9, WireGuard do kernel e nftables REAIS num laboratório de rede isolado
+(namespaces, sem alterar a rede do computador). Encontrados e corrigidos 9 defeitos que a verificação
+estática não pegava (atualização real sempre cancelada, instalador alterando o Python do sistema,
+`reverter` reativando versão quebrada, alertas sem acesso ao banco, core dump do worker, painel alcançável
+sem VPN, rajada do limite de conexões, IP completo no log do Caddy, falha de restauração sem alerta).
+Revisão `0.14.0rc1.post5`. Evidências e matriz do que foi testado em cada ambiente: `STATUS_FASE_18.md`.
+**18B (servidor real) NÃO iniciada:** não há servidor autorizado — roteiro em `GUIA_IMPLANTACAO_SERVIDOR.md`
+§7. **Commit/push não executados** (aguardam autorização específica). **11B continua pendente.**
+
 ## Atendimento humano operacional — planejamento original (histórico)
 
 **Entregas:** integração com inbox/processo humano efetivamente disponível; transições de estado autorizadas e auditáveis; notificação aos responsáveis; recuperação após falha.

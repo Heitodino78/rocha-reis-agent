@@ -1,0 +1,168 @@
+# Guia de implantação em servidor Linux (Fases 17 e 18)
+
+**Situação:** procedimento **preparado e ensaiado localmente** numa raiz descartável em volume cifrado.
+**Nenhum servidor foi contratado, nada foi instalado no sistema, nenhuma porta foi aberta, nenhum DNS ou
+certificado público foi pedido.** Meta e Gemini continuam desligados (travas `False`); dados só sintéticos.
+
+**Fase 18 (18A):** as unidades systemd REAIS rodaram no systemd do usuário (sem root), e Caddy, WireGuard
+(kernel) e nftables REAIS rodaram num laboratório de rede isolado em namespaces. Isso achou e corrigiu
+defeitos que a verificação estática não pegava (ver `STATUS_FASE_18.md` §F). **Não é a instalação no
+servidor definitivo (18B), que continua pendente** — roteiro em §7.
+
+## 1. Arquitetura escolhida
+
+Um servidor Linux pequeno, três processos e um proxy. Sem Kubernetes, sem microsserviços: um salão não
+gera carga que os justifique (medição em `STATUS_FASE_17.md` §F).
+
+```
+Internet ──HTTPS──► Caddy (443 público) ──► só /webhooks/whatsapp ──► webhook  127.0.0.1:8080  ─┐
+                                                                                                ├─► SQLite (WAL) em volume LUKS
+Equipe ──WireGuard──► 10.8.0.1 ──HTTPS──► Caddy (443 só na VPN) ──► painel 127.0.0.1:8000 ─────┤   /var/lib/rocha-reis-agent/dados
+                                                                                                │
+                                         worker (sem porta; systemd Type=notify + watchdog) ────┘──► Meta/Gemini só após homologação
+backup diário (timer) ─► backups cifrados locais ─► cópia externa (destino a contratar; hoje SIMULADO)
+alertas (timer 5 min) ─► journal (falha de unidade aciona rocha-reis-alerta@)
+```
+
+- O **webhook** é um aplicativo separado, sem nenhuma rota do painel: mesmo um caminho que escapasse do
+  Caddy cairia num app sem administração (testado com `../`, `%2e%2e`, `//`, maiúsculas, `/docs`).
+- O **painel** só escuta em 127.0.0.1; o Caddy o publica **somente** no IP da VPN. Segundo fator,
+  cookie `Secure` e origem HTTPS são obrigatórios (a instalação recusa subir sem eles).
+- `X-Forwarded-For`: o Caddy o reescreve com o IP real da conexão e as aplicações só o aceitam de
+  127.0.0.1. **Corrigido nesta fase:** a referência anterior confiava em faixas privadas — como os
+  clientes da VPN têm IP privado, um funcionário poderia forjar o cabeçalho e escapar do limitador de
+  tentativas de login.
+
+## 2. Árvore no servidor
+
+| Caminho | Conteúdo | Permissão / dono |
+|---|---|---|
+| `/opt/rocha-reis-agent/releases/<versão>-<impressão>/` | Código de cada versão + `.venv` | somente leitura; root |
+| `/opt/rocha-reis-agent/current` | Link para a versão ativa (troca atômica) | root |
+| `/etc/rocha-reis-agent/perfil.json` | Configuração e segredos da instância | 0600; `rocha-reis` |
+| `/etc/rocha-reis-agent/chaves/` | Chave do backup e do 2º fator (fora dos dados e dos backups) | 0700; `rocha-reis` |
+| `/var/lib/rocha-reis-agent/dados/` | Banco SQLite + `-wal`/`-shm` | 0700; volume **LUKS** |
+| `/var/lib/rocha-reis-agent/backups/` | Backups cifrados locais | 0700 |
+| `/var/lib/rocha-reis-agent/estado/` | Batimento do worker, histórico de implantações, versões | 0700 |
+| `/var/log/rocha-reis-agent/` | Log técnico privado (rotação 5 MB × 5) | 0700 |
+
+Os serviços leem a configuração do perfil por `ROCHA_REIS_PROFILE=/etc/rocha-reis-agent` — nenhum
+segredo na linha de comando, no ambiente da unidade ou no repositório.
+
+## 3. Pré-requisitos do servidor (a contratar — não feito)
+
+| Item | Mínimo justificável | Com margem |
+|---|---|---|
+| Sistema | Debian 12/13 ou Ubuntu 24.04 LTS, só pacotes oficiais | Igual |
+| CPU | 1 vCPU | 2 vCPU |
+| RAM | 1 GB (3 processos ≈ 210 MB medidos + SO) | 2 GB |
+| Disco | 20 GB SSD, **com LUKS** no volume dos dados | 40 GB SSD |
+| Python | 3.13 (`requirements.lock` com hashes) | Igual |
+| Rede | IPv4 público; portas 443/tcp e 51820/udp; SSH só do IP da agência | + IPv6 |
+| Backup externo | Armazenamento de objetos em **outro provedor/região** | + versionamento/retenção imutável |
+
+Justificativa (medição local, `STATUS_FASE_17.md` §F): ~1 000 conversas, 4 operadores simultâneos,
+mensagens chegando e backup rodando ao mesmo tempo → painel p95 ≈ 86 ms, ~75 MB por processo, banco de
+~6 MB (~3 KB por mensagem). **Quando crescer:** CPU média > 50% por semanas, p95 do painel > 500 ms,
+banco > 60% do `storage_max_bytes` (512 MB na instância) ou conversas ativas perto de 1 000 (alerta
+`capacidade_esgotada`). Preços: **a cotar** — nenhum valor presumido.
+
+## 4. Instalação (no servidor, como root; NÃO executado)
+
+```sh
+# 0) Volume cifrado montado em /var/lib/rocha-reis-agent (LUKS) e usuário de serviço sem shell:
+useradd --system --home /var/lib/rocha-reis-agent --shell /usr/sbin/nologin rocha-reis
+# 1) Pacote gerado e conferido na máquina da agência (reprodutível: mesmo conteúdo → mesmo SHA-256):
+python -m rocha_reis_agent.ops empacotar --destino ./pacotes          # anote o sha256 impresso
+sha256sum rocha-reis-agent-<versão>-<impressão>.tar.gz              # no servidor: deve bater
+# 2) Instalar (cria .venv com pip --require-hashes) e ativar a 1ª versão:
+python3.13 -m rocha_reis_agent.ops instalar --pacote rocha-reis-agent-...tar.gz --raiz /
+#    (sem internet no servidor: --pip-arg=--no-index --pip-arg=--find-links=/caminho/rodas)
+# 3) Instância de PRÉ-PRODUÇÃO SINTÉTICA (recusa volume sem cifragem verificada):
+/opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops preparar-servidor --raiz / \
+    --origem https://painel.<domínio-interno>
+chown -R rocha-reis: /etc/rocha-reis-agent /var/lib/rocha-reis-agent /var/log/rocha-reis-agent
+# 4) Conferir (o mesmo comando roda em ExecStartPre de cada serviço):
+sudo -u rocha-reis /opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops validar-instalacao --raiz /
+# 5) Unidades, proxy, firewall e VPN (revisar marcadores <...> antes):
+cp deploy/systemd/* /etc/systemd/system/ && systemd-analyze verify /etc/systemd/system/rocha-reis-*
+systemctl enable --now rocha-reis-webhook rocha-reis-panel rocha-reis-worker rocha-reis-backup.timer rocha-reis-alertas.timer
+nft -c -f deploy/nftables/rocha-reis.nft.exemplo   # só verifica; aplicar depois de revisar
+# Fase 18: o Caddy depende do IP da VPN (bind 10.8.0.1). Ordem + sysctl para a VPN não derrubar o webhook:
+install -D -m 644 deploy/caddy/caddy.service.d-10-rocha-reis.conf /etc/systemd/system/caddy.service.d/10-rocha-reis.conf
+install -m 644 deploy/sysctl/90-rocha-reis.conf /etc/sysctl.d/90-rocha-reis.conf && sysctl --system
+caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile   # validado na Fase 18 (Caddy 2.11.9)
+```
+
+**Atenção (Fase 18):**
+- Sem o IP da VPN o Caddy **inteiro** não sobe — inclusive o webhook público. Por isso o drop-in põe o
+  Caddy depois de `wg-quick@wg0` (com `Wants=`, não `Requires=`) e `net.ipv4.ip_nonlocal_bind=1` deixa o
+  Caddy subir mesmo se a VPN falhar. Ambos testados no laboratório (`caddy_antes_da_vpn`).
+- O firewall recusa o IP da VPN vindo de qualquer interface que não seja `wg0`. Sem essa regra, um
+  vizinho na rede do provedor roteava 10.8.0.1 pela interface pública e abria o painel **sem VPN**
+  (reproduzido no laboratório e corrigido).
+- O instalador **não** altera mais as permissões do Python do sistema (`/usr/bin/python3.13`): o `chmod`
+  que deixa o código somente leitura seguia o link `.venv/bin/python` — corrigido e testado.
+- Revogar acesso: `wg syncconf` (como abaixo), **nunca** `wg setconf`: este recria todos os peers e derruba
+  as sessões de quem continua por ~15 s (medido com a ferramenta de teste).
+
+`credenciais-iniciais.txt` (0600) traz a senha temporária de `admin.preprod`; troca e 2º fator são
+obrigatórios no primeiro acesso. Entregar pessoalmente e apagar o arquivo.
+
+## 5. VPN (WireGuard) — referência em `deploy/wireguard/`
+
+**Por que WireGuard:** no kernel Linux, configuração curta, aplicativos oficiais para Android, iOS,
+Windows e macOS, sem custo de licença, revogação imediata (apagar a chave pública do aparelho). A VPN
+só dá acesso a `10.8.0.1/32` (o painel); não vira saída de internet do aparelho.
+
+| Procedimento | Como |
+|---|---|
+| Criar acesso | No servidor: `wg genkey`/`wg pubkey`/`wg genpsk` para o aparelho; bloco `[Peer]` com IP `/32` próprio (planilha de IPs ↔ pessoa/aparelho); entregar `aparelho.conf` por QR **na tela, pessoalmente**; apagar o arquivo. |
+| Revogar | Apagar o `[Peer]` e `wg syncconf wg0 <(wg-quick strip wg0)`; desativar também o login no painel (Equipe → Desativar). |
+| Aparelho perdido | Revogar a chave do aparelho + redefinir o 2º fator da pessoa no painel. |
+| Recuperação do servidor | `wg0.conf` (com a chave privada do servidor) guardado cifrado junto das chaves de backup; sem ele, gerar nova chave e reenviar configurações a todos. |
+| Riscos | Chave do aparelho copiada (mitigado por 2º fator + senha no painel); aparelhos sem bloqueio de tela; esquecer de revogar quem saiu (checklist de desligamento). |
+
+O 2º fator do painel continua obrigatório **mesmo com a VPN**.
+
+## 6. Testes que precisam ser repetidos NO servidor definitivo
+
+Ensaiados na Fase 18 fora do servidor (ver matriz em `STATUS_FASE_18.md` §B); **repetir lá**:
+
+1. `validar-instalacao` e `systemd-analyze security` (exposição ≤ 2) **com o usuário `rocha-reis`** e o
+   systemd do SISTEMA (na 18A: systemd do usuário, sem `User=`; exposição medida 1,8).
+2. Subida real das unidades com o endurecimento completo — feito na 18A no systemd do usuário
+   (notify, watchdog, SIGTERM, kill -9, limite de reinícios, OnFailure, ExecStartPre, timers, montagens
+   somente leitura, seccomp, sem capabilities). Falta: usuário dedicado, `ProtectHome=true` literal,
+   journald do sistema, `systemd-coredump` (conferir que `LimitCORE=0` impede o core).
+3. `caddy validate`, certificado público (ACME) para o webhook, varredura de portas **externa**: só
+   443/tcp e 51820/udp; `/panel`, `/api`, `/health`, `/ready` → 404 pelo endereço público.
+4. Webhook real da Meta (homologação 6B, autorizada à parte) — inclusive a rajada de entregas contra o
+   limite do nftables (60/min por IP, rajada 20).
+5. `ops ensaio-operacional` e `ops carga` no próprio servidor; teste de restauração a partir do destino
+   externo **real**.
+6. Reinício da máquina inteira (`reboot`) com conferência de `/ready`, filas, VPN e Caddy (ordem de
+   subida). **Não testado em nenhuma fase.**
+7. Caddy subindo **antes** da VPN (com `ip_nonlocal_bind=1`) e o painel passando a responder quando o
+   `wg0` aparece — a primeira parte foi testada no laboratório; a segunda não.
+
+## 7. Roteiro da Fase 18B (servidor real — NÃO executado; exige autorização específica)
+
+Pré-condições (nenhuma existe hoje): servidor contratado e autorizado por escrito; acesso SSH por chave
+da agência; volume de dados LUKS montado em `/var/lib/rocha-reis-agent`; domínio para o webhook; destino
+externo de backup; lista de aparelhos da VPN. **Antes de mexer no servidor, apresentar o plano de
+alterações ao responsável** (o que será instalado, portas abertas, como desfazer).
+
+| # | Ação no servidor | Aceite |
+|---|---|---|
+| 1 | §4 passos 0–4 (usuário, pacote conferido por SHA-256, `instalar`, `preparar-servidor`, `validar-instalacao` como `rocha-reis`) | `ok: true`, travas `False` |
+| 2 | Unidades + drop-in do Caddy + sysctl + nftables (`nft -c` antes de `nft -f`) | `systemd-analyze verify` sem erro; exposição ≤ 2 |
+| 3 | WireGuard com chaves geradas NO servidor; um aparelho de teste | Handshake; painel só pela VPN; 2º fator |
+| 4 | Repetir no servidor o roteiro de `tests_infra/fase18_systemd.py` (subida, SIGTERM, kill -9, watchdog, limite de reinícios, ExecStartPre, backup/alertas, atualização/reversão) | Mesmos resultados da 18A, agora com `User=rocha-reis` |
+| 5 | Varredura externa de portas e caminhos (de fora da rede do provedor) | Só 443/tcp e 51820/udp; tudo fora do webhook = 404 |
+| 6 | `ops ensaio-operacional` e `ops carga` em diretório descartável | Sem duplicidade; integridade ok |
+| 7 | Backup → destino externo real → restauração numa instância nova | Contagens iguais; 2º fator funciona |
+| 8 | `reboot` | Tudo pronto sem intervenção; `/ready` 200; filas vazias |
+
+18B só é concluída com todos os aceites no próprio servidor. VMs, contêineres e namespaces locais **não**
+contam (ver `STATUS_FASE_18.md`).

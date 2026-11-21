@@ -89,6 +89,15 @@ class HumanHandoffManager:
             raise SimulationError("Transição inválida para o estado atual.")
         self._change(conversation, State.WAITING_HUMAN, "operator_request", operator.audit_id)
 
+    def release_to_queue(self, conversation: Conversation, operator: VerifiedOperator) -> None:
+        """Responsável desativado (HUMAN_ACTIVE → WAITING_HUMAN): o cliente volta à fila para outra
+        pessoa assumir. A automação continua suspensa; a mudança é versionada e auditada."""
+        if not isinstance(operator, VerifiedOperator) or conversation.closed:
+            raise SimulationError("Operação indisponível.")
+        if conversation.state != State.HUMAN_ACTIVE:
+            raise SimulationError("Transição inválida para o estado atual.")
+        self._change(conversation, State.WAITING_HUMAN, "owner_deactivated", operator.audit_id)
+
     def record_transfer(self, conversation: Conversation, operator: VerifiedOperator) -> None:
         """Transferência entre funcionários: sem mudança de estado, mas versionada e auditada."""
         if conversation.state != State.HUMAN_ACTIVE or conversation.closed:

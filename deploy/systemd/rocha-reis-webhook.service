@@ -1,0 +1,62 @@
+# REFERÊNCIA (Fase 17) — não instalado. Webhook da Meta: único processo alcançável pela internet, e só pelo
+# Caddy (127.0.0.1:8080). Não tem rotas do painel (aplicativo separado). Ver docs/GUIA_IMPLANTACAO_SERVIDOR.md.
+[Unit]
+Description=Rocha Reis — webhook do WhatsApp (somente 127.0.0.1)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=rocha-reis-alerta@%n.service
+
+[Service]
+Type=exec
+User=rocha-reis
+Group=rocha-reis
+WorkingDirectory=/opt/rocha-reis-agent/current
+# Configuração e segredos no perfil (0600, fora do código): nada sensível na linha de comando ou no ambiente.
+Environment=ROCHA_REIS_PROFILE=/etc/rocha-reis-agent
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStartPre=/opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops validar-instalacao --raiz /
+ExecStart=/opt/rocha-reis-agent/current/.venv/bin/python -m uvicorn rocha_reis_agent.main:create_app --factory --host 127.0.0.1 --port 8080 --no-access-log --timeout-graceful-shutdown 10 --proxy-headers --forwarded-allow-ips 127.0.0.1 --limit-concurrency 64
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillMode=mixed
+ReadWritePaths=/var/lib/rocha-reis-agent /var/log/rocha-reis-agent
+ReadOnlyPaths=/etc/rocha-reis-agent
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=384M
+TasksMax=64
+LimitNOFILE=4096
+# Endurecimento (Fase 17): validado com `systemd-analyze verify` e `systemd-analyze security --offline`.
+# Fase 18 (achado no systemd REAL: o watchdog abortou o worker com core dump): sem core dump — a memória do
+# processo tem texto de conversas e segredos da instância.
+LimitCORE=0
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

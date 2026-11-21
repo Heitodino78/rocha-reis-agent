@@ -1,0 +1,40 @@
+# REFERÊNCIA (Fase 17) — não instalado. Acionada por OnFailure= das outras unidades: registra o alerta no
+# journal com prioridade alta (consultar: journalctl -p err -t rocha-reis-alerta). Canal externo de aviso
+# (e-mail/mensageria) é decisão futura; nada sai da máquina nesta fase.
+[Unit]
+Description=Rocha Reis — registro de falha da unidade %i
+
+[Service]
+Type=oneshot
+User=rocha-reis
+ExecStart=/usr/bin/logger -p user.err -t rocha-reis-alerta "falha na unidade %i"
+PrivateNetwork=true
+# Endurecimento (Fase 17): validado com `systemd-analyze verify` e `systemd-analyze security --offline`.
+# Fase 18 (achado no systemd REAL: o watchdog abortou o worker com core dump): sem core dump — a memória do
+# processo tem texto de conversas e segredos da instância.
+LimitCORE=0
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+UMask=0077

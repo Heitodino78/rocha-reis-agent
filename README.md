@@ -465,6 +465,33 @@ em [`deploy/`](deploy/README.md). Documentos: [`STATUS_FASE_13.md`](docs/STATUS_
 [`OPERACAO_BACKUP_AUTOMATICO.md`](docs/OPERACAO_BACKUP_AUTOMATICO.md),
 [`PLANO_RECUPERACAO_DESASTRES.md`](docs/PLANO_RECUPERACAO_DESASTRES.md).
 
+## Validação da infraestrutura — Fase 18 (18A local; 18B pendente)
+
+Unidades systemd executadas de verdade (systemd do usuário, sem root) e Caddy, WireGuard e nftables reais
+num laboratório de rede isolado (namespaces). Ferramentas em `tests_infra/` (fora do pacote de execução);
+precisam de Linux com systemd do usuário, `unshare`, `nft` e um binário do Caddy:
+
+```sh
+python tests_infra/fase18_systemd.py --destino DIR_NOVO --python /caminho/python3.13
+python tests_infra/fase18_rede.py --destino DIR_NOVO --caddy /caminho/caddy
+```
+
+Resultados, defeitos corrigidos e o que ainda depende do servidor real:
+[`STATUS_FASE_18.md`](docs/STATUS_FASE_18.md). RC1 na revisão `0.14.0rc1.post5`. Nada instalado em servidor.
+
+## Servidor e operação contínua — Fase 17
+
+Pacote reprodutível, instalação, atualização/reversão, worker 24/7, alertas e ensaio operacional:
+[`GUIA_IMPLANTACAO_SERVIDOR.md`](docs/GUIA_IMPLANTACAO_SERVIDOR.md),
+[`OPERACAO_24_7.md`](docs/OPERACAO_24_7.md), [`ATUALIZACAO_E_ROLLBACK.md`](docs/ATUALIZACAO_E_ROLLBACK.md),
+[`MONITORAMENTO_E_ALERTAS.md`](docs/MONITORAMENTO_E_ALERTAS.md), [`STATUS_FASE_17.md`](docs/STATUS_FASE_17.md).
+Nada foi instalado em servidor. RC1 na revisão `0.14.0rc1.post4`.
+
+## Revisão final
+
+Revisão de ponta a ponta com correções e pontos para decisão do salão em
+[`REVISAO_FINAL.md`](docs/REVISAO_FINAL.md); RC1 na revisão `0.14.0rc1.post3`.
+
 ## Redesign do painel — Fase 16
 
 Interface revista (sistema de design, temas claro e escuro, celular/tablet/desktop) e auditoria com

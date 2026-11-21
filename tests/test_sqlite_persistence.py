@@ -253,7 +253,8 @@ def test_fastapi_composes_configured_store_and_health_is_still_liveness(tmp_path
     with TestClient(create_app(settings)) as client:
         assert client.get("/health").json() == {"status": "ok"}
         assert isinstance(client.app.state.conversation_repository, SQLiteConversationRepository)
-        assert set(client.app.openapi()["paths"]) == {"/health"}
+        # Fase 17: + /ready (prontidão: banco, esquema, WAL, disco). Nenhuma outra rota sem o canal ligado.
+        assert set(client.app.openapi()["paths"]) == {"/health", "/ready"}
 
 
 def test_database_deleted_does_not_silently_fall_back_to_memory(tmp_path, knowledge):

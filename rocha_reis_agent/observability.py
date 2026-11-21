@@ -6,6 +6,7 @@ anexadas à linha; qualquer outro atributo extra é descartado.
 """
 
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 
@@ -13,6 +14,17 @@ from rocha_reis_agent.domain.contracts import StorageError
 
 ALLOWED_EXTRAS = ("outcome", "code", "failure_kind", "accepted", "duplicates", "conflicts", "ignored")
 _MARKER = "_rocha_reis_private_log"
+# Fase 17: rotação (antes o arquivo crescia sem limite numa operação 24/7). ~30 MB no máximo.
+MAX_LOG_BYTES = 5 * 1024 * 1024
+LOG_BACKUPS = 5
+
+
+class _PrivateRotatingHandler(RotatingFileHandler):
+    """Rotaciona por tamanho; todo arquivo (inclusive o novo após a rotação) nasce 0600, sem seguir links."""
+
+    def _open(self):  # type: ignore[no-untyped-def]
+        descriptor = os.open(self.baseFilename, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        return os.fdopen(descriptor, "a", encoding=self.encoding)
 
 
 class _TechnicalFormatter(logging.Formatter):
@@ -39,7 +51,7 @@ def configure_private_log(path: Path) -> None:
     logger = logging.getLogger("rocha_reis_agent")
     if any(getattr(h, _MARKER, None) == str(path) for h in logger.handlers):
         return
-    handler = logging.FileHandler(path, mode="a", encoding="utf-8")
+    handler = _PrivateRotatingHandler(path, mode="a", maxBytes=MAX_LOG_BYTES, backupCount=LOG_BACKUPS, encoding="utf-8")
     handler.setFormatter(_TechnicalFormatter())
     setattr(handler, _MARKER, str(path))
     logger.addHandler(handler)

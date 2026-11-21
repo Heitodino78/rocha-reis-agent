@@ -94,8 +94,18 @@ def _exclusive(lock_path: Path) -> Iterator[None]:
         os.close(descriptor)
 
 
+def status_path(profile: Path) -> Path:
+    """Estado do backup automático. Fase 17: o perfil pode apontar outro local (no servidor o perfil fica em
+    /etc, montado SOMENTE LEITURA para o serviço; o estado vai para /var/lib/.../estado)."""
+    try:
+        configured = job_config(profile).get("estado")
+    except (OSError, ValueError):
+        configured = None
+    return profile / str(configured) if configured else profile / STATUS_FILE
+
+
 def load_status(profile: Path) -> dict[str, object]:
-    path = profile / STATUS_FILE
+    path = status_path(profile)
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -103,7 +113,7 @@ def load_status(profile: Path) -> dict[str, object]:
 
 
 def _save_status(profile: Path, status: dict[str, object]) -> None:
-    path = profile / STATUS_FILE
+    path = status_path(profile)
     partial = path.with_name(path.name + ".partial")
     descriptor = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:

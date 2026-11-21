@@ -30,6 +30,13 @@ const STORAGE = {  // somente conveniências deste navegador; nada aqui é fonte
   get(key, fallback) { try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* modo privado */ } },
 };
+// Motivos das mudanças de situação, em português (antes apareciam os códigos internos).
+const TRANSITION_LABEL = {
+  client_request: "pedido do cliente", processing_failure: "falha no processamento automático",
+  validated_ai_suggestion: "sugestão validada do assistente", operator_request: "enviada para a fila pela administração",
+  assume: "assumido", transfer: "transferido", resolve: "finalizado", resume: "automação retomada",
+  owner_deactivated: "responsável desativado; voltou para a fila",
+};
 const ROLE_LABEL = { client: "Cliente", assistant: "Assistente automático", operator: "Equipe" };
 
 const state = {
@@ -401,7 +408,7 @@ function renderDetail() {
   list.dataset.rendered = "1";
 
   $("transitions").replaceChildren(...d.transitions.map((t) => el("li", {
-    text: `${formatTime(t.recorded_at)} — ${STATE_LABEL[t.previous]} → ${STATE_LABEL[t.current]} (${t.action}${t.actor ? `, ${t.actor}` : ""})`,
+    text: `${formatTime(t.recorded_at)} — ${STATE_LABEL[t.previous]} → ${STATE_LABEL[t.current]} (${TRANSITION_LABEL[t.action] || t.action}${t.actor ? `, ${t.actor}` : ""})`,
   })));
 
   const canReply = d.state === "HUMAN_ACTIVE" && !d.closed && mine;
@@ -623,6 +630,8 @@ async function loadOverview() {
         urgent ? "critical" : "warning", ["conversations", "waiting"]);
     }
     if (data.inbox && data.inbox.FAILED) push(`${data.inbox.FAILED} mensagem(ns) recebida(s) não processada(s).`, "warning", ["system"]);
+    if (data.orphaned_active) push(`${data.orphaned_active} atendimento(s) em andamento com funcionário desativado — transfira para alguém ativo.`,
+      "critical", ["conversations", "others"]);
     if (data.retired_contact_attempts) push(`${data.retired_contact_attempts} tentativa(s) de contato de clientes com dados excluídos.`, "info", ["system"]);
     const list = $("attention-list");
     list.replaceChildren(...(attention.length ? attention.map((item) => {
@@ -912,6 +921,25 @@ function disableMfa() {
   }, wrap);
 }
 
+function resetPasswordDialog(user) {
+  // Senha temporária definida pela administração: troca obrigatória no próximo acesso; sessões encerradas.
+  const first = el("input", { attrs: { id: "reset-password-new", type: "password", minlength: "12", maxlength: "128", autocomplete: "new-password" } });
+  const again = el("input", { attrs: { id: "reset-password-again", type: "password", minlength: "12", maxlength: "128", autocomplete: "new-password" } });
+  const wrap = el("div", {}, [
+    el("label", { text: "Senha temporária (mínimo 12 caracteres)", attrs: { for: "reset-password-new" } }), first,
+    el("label", { text: "Repita a senha temporária", attrs: { for: "reset-password-again" } }), again]);
+  confirmAction(`Redefinir a senha de ${user.display_name}?`,
+    "Confirme antes a identidade da pessoa. As sessões dela serão encerradas e ela deverá trocar a senha no próximo acesso.",
+    async () => {
+      if (first.value !== again.value) { toast("As senhas não conferem. Nada foi alterado.", "error"); return; }
+      try {
+        await api(`/users/${user.id}/reset-password`, { method: "POST", body: { password: first.value } });
+        toast("Senha redefinida. Entregue a senha temporária pessoalmente.");
+      } catch (error) { toast(error.message, "error"); }
+      loadTeam();
+    }, wrap);
+}
+
 function resetMfaDialog(user) {
   const reason = el("textarea", { attrs: { id: "reset-reason", rows: "3", maxlength: "300" } });
   const confirm = el("input", { attrs: { id: "reset-confirm", autocomplete: "off", spellcheck: "false" } });
@@ -936,7 +964,8 @@ async function loadTeam() {
       const toggle = el("button", { className: "btn btn-ghost", text: u.active ? "Desativar" : "Reativar", attrs: { type: "button" } });
       toggle.disabled = u.id === state.user.id;
       toggle.addEventListener("click", () => confirmAction(u.active ? "Desativar acesso?" : "Reativar acesso?",
-        u.active ? "As sessões abertas dessa pessoa serão encerradas imediatamente." : "A pessoa poderá entrar novamente.",
+        u.active ? "As sessões abertas dessa pessoa serão encerradas imediatamente e os atendimentos em andamento dela voltam para a fila de espera."
+          : "A pessoa poderá entrar novamente.",
         async () => {
           try { await api(`/users/${u.id}/${u.active ? "deactivate" : "activate"}`, { method: "POST", body: {} }); toast("Acesso atualizado."); }
           catch (error) { toast(error.message, "error"); }
@@ -945,6 +974,11 @@ async function loadTeam() {
       // Fase 16: a célula era a própria caixa flexível (td.row-actions), o que a tirava do modelo de tabela
       // e desalinhava a linha; agora os botões ficam num contêiner dentro da célula.
       const buttons = el("div", { className: "row-actions" }, [toggle]);
+      if (u.active && u.id !== state.user.id) {
+        const pass = el("button", { className: "btn btn-ghost", text: "Redefinir senha", attrs: { type: "button" } });
+        pass.addEventListener("click", () => resetPasswordDialog(u));
+        buttons.append(pass);
+      }
       if (u.mfa_enabled && u.id !== state.user.id) {
         const reset = el("button", { className: "btn btn-ghost", text: "Redefinir duas etapas", attrs: { type: "button" } });
         reset.addEventListener("click", () => resetMfaDialog(u));
@@ -977,7 +1011,7 @@ async function createUser(event) {
 
 const ACTION_LABEL = {
   login: "Entrou", logout: "Saiu", login_failed: "Falha de login", user_created: "Criou acesso",
-  user_deactivated: "Desativou acesso", user_activated: "Reativou acesso", knowledge_drafted: "Criou rascunho de informação",
+  user_deactivated: "Desativou acesso", conversation_requeued: "Devolveu atendimento à fila", user_activated: "Reativou acesso", knowledge_drafted: "Criou rascunho de informação",
   knowledge_approved: "Aprovou informação", knowledge_rejected: "Rejeitou rascunho", knowledge_revoked: "Revogou informação", conversation_assumed: "Assumiu atendimento",
   conversation_transferred: "Transferiu atendimento", conversation_resolved: "Finalizou atendimento",
   automation_resumed: "Retomou automação", handoff_requested: "Enviou para a fila", operator_message_queued: "Enviou mensagem",

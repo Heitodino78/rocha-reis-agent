@@ -62,4 +62,4 @@ def test_script_still_never_injects_html():
 
 def test_release_identification_moved_with_the_redesign():
     assert RELEASE_NAME == "Rocha Reis Agent — RC1 Offline"
-    assert __version__ == "0.14.0rc1.post2"
+    assert __version__.startswith("0.14.0rc1.post") and __version__ != "0.14.0rc1.post1"  # Fase 16 em diante

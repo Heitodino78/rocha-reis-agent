@@ -1,0 +1,16 @@
+# REFERÊNCIA (Fase 17) — NÃO está em uso. Servidor WireGuard da equipe. Nenhuma chave real aqui.
+# Gere as chaves NO SERVIDOR (umask 077): wg genkey | tee servidor.key | wg pubkey > servidor.pub
+# Este arquivo final fica em /etc/wireguard/wg0.conf (0600, root). Procedimentos: docs/GUIA_IMPLANTACAO_SERVIDOR.md §VPN.
+[Interface]
+Address = 10.8.0.1/24
+ListenPort = 51820
+PrivateKey = <CHAVE-PRIVADA-DO-SERVIDOR>
+# Sem encaminhamento para a internet: a VPN só dá acesso ao painel (10.8.0.1:443), não é saída de rede.
+
+# Um bloco [Peer] por aparelho (celular ou computador) de cada funcionário. Revogar = apagar o bloco e
+# recarregar (wg syncconf wg0 <(wg-quick strip wg0)); o acesso cai na hora. O MFA do painel continua obrigatório.
+[Peer]
+# <Nome do funcionário> — <aparelho> — criado em <AAAA-MM-DD>
+PublicKey = <CHAVE-PUBLICA-DO-APARELHO>
+PresharedKey = <CHAVE-PRE-COMPARTILHADA-DO-APARELHO>
+AllowedIPs = 10.8.0.10/32

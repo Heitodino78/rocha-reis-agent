@@ -13,18 +13,18 @@ habilitados do salão e da agência.
 
 | Área | Comprovado localmente | Falta (depende de quem) |
 |---|---|---|
-| Servidor / sistema operacional | — | Contratar e instalar (agência + aprovação de custo pelo salão) |
+| Servidor / sistema operacional | Pacote reprodutível, instalação em árvore Linux, atualização/reversão testadas (Fase 17); **unidades executadas no systemd real do usuário** com todo o endurecimento, `ops atualizar` controlando o systemd (Fase 18) | Contratar e instalar (agência + aprovação de custo pelo salão); 18B: `GUIA_IMPLANTACAO_SERVIDOR.md` §7 (usuário dedicado, systemd do sistema, `reboot`) |
 | Disco cifrado | Verificação automática de dm-crypt/LUKS; pré-produção recusa volume sem cifragem | Disco cifrado no servidor (agência) |
-| HTTPS / domínio / proxy | HTTPS com certificado de desenvolvimento; HSTS; cookie `__Host-`/Secure; proxy de referência | Domínio, certificado público, Caddy instalado (agência; salão aprova domínio) |
-| VPN do painel | — (planejada) | Instalar e distribuir acessos (agência) |
+| HTTPS / domínio / proxy | HTTPS com certificado de desenvolvimento; HSTS; cookie `__Host-`/Secure; **Caddy 2.11.9 real testado em laboratório** (validação, TLS 1.3, SSE, caminhos, XFF, limites, logs) (Fase 18) | Domínio, certificado público (ACME), Caddy instalado no servidor (agência; salão aprova domínio) |
+| VPN do painel | **WireGuard do kernel testado em laboratório** (handshake, chave desconhecida, isolamento, revogação imediata, recuperação, 2º fator pela VPN) + firewall corrigido (IP da VPN só pelo túnel) (Fase 18) | Instalar no servidor, gerar chaves lá e distribuir acessos (agência) |
 | Banco | SQLite com migrações transacionais, ambientes marcados, dados reais bloqueados | Decidir hospedagem; manter SQLite enquanto houver um servidor |
-| Monitoramento | Indicadores locais (`ops metricas`, Sistema) | Verificação externa de saúde e alertas (agência) |
+| Monitoramento | Indicadores locais + `ops alertas` (0/1/2) com timer de referência; `/ready`; batimento do worker (Fase 17); unidade de alertas **corrigida e exercitada com os serviços reais**; 22 códigos com teste; alertas de backup/restauração com falha (Fase 18) | Canal de aviso a pessoas e verificação externa (agência) |
 | Segundo fator | TOTP, recuperação, redefinição auditada, obrigatório em pré-produção | Equipe cadastrar (11B / implantação) |
 | Credenciais / segredos | Arquivos 0600 fora do banco/backups; rotação da chave do 2º fator | Cofre/arquivos no servidor; custódia (salão + agência) |
-| Backup externo | Rodada automática, verificação, cópia secundária **simulada**, teste de restauração | Destino externo real e timer instalado (agência) |
+| Backup externo | Rodada automática, verificação, cópia secundária **simulada**, teste de restauração; interface de destino externo testada com adaptador FALSO (Fase 17) | Contratar destino externo real e escrever o adaptador; timer instalado (agência) |
 | Rotação de chaves | Comando testado (2º fator); procedimento documentado (backup) | Política e calendário (salão + agência) |
 | Acesso administrativo | RBAC no backend, auditoria | Lista real de administradores (salão) |
-| Recuperação | Ensaio local isolado (≈ 0,44 s, não é RTO) | Ensaio no servidor real; RPO/RTO decididos (salão) |
+| Recuperação | Ensaio local isolado; ensaio operacional com queda total e restauração em instância nova (Fase 17) — não é RTO | Ensaio no servidor real; RPO/RTO decididos (salão) |
 | Responsáveis / suporte / incidentes | Procedimentos documentados | Nomes, horários e canal de suporte (salão + agência) |
 | Retenção / exclusão | Mecanismos configuráveis | Decisão jurídica (salão + jurídico) |
 | Conta Google / projeto Gemini | Adaptador bloqueado; avaliação offline (Q2 reprovado com regras) | Conta, faturamento, chave, homologação 9C-B (salão autoriza; agência executa) |

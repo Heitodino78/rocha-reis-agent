@@ -30,7 +30,9 @@ FILTERS = {
     "human_active": "c.state='HUMAN_ACTIVE' AND c.closed=0",
     "auto": "c.state='AUTO' AND c.closed=0",
     "resolved": "(c.state='RESOLVED' OR c.closed=1)",
-    "mine": "a.user_id=:me",
+    # Atendimentos EM ANDAMENTO do usuário. Finalizar não remove o responsável (é o que mantém o histórico
+    # visível para a atendente); os finalizados aparecem em "Encerradas" (revisão final: antes contavam aqui).
+    "mine": "a.user_id=:me AND c.state='HUMAN_ACTIVE' AND c.closed=0",
     # Fase 10: atendimentos humanos de OUTROS funcionários (só aparece para quem pode ver: ADMIN).
     "others": "c.state='HUMAN_ACTIVE' AND c.closed=0 AND a.user_id IS NOT NULL AND a.user_id<>:me",
 }
@@ -162,7 +164,8 @@ class SQLitePanelStore:
                                             (user_id,)).fetchone()[0]
                 if row["role"] == "ADMIN" and admins == 0:
                     raise PanelError(409, "Não é possível desativar o último administrador ativo.")
-                # Desativar revoga imediatamente todas as sessões e libera responsabilidades.
+                # Desativar revoga imediatamente todas as sessões. Os atendimentos em andamento voltam à
+                # fila em seguida (PanelService.set_active), cada um na própria transação da conversa.
                 connection.execute("UPDATE panel_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
                                    (iso(self.clock()), user_id))
             connection.execute("UPDATE panel_users SET active=?,updated_at=? WHERE id=?",
@@ -204,20 +207,27 @@ class SQLitePanelStore:
             return None
         hashed = token_hash(token)
         now = self.clock()
-        with self._tx() as connection:
+        # Fase 17: LEITURA. Antes toda requisição autenticada abria transação de ESCRITA só para conferir a
+        # sessão; sob carga (worker gravando, backup) isso estourava o tempo de espera do SQLite e virava 500.
+        with self._read() as connection:
             row = connection.execute(
                 "SELECT s.*, u.id AS uid, u.login, u.display_name, u.role, u.active, u.must_change_password "
                 "FROM panel_sessions AS s JOIN panel_users AS u ON u.id=s.user_id WHERE s.token_hash=?", (hashed,),
             ).fetchone()
-            if (row is None or row["revoked_at"] is not None or not row["active"]
-                    or parse_iso(row["expires_at"]) <= now
-                    or now - parse_iso(row["last_seen_at"]) > timedelta(minutes=idle_minutes)):
-                return None
-            if touch and now - parse_iso(row["last_seen_at"]) > timedelta(seconds=30):
-                connection.execute("UPDATE panel_sessions SET last_seen_at=? WHERE token_hash=?", (iso(now), hashed))
-            user = PanelUser(row["uid"], row["login"], row["display_name"], row["role"], True,
-                             bool(row["must_change_password"]))
-            return PanelSession(hashed, user, csrf_for(token))
+        if (row is None or row["revoked_at"] is not None or not row["active"]
+                or parse_iso(row["expires_at"]) <= now
+                or now - parse_iso(row["last_seen_at"]) > timedelta(minutes=idle_minutes)):
+            return None
+        if touch and now - parse_iso(row["last_seen_at"]) > timedelta(seconds=30):
+            try:
+                with self._tx() as connection:  # escrita curta; não reativa sessão revogada entre a leitura e aqui
+                    connection.execute("UPDATE panel_sessions SET last_seen_at=? WHERE token_hash=? AND revoked_at IS "
+                                       "NULL", (iso(now), hashed))
+            except StorageError:
+                pass  # banco ocupado: a renovação da ociosidade fica para a próxima requisição (até 30 s depois)
+        user = PanelUser(row["uid"], row["login"], row["display_name"], row["role"], True,
+                         bool(row["must_change_password"]))
+        return PanelSession(hashed, user, csrf_for(token))
 
     def revoke_session(self, hashed: str, *, actor_id: str) -> None:
         with self._tx() as connection:
@@ -455,6 +465,13 @@ class SQLitePanelStore:
 
         self.repository.stage_effect(effect)
 
+    def active_assignments(self, user_id: str) -> list[str]:
+        """Conversas em atendimento humano ativo sob responsabilidade do usuário."""
+        with self._read() as connection:
+            return [row[0] for row in connection.execute(
+                "SELECT a.conversation_id FROM panel_assignments AS a JOIN conversations AS c ON c.id=a.conversation_id "
+                "WHERE a.user_id=? AND c.state='HUMAN_ACTIVE' AND c.closed=0 ORDER BY a.assigned_at", (user_id,))]
+
     def stage_unassign(self, conversation_id: str) -> None:
         self.repository.stage_effect(lambda connection: connection.execute(
             "DELETE FROM panel_assignments WHERE conversation_id=?", (conversation_id,)))
@@ -614,7 +631,15 @@ class SQLitePanelStore:
                 "SELECT CASE WHEN c.closed=1 THEN 'CLOSED' ELSE c.state END, count(*) FROM conversations AS c "
                 "LEFT JOIN panel_assignments AS a ON a.conversation_id=c.id WHERE " + visibility(user) + " GROUP BY 1",
                 {"me": user.id})}
-            mine = connection.execute("SELECT count(*) FROM panel_assignments WHERE user_id=?", (user.id,)).fetchone()[0]
+            mine = connection.execute(
+                "SELECT count(*) FROM panel_assignments AS a JOIN conversations AS c ON c.id=a.conversation_id "
+                "WHERE a.user_id=? AND c.state='HUMAN_ACTIVE' AND c.closed=0", (user.id,)).fetchone()[0]
+            # Rede de segurança: atendimento em andamento com responsável desativado (ex.: devolução à fila
+            # interrompida). Só a administração vê e pode transferir.
+            orphaned = connection.execute(
+                "SELECT count(*) FROM panel_assignments AS a JOIN conversations AS c ON c.id=a.conversation_id "
+                "JOIN panel_users AS u ON u.id=a.user_id WHERE u.active=0 AND c.state='HUMAN_ACTIVE' AND c.closed=0"
+            ).fetchone()[0] if user.role == "ADMIN" else None
             halted = connection.execute("SELECT reason,set_at FROM channel_control WHERE key='dispatch_halt'").fetchone()
             outbox = {row[0]: row[1] for row in connection.execute(
                 "SELECT status,count(*) FROM channel_outbox GROUP BY status")} if user.role == "ADMIN" else None
@@ -640,7 +665,7 @@ class SQLitePanelStore:
                 "waiting_unassigned": waiting[0], "oldest_waiting_since": oldest,
                 "oldest_waiting_minutes": int((self.clock() - datetime.fromisoformat(oldest)).total_seconds() // 60) if oldest else None,
                 "urgent_after_minutes": urgent_after, "last_activity_at": last_activity,
-                "inbox": inbox, "retired_contact_attempts": retired_attempts}
+                "inbox": inbox, "retired_contact_attempts": retired_attempts, "orphaned_active": orphaned}
 
     # ---------------------------------------------------------- notificações (Fase 10)
     def notifications(self, user: PanelUser) -> list[dict[str, object]]:

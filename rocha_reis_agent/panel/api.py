@@ -525,7 +525,9 @@ def build_panel_router(ctx: PanelContext) -> APIRouter:
 
     @router.post("/users/{user_id}/deactivate", status_code=204)
     async def deactivate(request: Request, user_id: str) -> None:
-        service.set_active(admin(request).user, user_id, False)
+        # Atendimentos em andamento da pessoa voltam à fila (cada um auditado como conversation_requeued).
+        session = admin(request)
+        await run_in_threadpool(service.set_active, session.user, user_id, False)
 
     @router.post("/users/{user_id}/activate", status_code=204)
     async def activate(request: Request, user_id: str) -> None:

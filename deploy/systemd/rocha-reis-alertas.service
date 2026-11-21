@@ -1,0 +1,49 @@
+# REFERÊNCIA (Fase 17) — não instalado. Avalia os alertas locais; código 1/2 marca a unidade como falha
+# (aparece no journal e aciona rocha-reis-alerta@). Nada é enviado para fora da máquina nesta fase.
+[Unit]
+Description=Rocha Reis — verificação de alertas operacionais
+OnFailure=rocha-reis-alerta@%n.service
+
+[Service]
+Type=oneshot
+User=rocha-reis
+Group=rocha-reis
+WorkingDirectory=/opt/rocha-reis-agent/current
+ExecStart=/opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops alertas --perfil /etc/rocha-reis-agent --batimento /var/lib/rocha-reis-agent/estado/worker.json
+ReadOnlyPaths=/etc/rocha-reis-agent /var/lib/rocha-reis-agent
+# Fase 18 (achado no systemd REAL): SQLite em modo WAL precisa escrever no índice "-shm" até para LER; com o
+# diretório do banco somente leitura a avaliação dava "banco_inacessivel" (CRÍTICO) a cada 5 minutos e
+# escondia os alertas verdadeiros. O banco continua aberto com mode=ro (nenhum dado é alterado).
+ReadWritePaths=/var/lib/rocha-reis-agent/dados
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=true
+MemoryMax=256M
+# Endurecimento (Fase 17): validado com `systemd-analyze verify` e `systemd-analyze security --offline`.
+# Fase 18 (achado no systemd REAL: o watchdog abortou o worker com core dump): sem core dump — a memória do
+# processo tem texto de conversas e segredos da instância.
+LimitCORE=0
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+UMask=0077

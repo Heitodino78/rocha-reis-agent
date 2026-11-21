@@ -39,8 +39,10 @@ máquina. Custos estão como itens **a cotar**: nenhum valor foi presumido. Prot
                                       └────────────────┘
 ```
 
-Os três processos (webhook, worker, painel) já são separados no código e compartilham o
-banco por SQLite em WAL com leases e idempotência.
+Os três processos (webhook, worker, painel) são separados e compartilham o banco por SQLite em WAL com
+leases e idempotência. **Correção da Fase 17:** até então não havia worker CONTÍNUO (só o embutido da
+demonstração e o comando que esvazia as filas uma vez); agora existe `python -m rocha_reis_agent.worker`
+(systemd `Type=notify` + watchdog). Implantação concreta em `GUIA_IMPLANTACAO_SERVIDOR.md`.
 
 ## 3. Opções de hospedagem
 
@@ -74,7 +76,7 @@ não garantia.
 | HTTPS | Certificado válido com renovação automática no proxy; TLS 1.2+; HSTS |
 | Webhook | Só `POST/GET /webhooks/whatsapp` público; assinatura `X-Hub-Signature-256` já validada no código; limite de tamanho já aplicado; limite de taxa no proxy |
 | Painel | Nunca público sem controle: VPN ou proxy autenticado; HTTPS; cookie `Secure` (`PANEL_COOKIE_SECURE=true`); `PANEL_ORIGIN` com https; **segundo fator obrigatório** (implementado na Fase 13; `SEGURANCA_AUTENTICACAO.md`) |
-| Referências | `deploy/caddy/Caddyfile.exemplo` e `deploy/systemd/*` (Fase 13, não instalados); `X-Forwarded-*` só do proxy local |
+| Referências | `deploy/caddy/`, `deploy/systemd/`, `deploy/wireguard/`, `deploy/nftables/` (Fases 13 e 17, não instalados); `X-Forwarded-*` só do proxy local e reescrito pelo Caddy (sem `trusted_proxies`) |
 | Separação de rotas | App do webhook não tem rotas administrativas (já separado); painel em porta/host distintos |
 | Limites | Proxy: limite de requisições por IP no webhook e no login; o painel já limita tentativas de login |
 | Certificados | Gerenciados pelo proxy; nenhum certificado no repositório |

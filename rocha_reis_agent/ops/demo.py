@@ -70,7 +70,8 @@ def profile_settings(profile: Path, *, port: int = 8000) -> Settings:
     # Fase 12: o perfil declara o ambiente e o arquivo; perfis antigos sem isso são demonstração.
     values["storage_path"] = profile / "dados" / data.get("database", "demo.synthetic.sqlite3")
     values["environment_profile"] = data.get("profile", "demo")
-    values["panel_origin"] = f"{'https' if data.get('tls') else 'http'}://127.0.0.1:{port}"
+    # Fase 17: no servidor, a origem é o endereço do painel na VPN (atrás do Caddy), declarada no perfil.
+    values["panel_origin"] = data.get("panel_origin") or f"{'https' if data.get('tls') else 'http'}://127.0.0.1:{port}"
     if data.get("mfa_key"):  # caminho relativo ao perfil (chave em chaves/, separada de dados/ e backups/)
         values["panel_mfa_key_file"] = profile / data["mfa_key"]
     return Settings(_env_file=None, **values)  # type: ignore[call-arg]

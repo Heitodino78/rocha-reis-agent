@@ -266,7 +266,20 @@ def _strong_secret(value: str) -> bool:
 
 
 def load_settings() -> Settings:
-    """Ler ambiente/.env e falhar sem expor valores ou a exceção original."""
+    """Ler ambiente/.env e falhar sem expor valores ou a exceção original.
+
+    Fase 17: com ROCHA_REIS_PROFILE=<diretório> (serviços systemd do servidor), a configuração vem do
+    perfil (perfil.json 0600, segredos fora do ambiente e da linha de comando), como `ops iniciar`.
+    """
+    import os
+    profile = os.environ.get("ROCHA_REIS_PROFILE")
+    if profile:
+        from pathlib import Path
+        from rocha_reis_agent.ops.demo import profile_settings
+        try:
+            return profile_settings(Path(profile))
+        except (ValidationError, OSError, ValueError, KeyError, TypeError):
+            raise ConfigurationError("Perfil inválido ou ilegível em ROCHA_REIS_PROFILE.") from None
     try:
         return Settings()
     except (ValidationError, SettingsError, OSError, UnicodeError):

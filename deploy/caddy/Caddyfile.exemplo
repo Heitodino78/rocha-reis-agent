@@ -1,25 +1,102 @@
-# REFERÊNCIA (Fase 13) — NÃO está em uso. Nada foi publicado; nenhum DNS ou certificado público foi pedido.
-# Substitua os marcadores <...> só na implantação autorizada. Caddy obtém e renova certificados públicos.
+# REFERÊNCIA (Fases 13 e 17) — NÃO está em uso. Nada foi publicado; nenhum DNS ou certificado público foi pedido.
+# Substitua os marcadores <...> só na implantação autorizada (docs/GUIA_IMPLANTACAO_SERVIDOR.md).
+#
+# Separação (verificada pelos testes da Fase 17 do lado da aplicação):
+#   - endereço PÚBLICO → só /webhooks/whatsapp, para o APLICATIVO DO WEBHOOK (127.0.0.1:8080), que não tem
+#     nenhuma rota administrativa. Mesmo que um caminho alternativo passasse pelo Caddy, cairia num app sem elas.
+#   - administração → só no IP da VPN (bloco 2).
 {
-	# Admin API do Caddy só no próprio servidor.
+	# API administrativa do Caddy só no próprio servidor.
 	admin 127.0.0.1:2019
+	# Fase 17: SEM trusted_proxies. Não há proxy na frente do Caddy; antes confiávamos em private_ranges, e
+	# como os clientes da VPN TÊM IP privado, um funcionário poderia forjar X-Forwarded-For e escapar do
+	# limitador de tentativas de login. O Caddy SUBSTITUI o X-Forwarded-For pelo IP real da conexão.
 	servers {
-		# Confiar em X-Forwarded-* só de proxies conhecidos (nenhum na frente do Caddy).
-		trusted_proxies static private_ranges
+		timeouts {
+			read_body 10s
+			read_header 10s
+			idle 2m
+		}
+		max_header_size 16KB
+	}
+	log {
+		output file /var/log/caddy/rocha-reis.log {
+			roll_size 10MiB
+			roll_keep 10
+		}
+		format filter {
+			wrap json
+			# Logs sem segredos nem dados pessoais: sem cookies, assinatura, token, consulta ou IP completo.
+			fields {
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>X-Hub-Signature-256 delete
+				request>headers>X-Csrf-Token delete
+				# Fase 18 (achado no laboratório): avisos do reverse_proxy registram os cabeçalhos ENVIADOS ao
+				# aplicativo, inclusive o X-Forwarded-For que o próprio Caddy põe (IP completo do aparelho).
+				request>headers>X-Forwarded-For delete
+				request>headers>X-Real-Ip delete
+				request>uri query {
+					delete hub.verify_token
+					delete hub.challenge
+				}
+				request>remote_ip ip_mask 16 32
+				request>client_ip ip_mask 16 32
+				resp_headers>Set-Cookie delete
+			}
+		}
 	}
 }
 
-# 1) Endereço PÚBLICO: somente o webhook da Meta. Qualquer outra rota responde 404.
-<webhook.dominio-do-salao>, {
-	@webhook path /webhooks/whatsapp
+# 1) Endereço PÚBLICO: somente o webhook da Meta (GET de verificação e POST de eventos).
+<webhook.dominio-do-salao> {
+	@webhook {
+		path /webhooks/whatsapp
+		method GET POST
+	}
 	handle @webhook {
 		request_body {
 			max_size 256KB
 		}
 		reverse_proxy 127.0.0.1:8080 {
+			# Cabeçalhos repassados são reescritos pelo Caddy (o cliente não os controla).
+			header_up X-Forwarded-For {remote_host}
+			header_up -X-Forwarded-Host
 			transport http {
 				dial_timeout 5s
 				response_header_timeout 15s
+			}
+		}
+	}
+	# Tudo o mais (inclusive verificações de saúde, rotas administrativas, caminhos com ../ ou codificados) → 404.
+	handle {
+		respond "Not Found" 404
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+	# Limite de taxa por IP: no firewall (deploy/nftables/rocha-reis.nft.exemplo); o Caddy padrão não tem módulo.
+}
+
+# 2) PAINEL: escuta SOMENTE no endereço da VPN da equipe (WireGuard 10.8.0.1). Nunca na internet.
+https://<painel.interno> {
+	# IP da VPN (ex.: 10.8.0.1, o mesmo de deploy/wireguard/wg0.conf.exemplo).
+	bind <IP-DA-VPN>
+	tls internal
+	@painel path /panel /panel/* /api/panel/* /health /ready
+	handle @painel {
+		request_body {
+			max_size 64KB
+		}
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Forwarded-For {remote_host}
+			# SSE (atualização ao vivo): sem buffer e com leitura longa.
+			flush_interval -1
+			transport http {
+				dial_timeout 5s
+				read_timeout 0
 			}
 		}
 	}
@@ -29,27 +106,6 @@
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
-		-Server
-	}
-	# Limite de taxa: usar o módulo rate_limit ou o firewall do servidor (não incluído por padrão no Caddy).
-}
-
-# 2) PAINEL: escuta SOMENTE no endereço da VPN da equipe (ex.: WireGuard 10.8.0.1). Nunca na internet.
-https://<painel.interno>:443 {
-	bind <IP-DA-VPN>
-	tls internal
-	reverse_proxy 127.0.0.1:8000 {
-		# SSE (atualização ao vivo): sem buffer e com leitura longa.
-		flush_interval -1
-		transport http {
-			read_timeout 0
-		}
-	}
-	request_body {
-		max_size 64KB
-	}
-	header {
-		Strict-Transport-Security "max-age=31536000"
 		-Server
 	}
 }

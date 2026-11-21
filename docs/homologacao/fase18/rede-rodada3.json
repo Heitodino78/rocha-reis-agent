@@ -1,0 +1,226 @@
+{
+  "tipo": "TESTE COM SERVIÇOS REAIS EM LABORATÓRIO DE REDE ISOLADO (namespaces) — não é servidor real",
+  "resultado": "OK",
+  "etapas": [
+    {
+      "etapa": "laboratorio_de_rede",
+      "ok": true,
+      "ip_forward_servidor": "0",
+      "aviso": "namespaces de usuário/rede/montagem; nada muda na rede do computador"
+    },
+    {
+      "etapa": "nftables_carregado_no_kernel",
+      "ok": true,
+      "erro": ""
+    },
+    {
+      "etapa": "aplicacao_pronta",
+      "ok": true
+    },
+    {
+      "etapa": "caddy_validate",
+      "ok": true,
+      "saida": "xy's default behavior is to pass headers to the upstream\"}\n{\"level\":\"warn\",\"ts\":1795286087.6091065,\"logger\":\"caddyfile\",\"msg\":\"Unnecessary header_up X-Forwarded-For: the reverse proxy's default behavior is to pass headers to the upstream\"}\n{\"level\":\"info\",\"ts\":1795286087.6104653,\"msg\":\"adapted config to JSON\",\"adapter\":\"caddyfile\"}\n{\"level\":\"info\",\"ts\":1795286087.6117043,\"msg\":\"redirected default logger\",\"from\":\"stderr\",\"to\":\"~/.local/share/rocha-reis-fase18/run-rede-3/caddy.log\"}"
+    },
+    {
+      "etapa": "caddy_antes_da_vpn",
+      "ok": true,
+      "subiu_sem_vpn": false,
+      "subiu_com_ip_nonlocal_bind": true,
+      "observacao": "sem o IP da VPN o Caddy INTEIRO não sobe (inclusive o webhook público)",
+      "trecho": []
+    },
+    {
+      "etapa": "wireguard_configurado",
+      "ok": true,
+      "servidor": 51820,
+      "aparelhos": [
+        "ana",
+        "bia",
+        "intruso"
+      ],
+      "chaves": "geradas na hora, só de teste, 0600 em wireguard"
+    },
+    {
+      "etapa": "caddy_em_execucao",
+      "ok": true,
+      "variante": "referencia",
+      "trecho": []
+    },
+    {
+      "etapa": "vpn_handshake_e_painel",
+      "ok": true,
+      "painel_ana": 200,
+      "painel_bia": 200,
+      "handshake": {
+        "ana": true,
+        "bia": true
+      },
+      "tls": {
+        "versao": "TLSv1.3",
+        "cifra": "TLS_AES_128_GCM_SHA256",
+        "emissor": "Caddy Local Authority - ECC Intermediate"
+      }
+    },
+    {
+      "etapa": "login_2fa_pela_vpn",
+      "ok": true,
+      "codigos": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "cookies_secure_httponly": true
+    },
+    {
+      "etapa": "webhook_publico_e_sse_pela_vpn",
+      "ok": true,
+      "verificacao": 200,
+      "post": 200,
+      "sse": 200,
+      "evento_ao_vivo": true,
+      "latencia_s": 1.01,
+      "buffer_proxy": "no"
+    },
+    {
+      "etapa": "superficie_publica_isolada",
+      "ok": true,
+      "caminhos": {
+        "/panel/": 404,
+        "/panel": 404,
+        "/api/panel/auth/session": 404,
+        "/health": 404,
+        "/ready": 404,
+        "/docs": 404,
+        "/openapi.json": 404,
+        "/webhooks/whatsapp/../../panel/": 404,
+        "/%2e%2e/panel/": 404,
+        "//panel/": 404,
+        "/WEBHOOKS/whatsapp": 404,
+        "/webhooks/whatsapp%2f..%2f..%2fpanel%2f": 404,
+        "/webhooks/whatsapp/extra": 404,
+        "/webhooks//whatsapp/../../api/panel/auth/session": 404
+      },
+      "metodos": {
+        "PUT": 404,
+        "DELETE": 404,
+        "PATCH": 404
+      },
+      "host_do_painel_no_publico": {
+        "status": 200,
+        "bytes": 0
+      },
+      "host_do_painel_api": {
+        "status": 200,
+        "bytes": 0
+      },
+      "sni_do_painel_no_publico": {
+        "status": 200,
+        "bytes": 0
+      },
+      "bytes_da_pagina_real_do_painel": 35118
+    },
+    {
+      "etapa": "xff_forjado_ignorado",
+      "ok": true,
+      "codigos": [
+        401,
+        401,
+        401,
+        401,
+        401,
+        429,
+        429
+      ],
+      "ip_real_registrado": true,
+      "ips_forjados_registrados": []
+    },
+    {
+      "etapa": "limites_e_timeouts_do_caddy",
+      "ok": true,
+      "corpo_70kb_painel": 413,
+      "corpo_300kb_webhook": 413,
+      "cabecalho_20kb": 431,
+      "cabecalho_lento_fechado_em_s": 10.0,
+      "resposta_ao_lento": ""
+    },
+    {
+      "etapa": "firewall_portas",
+      "ok": true,
+      "publico": {
+        "443": "aberta",
+        "8000": "sem_resposta",
+        "8080": "sem_resposta",
+        "2019": "sem_resposta",
+        "22": "sem_resposta"
+      },
+      "pela_vpn": {
+        "443": "aberta",
+        "8000": "sem_resposta",
+        "8080": "sem_resposta",
+        "2019": "sem_resposta",
+        "22": "sem_resposta"
+      }
+    },
+    {
+      "etapa": "chave_desconhecida_recusada",
+      "ok": true,
+      "resultado": "sem_resposta"
+    },
+    {
+      "etapa": "isolamento_entre_aparelhos",
+      "ok": true,
+      "ip_de_outro_aparelho": "sem_resposta",
+      "ana_para_bia_com_rota_alargada": "sem_resposta",
+      "observacao": "servidor descarta origem fora do AllowedIPs do peer e não encaminha entre aparelhos"
+    },
+    {
+      "etapa": "painel_inacessivel_sem_tunel",
+      "ok": true,
+      "tcp": "sem_resposta",
+      "painel": "sem_resposta"
+    },
+    {
+      "etapa": "revogacao_imediata",
+      "ok": true,
+      "conexao_aberta_apos_revogar": "TimeoutError",
+      "nova_conexao_bia": "sem_resposta",
+      "ana_continua": 200,
+      "peers_removidos": 1
+    },
+    {
+      "etapa": "recuperacao_da_vpn_com_2fa",
+      "ok": true,
+      "sem_interface": "sem_resposta",
+      "reconexao_automatica_s": 13.1,
+      "login": 200,
+      "segundo_fator": 200
+    },
+    {
+      "etapa": "logs_do_caddy",
+      "ok": true,
+      "ocorrencias": {
+        "token_verificacao": 0,
+        "desafio": 0,
+        "assinatura": 0,
+        "cookie:__Host-rr_panel": 0,
+        "csrf": 0,
+        "ip_completo_ana": 0,
+        "ip_completo_intruso": 0
+      },
+      "linhas": 97,
+      "permissao": "0o600"
+    },
+    {
+      "etapa": "limite_de_conexoes_webhook",
+      "ok": true,
+      "aceitas": 48,
+      "primeira_recusada": 21,
+      "observacao": "60 novas conexões/min por IP com rajada de 20; a Meta entrega por poucos IPs (6B)"
+    }
+  ]
+}

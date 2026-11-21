@@ -1,0 +1,38 @@
+# REFERÊNCIA (Fase 17) — NÃO aplicado. Firewall do servidor (nftables). Revise a interface pública (<if-publica>)
+# e o IP de administração antes de usar: nft -c -f arquivo (só verifica) → nft -f arquivo (aplica).
+table inet rocha_reis {
+	set limite_webhook {
+		type ipv4_addr
+		flags dynamic
+		timeout 1m
+	}
+
+	chain entrada {
+		type filter hook input priority 0; policy drop;
+		iif "lo" accept
+		# Fase 18 (achado no laboratório de rede): o IP da VPN só pode ser alcançado PELO TÚNEL. Sem esta regra,
+		# quem está na mesma rede do provedor roteava 10.8.0.1 para a interface pública e abria o painel sem VPN
+		# (a regra do 443 público não olha o destino).
+		ip daddr 10.8.0.0/24 iifname != "wg0" drop
+		ct state established,related accept
+		ct state invalid drop
+		meta l4proto { icmp, ipv6-icmp } limit rate 10/second accept
+
+		# SSH só do IP fixo de administração da agência (ou só pela VPN).
+		ip saddr <IP-ADMINISTRACAO> tcp dport 22 accept
+		# WireGuard da equipe.
+		iifname "<if-publica>" udp dport 51820 accept
+		# HTTPS público (webhook) com limite de novas conexões por IP; o Caddy só responde /webhooks/whatsapp.
+		# Fase 18: rajada EXPLÍCITA. O padrão do nftables é 5: medido no laboratório, a 6ª conexão nova seguida já
+		# era descartada (atraso de 1 s+ por retransmissão). A Meta entrega por poucos IPs: revisar na homologação 6B.
+		iifname "<if-publica>" tcp dport { 80, 443 } ct state new add @limite_webhook { ip saddr limit rate over 60/minute burst 20 packets } drop
+		iifname "<if-publica>" tcp dport { 80, 443 } accept
+		# Painel: 443 no IP da VPN, só para quem está na VPN.
+		iifname "wg0" ip daddr 10.8.0.1 tcp dport 443 accept
+		# 8000/8080/2019 (aplicações e admin do Caddy) NUNCA abertos: só 127.0.0.1.
+	}
+
+	chain encaminhamento {
+		type filter hook forward priority 0; policy drop;
+	}
+}

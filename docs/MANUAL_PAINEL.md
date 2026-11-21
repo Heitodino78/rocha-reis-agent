@@ -45,7 +45,7 @@ fechar.
 | **Visão geral** | Resumo do momento e a lista **Precisa de atenção** |
 | **Conversas** | Todas as conversas que você pode ver |
 | **Aguardando atendimento** | Clientes que pediram uma pessoa e ainda estão **sem responsável** |
-| **Meus atendimentos** | Conversas sob sua responsabilidade |
+| **Meus atendimentos** | Atendimentos **em andamento** sob sua responsabilidade (os finalizados ficam em **Encerradas**) |
 | **Automáticas** | Conversas que o assistente automático está atendendo |
 | **Com outros funcionários** | (administração) atendimentos de colegas |
 | **Encerradas** | Atendimentos já finalizados (histórico) |
@@ -135,7 +135,10 @@ mesma coisa duas vezes.
 
 - **Equipe → Novo funcionário**: login, nome, papel (Atendente ou Administrador) e uma senha
   temporária (a pessoa troca no primeiro acesso). Entregue a senha pessoalmente.
-- **Desativar** encerra na hora as sessões da pessoa. Use quando alguém sair do salão.
+- **Desativar** encerra na hora as sessões da pessoa e devolve os atendimentos em andamento dela para
+  **Aguardando atendimento**, para outra pessoa assumir. Use quando alguém sair do salão.
+- **Redefinir senha**: quando alguém esquecer a senha. Confirme antes a identidade da pessoa, defina uma
+  senha temporária (mínimo 12 caracteres) e entregue pessoalmente; ela troca no próximo acesso.
 - Cada pessoa tem o seu acesso. Não compartilhe logins: a Auditoria registra quem fez cada ação.
 
 ### Informações do salão (Conhecimento)

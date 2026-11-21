@@ -1,0 +1,13 @@
+# REFERÊNCIA (Fase 17) — modelo do arquivo/QR entregue a UM aparelho. Nenhuma chave real aqui.
+# Gerado no servidor e entregue pessoalmente (QR na tela: qrencode -t ansiutf8 < aparelho.conf); depois apagar.
+[Interface]
+Address = 10.8.0.10/32
+PrivateKey = <CHAVE-PRIVADA-DO-APARELHO>
+
+[Peer]
+PublicKey = <CHAVE-PUBLICA-DO-SERVIDOR>
+PresharedKey = <CHAVE-PRE-COMPARTILHADA-DO-APARELHO>
+Endpoint = <IP-OU-NOME-PUBLICO-DO-SERVIDOR>:51820
+# Só o painel passa pela VPN (o resto da internet do aparelho segue normal).
+AllowedIPs = 10.8.0.1/32
+PersistentKeepalive = 25

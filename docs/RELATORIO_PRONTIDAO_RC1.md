@@ -8,10 +8,10 @@ prontidão para produção.
 
 | Campo | Valor |
 |---|---|
-| Versão | Rocha Reis Agent — RC1 Offline `0.14.0rc1.post2` (Fase 16) |
-| Commit | Versionada no commit da Fase 16 sobre `f406641` (`main`); hash em `git log -1` / `ops versao`. O campo `commit_base` do manifesto registra a base no momento do congelamento |
-| Impressão digital | `b67636df59849361` (281 arquivos) |
-| Manifesto | `docs/homologacao/RC1_MANIFESTO.json` (hash de cada arquivo; congelado em 2026-11-20T22:58:05Z) |
+| Versão | Rocha Reis Agent — RC1 Offline `0.14.0rc1.post5` (Fase 16 + revisão final + Fases 17 e 18) |
+| Commit | Base `88ad523` (`main`, Fase 16); revisão final e Fase 17 **ainda sem commit** |
+| Impressão digital | `7823a5ac7f45ce34` (316 arquivos; post4 era `7fa848b6eeec4bb2`) |
+| Manifesto | `docs/homologacao/RC1_MANIFESTO.json` (hash de cada arquivo; congelado em 2026-11-21T02:38:12Z) |
 | Esquema do banco | 11 (migrações 001–011, hashes no manifesto) |
 | Travas | Meta Graph, Meta homologação, Gemini real, dados reais: **todas `False`** |
 | Demonstração | Perfil isolado `demo` (dados, contas e segredos fictícios gerados a cada criação; 2FA opcional) |
@@ -19,6 +19,20 @@ prontidão para produção.
 **Antes de cada sessão:** `python -m rocha_reis_agent.ops verificar-rc` precisa mostrar
 `"identica": true`. Qualquer correção depois disso exige nova revisão da versão, `ops congelar-rc` e
 o registro da mudança aqui.
+
+### Diferença para a 0.14.0rc1.post3 (Fase 17)
+
+Infraestrutura de servidor (worker contínuo, `/ready`, pacote, instalação, atualização/reversão, alertas,
+cópia externa simulada, ensaio operacional, carga) e duas correções que afetam o painel em operação:
+conferência da sessão sem transação de escrita (erros 500 sob carga) e capacidade/espera do banco na
+instância de servidor. Detalhes em `STATUS_FASE_17.md`.
+
+### Diferença para a 0.14.0rc1.post2 (revisão final)
+
+"Meus atendimentos" só com atendimentos em andamento; desativar devolve os atendimentos à fila (transição
+auditada); histórico com posições estáveis (sem repetição na paginação e sem perder avisos de nova
+mensagem após 100 mensagens); redefinição de senha no painel; linha do tempo em português. Detalhes e
+pontos para decisão do salão em `REVISAO_FINAL.md`.
 
 ### Diferença para a 0.14.0rc1.post1 (Fase 16)
 
@@ -39,8 +53,8 @@ Painel, atendimento, conhecimento e segurança: **sem mudança de comportamento*
 
 | Verificação | Resultado |
 |---|---|
-| pytest (unidade, integração, segurança, autenticação, 2FA, painel, conhecimento, envio, estado humano, recuperação, demonstração, isolamento, travas) | **969 aprovados** |
-| Chromium (desktop, notebook, tablet, celular emulado; contraste AA claro e escuro) | **44 aprovados** |
+| pytest (unidade, integração, segurança, autenticação, 2FA, painel, conhecimento, envio, estado humano, recuperação, demonstração, isolamento, travas) | **1011 aprovados** |
+| Chromium (desktop, notebook, tablet, celular emulado; contraste AA claro e escuro) | **46 aprovados** |
 | Roteiro automático da demonstração (13 jornadas) | **13/13** |
 | Avaliação offline — regras (configuração ativa) | 123/129; segurança OK; **Q2 reprovado** (recall de pedido humano 0,902 < 0,95) |
 | Avaliação offline — modelo adversário simulado | 129/129 |
@@ -92,3 +106,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ```
 
 Tag (`v0.14.0-rc1.post2`) e push **somente com autorização**.
+
+## 6. Situação da Fase 11B (registrada em 20/11/2026)
+
+**FASE 11B PREPARADA — AGUARDANDO PARTICIPAÇÃO REAL DO SALÃO.** Nenhuma sessão ocorreu; nenhum
+funcionário participou; nenhum resultado, assinatura ou aceite foi registrado.
+
+Prontidão conferida em `88ad523` (= `origin/main`): `ops verificar-rc` idêntico (`0.14.0rc1.post2`,
+`b67636df59849361`; depois substituída pela `0.14.0rc1.post3`, ver §1); quatro travas `False`; `sh iniciar.sh --verificar` sem falhas (perfil privado,
+transporte e IA simulados, banco migrado); `ops roteiro` 13/13 num perfil isolado; logins fictícios
+`admin.demo`, `ana.demo`, `bia.demo` presentes; 31 cenários (17 AT, 14 AD) no plano; ficha gerada por
+`ops registro-11b` fora do repositório (0600) e conferida por `ops conferir-registro`: **0 resultados**.
+
+Pendente para a sessão: nomes do condutor, observador, atendentes, administração e responsável
+(§2 do plano); confirmação dos critérios do §7 pelo responsável **antes** dos testes. A opção
+"Aprovado com ajustes" do §7 corresponde a "aprovado com ressalvas": aceite condicionado, com
+pendências registradas e aceitas pelo responsável.

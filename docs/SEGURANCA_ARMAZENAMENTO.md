@@ -120,3 +120,17 @@ Todos obrigatórios; `ops ambiente` mostra a situação dos verificáveis:
 8. Segredos fora do repositório (arquivo 0600 ou credenciais do `systemd`), com rotação documentada.
 
 Enquanto qualquer item estiver pendente, o sistema continua restrito a dados sintéticos.
+
+## 7. Servidor (Fase 17)
+
+- **Árvore:** código somente leitura em `/opt/rocha-reis-agent/releases/`; perfil e segredos em
+  `/etc/rocha-reis-agent` (0700/0600, **somente leitura** para os serviços); banco, backups e estado em
+  `/var/lib/rocha-reis-agent` (0700, volume LUKS verificado); `validar-instalacao` recusa subir se algo
+  estiver frouxo, se o banco ou a chave do 2º fator estiverem fora do lugar, sem cifragem ou com trava aberta.
+- **SQLite** continua adequado (um servidor, três processos, ~3 KB por mensagem; medição em
+  `STATUS_FASE_17.md` §F). Ajustes da instância: espera por bloqueio 5 s (1 s recusava webhooks em rajada),
+  até 1000 conversas ativas, limite de 512 MB. `-wal`/`-shm` herdam 0600 do banco. Migração para PostgreSQL
+  **não** recomendada sem evidência de necessidade (vários servidores ou carga muito maior).
+- **Ensaio de migração** numa cópia decifrada **no volume cifrado** (nunca em /tmp), apagada no fim.
+- **Cópia externa:** só backups já cifrados saem; chaves nunca; envio conferido por SHA-256; destino real
+  ainda não contratado (adaptador falso nos testes).

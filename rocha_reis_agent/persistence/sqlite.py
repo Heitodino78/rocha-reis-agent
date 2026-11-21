@@ -36,6 +36,18 @@ MIGRATIONS = Path(__file__).parent / "migrations"
 RESULT = TypeAdapter(AgentResult)
 
 
+def _appended_count(before: list[HistoryEntry], after: list[HistoryEntry]) -> int | None:
+    """Quantas entradas de `after` foram acrescentadas ao fim de `before` (o começo pode ter sido
+    descartado pelo limite). None quando o histórico mudou de outro jeito."""
+    for appended in range(len(after) + 1):
+        overlap = len(after) - appended
+        if overlap == 0:
+            return appended if not before else None
+        if overlap <= len(before) and before[len(before) - overlap:] == after[:overlap]:
+            return appended
+    return None
+
+
 @dataclass
 class _Work:
     originals: dict[str, Conversation | None] = field(default_factory=dict)
@@ -494,10 +506,7 @@ class SQLiteConversationRepository:
                                (key, event_id, value.session_id, digest, result, now))
             self._audit(connection, "message_processed", key, "client", "committed")
         self.fault_hook("after_events")
-        connection.execute("DELETE FROM messages WHERE conversation_id=?", (key,))
-        for ordinal, entry in enumerate(value.history[-self.limits.max_history_entries:]):
-            connection.execute("INSERT INTO messages(conversation_id,ordinal,event_id,role,content,recorded_at,fact_references,prompt_version,operation_id) VALUES(?,?,?,?,?,?,?,?,?)",
-                               (key, ordinal, entry.event_id, entry.role, entry.text, entry.timestamp.isoformat(), _json(entry.fact_references), entry.prompt_version, entry.operation_id))
+        self._save_history(connection, key, original.history if original else [], value.history)
         old_changes = original.transitions if original else []
         for change in value.transitions:
             if change not in old_changes:
@@ -512,6 +521,33 @@ class SQLiteConversationRepository:
             connection.execute("INSERT INTO transitions(conversation_id,ordinal,previous,current,action,operator_id,recorded_at) VALUES(?,?,?,?,?,?,?)",
                                (key, ordinal, change.previous.value, change.current.value, change.action, change.operator_id, change.timestamp.isoformat()))
         self.fault_hook("after_history")
+
+    def _save_history(self, connection: sqlite3.Connection, key: str, before: list[HistoryEntry],
+                      after: list[HistoryEntry]) -> None:
+        """Grava só as mensagens novas, com posição (ordinal) que só cresce, e apaga as que passam do limite.
+
+        Antes (até a revisão final) o histórico inteiro era apagado e regravado a cada mensagem e,
+        passado o limite, as posições eram renumeradas: "Carregar mensagens anteriores" podia repetir
+        mensagens e o aviso de nova mensagem (chave com a posição) deixava de aparecer.
+        """
+        cap = self.limits.max_history_entries
+        kept = after[-cap:]
+        appended = _appended_count(before[-cap:], kept)
+        top = connection.execute("SELECT max(ordinal) FROM messages WHERE conversation_id=?", (key,)).fetchone()[0]
+        start = 0 if top is None else top + 1
+        if appended is None:
+            # Histórico não cresceu só no fim (reinício de sessão etc.): regrava, mantendo posições crescentes.
+            connection.execute("DELETE FROM messages WHERE conversation_id=?", (key,))
+            rows = kept
+        else:
+            rows = kept[len(kept) - appended:] if appended else []
+        for offset, entry in enumerate(rows):
+            connection.execute("INSERT INTO messages(conversation_id,ordinal,event_id,role,content,recorded_at,fact_references,prompt_version,operation_id) VALUES(?,?,?,?,?,?,?,?,?)",
+                               (key, start + offset, entry.event_id, entry.role, entry.text, entry.timestamp.isoformat(), _json(entry.fact_references), entry.prompt_version, entry.operation_id))
+        if rows:
+            connection.execute(
+                "DELETE FROM messages WHERE conversation_id=? AND ordinal NOT IN (SELECT ordinal FROM messages "
+                "WHERE conversation_id=? ORDER BY ordinal DESC LIMIT ?)", (key, key, cap))
 
     def _ensure_capacity(self, connection: sqlite3.Connection, key: str) -> None:
         """Limite de conversas ATIVAS. Se cheio, arquiva a mais ociosa elegível no mesmo commit.

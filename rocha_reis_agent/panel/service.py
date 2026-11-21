@@ -216,9 +216,31 @@ class PanelService:
         return self.store.create_user(login=clean, display_name=name, password_hash=hash_password(password),  # type: ignore[arg-type]
                                       role=role, must_change_password=True, actor_id=actor.id).public()
 
-    def set_active(self, actor: PanelUser, user_id: str, active: bool) -> None:
+    def set_active(self, actor: PanelUser, user_id: str, active: bool) -> int:
+        """Ativa/desativa. Ao desativar, os atendimentos em andamento da pessoa voltam à fila de espera
+        (antes ficavam presos a alguém que não entra mais). Retorna quantos voltaram."""
         self._admin(actor)
         self.store.set_active(user_id, active, actor_id=actor.id)
+        if active:
+            return 0
+        released = 0
+        for conversation_id in self.store.active_assignments(user_id):
+            @retry_conflicts
+            def operation(conversation_id: str = conversation_id) -> bool:
+                with self.conversations.edit(conversation_id) as conversation:
+                    if conversation.closed or conversation.state != State.HUMAN_ACTIVE \
+                            or self.store.assignment(conversation_id) != user_id:
+                        return False  # mudou desde a consulta: nada a devolver
+                    self.handoff.release_to_queue(conversation, actor.operator)
+                    self.store.stage_unassign(conversation_id)
+                    self.store.stage_audit(actor.id, "conversation_requeued", "conversation", conversation_id)
+                    return True
+            try:
+                released += int(operation())
+            except (SimulationError, StorageError):
+                # Fica com o responsável desativado; a Visão geral da administração alerta (orphaned_active).
+                self.store.audit(actor.id, "conversation_requeued", "conversation", conversation_id, "failed")
+        return released
 
     def reset_password(self, actor: PanelUser, user_id: str, password: object) -> None:
         self._admin(actor)
