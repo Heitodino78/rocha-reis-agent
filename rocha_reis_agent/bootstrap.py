@@ -45,6 +45,9 @@ def configured_repository(settings: Settings) -> ConversationRepository:
         archive_idle_hours=settings.storage_archive_idle_hours,
         environment=settings.environment_profile,
         require_encrypted_volume=settings.requires_encrypted_volume,
+        required_volume=({"ponto_montagem": str(settings.storage_volume_mount), "id": settings.storage_volume_id,
+                          "luks_uuid": settings.storage_volume_luks_uuid}
+                         if settings.storage_volume_mount and settings.storage_volume_id else None),
     )
 
 

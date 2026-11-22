@@ -51,15 +51,23 @@ def notify(message: str) -> bool:
         return False
 
 
-def write_heartbeat(path: Path | None, *, processed: int, failures: int) -> None:
+def write_heartbeat(path: Path | None, *, processed: int, failures: int) -> bool:
+    """Batimento é SINAL de vida, nunca motivo de queda. Fase 18B-0 (achado no laboratório com disco LUKS
+    real): se o volume some, a pasta do batimento some junto e a exceção derrubava o worker com código 1
+    no meio da parada controlada. Agora registra e segue; o alerta `worker_sem_batimento` vigia a falta."""
     if path is None:
-        return
+        return True
     temporary = path.with_name(path.name + ".tmp")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        json.dump({"pid": os.getpid(), "at": time.time(), "processed": processed, "consecutive_failures": failures},
-                  handle)
-    os.replace(temporary, path)
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump({"pid": os.getpid(), "at": time.time(), "processed": processed,
+                       "consecutive_failures": failures}, handle)
+        os.replace(temporary, path)
+        return True
+    except OSError:
+        logger.warning("worker_heartbeat_failed")  # sem caminho nem detalhe (mesma regra do canal)
+        return False
 
 
 def read_heartbeat(path: Path) -> dict[str, object] | None:

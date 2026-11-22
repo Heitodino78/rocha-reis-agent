@@ -8,4 +8,6 @@ RandomizedDelaySec=600
 Persistent=true
 
 [Install]
-WantedBy=timers.target
+# Fase 18B-0: o backup só roda com o volume desbloqueado; o timer sobe junto com o rocha-reis.target
+# (Persistent=true recupera a rodada perdida enquanto o volume estava bloqueado).
+WantedBy=rocha-reis.target

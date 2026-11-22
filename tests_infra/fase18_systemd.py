@@ -40,7 +40,8 @@ from rocha_reis_agent.ops.opsdrill import _envelope, _post_local  # noqa: E402
 from rocha_reis_agent.channels.meta import sign  # noqa: E402
 
 SERVICES = ("rocha-reis-webhook.service", "rocha-reis-panel.service", "rocha-reis-worker.service")
-UNIT_FILES = sorted(p.name for p in (REPO / "deploy" / "systemd").iterdir() if p.suffix in (".service", ".timer"))
+UNIT_FILES = sorted(p.name for p in (REPO / "deploy" / "systemd").iterdir() if p.suffix in (".service", ".timer")
+                    and p.name != "rocha-reis-volume.service")  # portão do volume: só no roteiro da 18B-0
 ORIGIN = "https://painel.interno:18443"
 PANEL_HOST = "painel.interno"
 SECRET_KEYS = ("whatsapp_verify_token", "whatsapp_app_secret", "whatsapp_conversation_key")
@@ -94,8 +95,26 @@ class Report:
 
 
 # ------------------------------------------------------------------ unidades
-def render_unit(text: str, root: Path, python_home: Path) -> str:
+SERVER_MOUNT_UNIT = r"var-lib-rocha\x2dreis\x2dagent.mount"
+VOLUME_LINES = ("Requires=rocha-reis-volume.service", "After=rocha-reis-volume.service",
+                f"BindsTo={SERVER_MOUNT_UNIT}", f"After={SERVER_MOUNT_UNIT}")
+
+
+def render_unit(text: str, root: Path, python_home: Path, *, mount_unit: str | None = None,
+                identity: Path | None = None) -> str:
+    """`mount_unit=None` (roteiro da 18A, raiz no $HOME sem volume dedicado): as dependências do volume
+    (Fase 18B-0) são omitidas — cobertas por tests_infra/fase18b0_volume.py. Com `mount_unit`, a unidade de
+    montagem do servidor é trocada pela do disco de teste e o portão recebe `--identidade` (laboratório)."""
+    if mount_unit is None:
+        text = "\n".join(f"# Fase 18 (sem volume dedicado): '{l}' omitido" if l in VOLUME_LINES else l
+                         for l in text.splitlines()) + "\n"
+    else:
+        text = text.replace(SERVER_MOUNT_UNIT, mount_unit)
+        if identity is not None:
+            text = re.sub(r"verificar-volume --raiz /$", f"verificar-volume --raiz / --identidade {identity}",
+                          text, flags=re.MULTILINE)
     text = re.sub(r"--raiz /$", f"--raiz {root}", text, flags=re.MULTILINE)
+    text = re.sub(r"--raiz / --identidade", f"--raiz {root} --identidade", text)
     for path in ("/opt/rocha-reis-agent", "/etc/rocha-reis-agent", "/var/lib/rocha-reis-agent",
                  "/var/log/rocha-reis-agent"):
         text = text.replace(path, f"{root}{path}")
@@ -107,7 +126,10 @@ def render_unit(text: str, root: Path, python_home: Path) -> str:
             # ProtectHome também esconde /run/user/UID, onde fica o NOTIFY_SOCKET do manager do USUÁRIO (no
             # servidor ele fica em /run/systemd/notify, fora do alcance de ProtectHome): bind só do socket.
             out += ["# Fase 18: ProtectHome=true -> tmpfs + bind somente leitura da raiz de teste e do Python",
-                    "ProtectHome=tmpfs", f"BindReadOnlyPaths={root}", f"BindReadOnlyPaths={python_home}",
+                    # Com disco de teste (18B-0) a raiz fica DENTRO do disco: "-" deixa as unidades que precisam
+                    # rodar sem ele (alertas, alerta@, portão) subirem — no servidor não dependem do volume.
+                    "ProtectHome=tmpfs", f"BindReadOnlyPaths={'-' if mount_unit else ''}{root}",
+                    f"BindReadOnlyPaths={python_home}",
                     f"BindReadOnlyPaths=-{os.environ['XDG_RUNTIME_DIR']}/systemd/notify"]
         else:
             out.append(line)
@@ -250,7 +272,7 @@ def execute(dest: Path, python: str, keep: bool) -> dict[str, object]:
         package = deploy.build_package(dest / "pacotes")
         installed = deploy.install_release(package, root, python=python, create_venv=True)
         deploy.activate(root, str(installed["id"]))
-        deploy.prepare_instance(root, panel_origin=ORIGIN)
+        deploy.prepare_instance(root, panel_origin=ORIGIN, laboratorio=True)
         validation = deploy.validate_installation(root)
         info.update(versao=installed["versao"], release=installed["id"])
         r.step("instalacao_fluxo_oficial", validation["ok"], t, problemas=validation["problemas"],

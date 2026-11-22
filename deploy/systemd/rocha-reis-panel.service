@@ -4,6 +4,14 @@
 [Unit]
 Description=Rocha Reis — painel da equipe (somente rede interna)
 After=network-online.target
+# Fase 18B-0: SÓ com o volume LUKS de dados montado E conferido (rocha-reis-volume.service). BindsTo= no
+# ponto de montagem: se o volume sair (desmontado/perdido), o serviço PARA em vez de gravar no disco de
+# sistema. Volume ausente = falha de DEPENDÊNCIA (sem Restart= em ciclo, sem OnFailure=): nada sobe até o
+# desbloqueio manual (deploy/scripts/rocha-reis-desbloquear). Não há entrada no fstab/crypttab de propósito.
+Requires=rocha-reis-volume.service
+After=rocha-reis-volume.service
+BindsTo=var-lib-rocha\x2dreis\x2dagent.mount
+After=var-lib-rocha\x2dreis\x2dagent.mount
 Wants=network-online.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
@@ -59,4 +67,5 @@ SystemCallErrorNumber=EPERM
 UMask=0077
 
 [Install]
-WantedBy=multi-user.target
+# Fase 18B-0: parte do rocha-reis.target, iniciado APÓS o desbloqueio (não no boot).
+WantedBy=rocha-reis.target

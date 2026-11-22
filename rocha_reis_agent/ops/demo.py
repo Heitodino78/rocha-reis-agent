@@ -72,6 +72,11 @@ def profile_settings(profile: Path, *, port: int = 8000) -> Settings:
     values["environment_profile"] = data.get("profile", "demo")
     # Fase 17: no servidor, a origem é o endereço do painel na VPN (atrás do Caddy), declarada no perfil.
     values["panel_origin"] = data.get("panel_origin") or f"{'https' if data.get('tls') else 'http'}://127.0.0.1:{port}"
+    volume = data.get("volume") or {}
+    if volume.get("id"):  # Fase 18B-0: volume dedicado identificado (ausente = laboratório/demonstração)
+        values["storage_volume_mount"] = Path(volume["ponto_montagem"])
+        values["storage_volume_id"] = volume["id"]
+        values["storage_volume_luks_uuid"] = volume["luks_uuid"]
     if data.get("mfa_key"):  # caminho relativo ao perfil (chave em chaves/, separada de dados/ e backups/)
         values["panel_mfa_key_file"] = profile / data["mfa_key"]
     return Settings(_env_file=None, **values)  # type: ignore[call-arg]

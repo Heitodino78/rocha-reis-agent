@@ -50,6 +50,11 @@ a decisão humana de acionar a recuperação.
 | Perda da chave de backup | Backups existentes **irrecuperáveis**. Gerar chave nova e backup imediato | Sim (recusa com chave errada) |
 | Perda da chave do segundo fator | Nenhum login completa → redefinir o segundo fator de todos (via banco, procedimento técnico) e recadastrar | Parcial (falha segura 503 testada) |
 | Comprometimento de chave | Rotacionar (`ops mfa-rotacionar`), novo backup com chave nova, revogar sessões | Rotação sim |
+| Reinício / queda de energia (Fase 18B-0) | Volume LUKS volta BLOQUEADO; atendimento parado; alerta `volume_aguardando_desbloqueio` a cada 5 min → pessoa autorizada roda `rocha-reis-desbloquear` → identidade conferida → `rocha-reis.target` → `ops estado-servidor` | Laboratório: disco LUKS2 de loop + systemd do usuário (`tests_infra/fase18b0_volume.py`); servidor **não** |
+| Volume errado montado no lugar (Fase 18B-0) | Portão `rocha-reis-volume` recusa (UUID LUKS/marca ≠ perfil); nada sobe; `rocha-reis-desbloquear` desmonta e fecha | Laboratório (2º disco LUKS com a marca copiada) |
+| Volume some com tudo rodando (Fase 18B-0) | `BindsTo=` para webhook/painel/worker; itens em andamento voltam à fila pelo lease; após desbloqueio, retomada sem duplicar envios; `UNKNOWN` só com conferência humana | Laboratório (desmontagem forçada) |
+| VM destruída, volume intacto (Fase 18B-0) | VM nova → anexar o MESMO volume → `cryptsetup open` → montar → reinstalar o pacote → restaurar `/etc/rocha-reis-agent` da guarda (perfil com o UUID LUKS esperado) → `rocha-reis-desbloquear` | **Não** (depende do provedor) |
+| Frase-senha LUKS perdida (Fase 18B-0) | Dados do volume irrecuperáveis (2º keyslot de recuperação, se existir) → instância nova + restauração do backup externo (chave de backup é OUTRA) | Não |
 
 ## 4. RPO e RTO
 
@@ -59,5 +64,8 @@ a decisão humana de acionar a recuperação.
 
 ## 5. Pendências
 
-Backup externo real; guarda das chaves com duas pessoas; ensaio completo em servidor novo;
-alertas automáticos; decisão de RPO/RTO pelo salão.
+Backup externo real (o adaptador S3 existe desde a 18B-0, **desativado** pela trava
+`EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED` e testado só contra um servidor S3 falso em 127.0.0.1); guarda das
+chaves com duas pessoas (backup, 2º fator, frase LUKS + cópia do cabeçalho LUKS); ensaio completo em
+servidor novo; canal externo de alertas (Decisão 11); decisão de RPO/RTO **e do prazo de desbloqueio após
+reinício** pelo salão — sem esse prazo acordado, a operação não é declarada 24/7.

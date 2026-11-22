@@ -1,0 +1,53 @@
+# REFERÊNCIA (Fase 18B-0) — não instalado. Portão do volume de dados: confere que o que está montado em
+# /var/lib/rocha-reis-agent é O volume LUKS esperado (UUID LUKS + marca de identificação do perfil, que fica
+# em /etc, FORA do volume) e que as pastas de dados estão nele. Os serviços dependem desta unidade.
+# Sem o volume montado, a montagem não existe (não há fstab/crypttab) e a unidade nem inicia: falha de
+# DEPENDÊNCIA, sem ciclo de reinício. Volume errado montado: esta unidade falha e nada sobe.
+[Unit]
+Description=Rocha Reis — conferência do volume de dados cifrado
+BindsTo=var-lib-rocha\x2dreis\x2dagent.mount
+After=var-lib-rocha\x2dreis\x2dagent.mount
+OnFailure=rocha-reis-alerta@%n.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=rocha-reis
+Group=rocha-reis
+WorkingDirectory=/opt/rocha-reis-agent/current
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops verificar-volume --raiz /
+ReadOnlyPaths=/etc/rocha-reis-agent /var/lib/rocha-reis-agent
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=true
+MemoryMax=128M
+# Endurecimento igual ao das demais unidades (Fases 17 e 18).
+LimitCORE=0
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+UMask=0077
+
+[Install]
+WantedBy=rocha-reis.target

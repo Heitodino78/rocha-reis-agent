@@ -479,6 +479,21 @@ python tests_infra/fase18_rede.py --destino DIR_NOVO --caddy /caminho/caddy
 Resultados, defeitos corrigidos e o que ainda depende do servidor real:
 [`STATUS_FASE_18.md`](docs/STATUS_FASE_18.md). RC1 na revisão `0.14.0rc1.post5`. Nada instalado em servidor.
 
+## Volume cifrado, backup externo e seleção do servidor — Fase 18B-0
+
+O banco só abre no volume LUKS **identificado** (UUID + marca conferidos contra o perfil); sem ele nada
+sobe (portão `rocha-reis-volume`, `rocha-reis.target`) e, após reinício, o atendimento espera o desbloqueio
+manual (`deploy/scripts/rocha-reis-desbloquear`). Adaptador S3 do backup externo **desativado**
+(`EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED = False`). Laboratório com disco LUKS2 real:
+
+```sh
+python tests_infra/fase18b0_volume.py --destino DIR_NOVO --python /caminho/python3.13
+```
+
+Detalhes: [`STATUS_FASE_18B_0.md`](docs/STATUS_FASE_18B_0.md); provedores e custos:
+[`SELECAO_INFRAESTRUTURA.md`](docs/SELECAO_INFRAESTRUTURA.md). RC1 na revisão `0.14.0rc1.post6`. Nada
+contratado nem instalado em servidor.
+
 ## Servidor e operação contínua — Fase 17
 
 Pacote reprodutível, instalação, atualização/reversão, worker 24/7, alertas e ensaio operacional:

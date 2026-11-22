@@ -102,13 +102,42 @@ def _save_state(path: Path, state: dict[str, object]) -> None:
 
 
 def sync(backups: Path, store: ExternalStore, state_path: Path, *, keep: int = 14) -> dict[str, object]:
-    """Envia os backups válidos que faltam no destino, confere cada um e aplica a retenção remota."""
+    """Envia os backups válidos que faltam no destino, confere cada um e aplica a retenção remota.
+
+    Fase 18B-0: execução ÚNICA (lock ao lado do estado: um timer e um comando manual nunca enviam juntos);
+    com um destino que não permite exclusão pelo cliente (`client_deletes` falso — o adaptador S3 real), a
+    retenção remota fica com o provedor (Object Lock / regras do bucket / ciclo de vida) e nada é apagado.
+    """
     if not 1 <= keep <= 365:
         raise BackupError("Retenção externa deve ficar entre 1 e 365 cópias.")
+    import fcntl
+    lock = os.open(str(state_path) + ".lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise BackupError("Outro envio ao destino externo já está em andamento.") from None
+        return _sync(backups, store, state_path, keep=keep)
+    finally:
+        os.close(lock)
+
+
+class _Skip(Exception):
+    pass
+
+
+def _sync(backups: Path, store: ExternalStore, state_path: Path, *, keep: int) -> dict[str, object]:
+    client_deletes = bool(getattr(store, "client_deletes", True))
     state = load_state(state_path)
     local = [b for b in list_backups(backups) if b["ok"]]
-    remote = set(store.list())
-    sent, failures = [], []
+    sent: list[str] = []
+    failures: list[dict[str, object]] = []
+    reachable = True
+    try:
+        remote = set(store.list())
+    except (ExternalError, OSError) as error:  # destino fora do ar: registra a falha (alerta) e não envia nada
+        remote, local, reachable = set(), [], False
+        failures.append({"arquivo": None, "erro": str(error) if isinstance(error, ExternalError) else "E/S"})
     # Só os `keep` mais recentes: enviar um mais antigo que a retenção apagaria em seguida criaria um ciclo
     # de reenvio a cada rodada.
     for item in sorted(local, key=lambda b: str(b["created_at"]))[-keep:]:
@@ -121,18 +150,36 @@ def sync(backups: Path, store: ExternalStore, state_path: Path, *, keep: int = 1
         try:
             store.put(name, data)
             if hashlib.sha256(store.get(name)).hexdigest() != hashlib.sha256(data).hexdigest():
+                if not client_deletes:
+                    raise ExternalError("Cópia externa diferente da local; mantida no destino (exclusão "
+                                        "bloqueada) — conferir manualmente.")
                 store.delete(name)
                 raise ExternalError("Cópia externa diferente da local.")
             sent.append(name)
         except (ExternalError, OSError) as error:
             failures.append({"arquivo": name, "erro": str(error) if isinstance(error, ExternalError) else "E/S"})
-    removed = []
-    remaining = sorted(store.list())
-    for name in remaining[: max(0, len(remaining) - keep)]:
-        store.delete(name)
-        removed.append(name)
+    removed: list[str] = []
+    remote_total: int | None = None
+    try:
+        if not reachable:
+            raise _Skip
+        remaining = sorted(store.list())
+        if client_deletes:
+            for name in remaining[: max(0, len(remaining) - keep)]:
+                store.delete(name)
+                removed.append(name)
+            remaining = sorted(store.list())
+        remote_total = len(remaining)
+    except _Skip:
+        pass
+    except (ExternalError, OSError) as error:
+        failures.append({"arquivo": None, "erro": str(error) if isinstance(error, ExternalError) else "E/S"})
     now = _now()
-    state.update(simulado=bool(getattr(store, "simulated", True)), ultima_execucao=now, remoto_total=len(store.list()))
+    state.update(simulado=bool(getattr(store, "simulated", True)), ultima_execucao=now, remoto_total=remote_total,
+                 retencao_remota="pelo servidor" if client_deletes else "pelo provedor (Object Lock/regras do bucket)")
+    stats = getattr(store, "stats", None)
+    if stats is not None and hasattr(stats, "as_dict"):
+        state["ultima_transferencia"] = stats.as_dict()
     if failures:
         state["falhas_seguidas"] = int(state.get("falhas_seguidas", 0)) + 1  # type: ignore[arg-type]
         state["ultima_falha"] = now

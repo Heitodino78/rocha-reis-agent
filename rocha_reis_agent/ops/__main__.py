@@ -180,6 +180,17 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("preparar-servidor", help="cria a instância de PRÉ-PRODUÇÃO SINTÉTICA no layout do servidor")
     p.add_argument("--raiz", required=True)
     p.add_argument("--origem", default="https://painel.interno")
+    p.add_argument("--ponto-montagem", help="laboratório: ponto de montagem do volume (ancestral de var/lib/...)")
+    p.add_argument("--laboratorio", action="store_true",
+                   help="ensaio local SEM volume dedicado (proibido na raiz /; registrado no perfil)")
+    # ---- Fase 18B-0: volume de dados dedicado e estado em camadas
+    p = sub.add_parser("marcar-volume", help="grava a marca de identificação num volume LUKS recém-preparado")
+    p.add_argument("--ponto-montagem", required=True)
+    p = sub.add_parser("verificar-volume", help="confere o volume de dados (0 pronto, 3 aguardando desbloqueio, 1 recusado)")
+    p.add_argument("--raiz", required=True)
+    p.add_argument("--identidade", help="laboratório: JSON com a identidade esperada fora da raiz de teste")
+    p = sub.add_parser("estado-servidor", help="estado em camadas: ligado, disco, banco, worker, webhook, atendimento")
+    p.add_argument("--raiz", required=True)
     p = sub.add_parser("validar-instalacao", help="checa permissões, perfil, cifragem e travas (sai 1 se inseguro)")
     p.add_argument("--raiz", required=True)
     p = sub.add_parser("atualizar", help="atualização com backup verificado, ensaio de migração e reversão automática")
@@ -210,14 +221,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--segundos", type=float, default=30.0)
     p = sub.add_parser("ensaio-operacional", help="ensaio completo do servidor simulado (instala, derruba, restaura)")
     p.add_argument("--destino", required=True)
-    p = sub.add_parser("backup-externo", help="envia backups cifrados ao destino externo (somente SIMULADO nesta fase)")
+    p = sub.add_parser("backup-externo", help="envia backups cifrados ao destino externo (real BLOQUEADO pela trava)")
     p.add_argument("--perfil", required=True)
-    p.add_argument("--destino-falso", required=True, help="diretório que SIMULA o armazenamento externo")
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--destino-falso", help="diretório que SIMULA o armazenamento externo")
+    target.add_argument("--s3", action="store_true", help="destino S3 do perfil (backup.externo); só 127.0.0.1 com a trava fechada")
     p.add_argument("--manter", type=int, default=14)
+    p = sub.add_parser("baixar-externo", help="baixa um backup do destino externo para restaurar (verificado)")
+    p.add_argument("--perfil", required=True)
+    p.add_argument("--nome", required=True)
+    p.add_argument("--para", required=True)
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--destino-falso")
+    target.add_argument("--s3", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.command in ("empacotar", "instalar", "preparar-servidor", "validar-instalacao", "atualizar", "reverter",
-                            "verificar-migracao", "alertas", "backup-externo", "ensaio-operacional", "carga"):
+                            "verificar-migracao", "alertas", "backup-externo", "ensaio-operacional", "carga",
+                            "marcar-volume", "verificar-volume", "estado-servidor", "baixar-externo"):
             return _server(args)
         if args.command == "chave":
             _print({"chave_criada": str(generate_key(Path(args.arquivo).expanduser())),
@@ -324,7 +345,30 @@ def _server(args) -> int:  # type: ignore[no-untyped-def]
             result.pop("manifesto", None)
             _print(result)
         elif args.command == "preparar-servidor":
-            _print(deploy.prepare_instance(Path(args.raiz), panel_origin=args.origem))
+            _print(deploy.prepare_instance(Path(args.raiz), panel_origin=args.origem, laboratorio=args.laboratorio,
+                                           volume_mount=Path(args.ponto_montagem) if args.ponto_montagem else None))
+        elif args.command == "marcar-volume":
+            from rocha_reis_agent.persistence.storage_security import mark_volume
+            try:
+                _print(mark_volume(Path(args.ponto_montagem)))
+            except (ValueError, FileExistsError) as error:
+                raise deploy.DeployError("Marca já existe; nunca é sobrescrita." if isinstance(error, FileExistsError)
+                                         else str(error)) from None
+        elif args.command == "verificar-volume":
+            import json as _json
+            spec = None
+            if args.identidade:
+                if deploy.is_server_root(Path(args.raiz)):
+                    raise deploy.DeployError("--identidade é só para laboratório; no servidor vale o perfil.")
+                spec = _json.loads(Path(args.identidade).read_text(encoding="utf-8"))
+            status = deploy.volume_status(Path(args.raiz), spec)
+            _print(status.as_dict())
+            return 0 if status.ready else (3 if status.state == "AGUARDANDO_DESBLOQUEIO" else 1)
+        elif args.command == "estado-servidor":
+            from rocha_reis_agent.ops import readiness
+            state = readiness.server_state(Path(args.raiz))
+            _print(state)
+            return readiness.exit_code(state)
         elif args.command == "validar-instalacao":
             result = deploy.validate_installation(Path(args.raiz))
             _print(result)
@@ -362,14 +406,28 @@ def _server(args) -> int:  # type: ignore[no-untyped-def]
             from rocha_reis_agent.ops import alerts
             from rocha_reis_agent.ops.backup_job import job_config, load_status
             from rocha_reis_agent.ops.demo import profile_settings
+            from rocha_reis_agent.ops.notify import dispatch
             profile = Path(args.perfil).expanduser().absolute()
             settings = profile_settings(profile)
+            if settings.storage_volume_mount and settings.storage_volume_id:
+                # Fase 18B-0: primeiro o volume — bloqueado/incorreto, o banco não está lá para avaliar.
+                from rocha_reis_agent.persistence.storage_security import check_data_volume
+                volume = check_data_volume(settings.storage_volume_mount,
+                                           {"id": settings.storage_volume_id,
+                                            "luks_uuid": settings.storage_volume_luks_uuid},
+                                           paths=(Path(settings.storage_path).parent,))  # type: ignore[arg-type]
+                blocked = alerts.evaluate_volume(volume.as_dict())
+                if blocked is not None:
+                    blocked["notificacao_externa"] = dispatch(blocked)
+                    print(alerts.dumps(blocked))
+                    return alerts.exit_code(blocked)
             backups = profile / str(job_config(profile)["primario"])
             result = alerts.evaluate(Path(settings.storage_path), backups=backups,  # type: ignore[arg-type]
                                      heartbeat=Path(args.batimento) if args.batimento else None,
                                      offsite_state=Path(args.externo) if args.externo else None,
                                      database_limit_bytes=settings.storage_max_bytes,
                                      backup_status=load_status(profile))
+            result["notificacao_externa"] = dispatch(result)
             print(alerts.dumps(result))
             return alerts.exit_code(result)
         elif args.command == "ensaio-operacional":
@@ -387,11 +445,37 @@ def _server(args) -> int:  # type: ignore[no-untyped-def]
             profile = Path(args.perfil).expanduser().absolute()
             backups = profile / str(job_config(profile)["primario"])
             state = backups.parent / "estado-copia-externa.json"
-            _print(offsite.sync(backups, offsite.FakeExternalStore(Path(args.destino_falso)), state, keep=args.manter))
+            _print(offsite.sync(backups, _external_store(profile, args), state, keep=args.manter))
+        elif args.command == "baixar-externo":
+            from rocha_reis_agent.ops import offsite
+            from rocha_reis_agent.ops.backup import read_manifest
+            profile = Path(args.perfil).expanduser().absolute()
+            target = offsite.fetch(_external_store(profile, args), args.nome, Path(args.para).expanduser())
+            read_manifest(target)  # é um backup do projeto; a restauração (ops restaurar) confere a autenticidade
+            _print({"baixado": str(target), "proximo_passo": "ops verificar / ops restaurar (arquivo NOVO e isolado)"})
     except (deploy.DeployError, BackupError) as error:
         print(f"ERRO: {error}", file=sys.stderr)
         return 2
+    except Exception as error:  # noqa: BLE001 — só a falha do destino externo, com mensagem segura
+        from rocha_reis_agent.ops.offsite import ExternalError
+        if not isinstance(error, ExternalError):
+            raise
+        print(f"ERRO: {error}", file=sys.stderr)
+        return 2
     return 0
+
+
+def _external_store(profile: Path, args):  # type: ignore[no-untyped-def]
+    """Destino externo: diretório FALSO ou o adaptador S3 do perfil (endpoint real bloqueado pela trava)."""
+    from rocha_reis_agent.ops import offsite
+    if getattr(args, "destino_falso", None):
+        return offsite.FakeExternalStore(Path(args.destino_falso))
+    import json as _json
+    from rocha_reis_agent.ops import s3_store
+    external = (_json.loads((profile / "perfil.json").read_text(encoding="utf-8")).get("backup") or {}).get("externo")
+    if not isinstance(external, dict):
+        raise offsite.ExternalError("Perfil sem a seção backup.externo.")
+    return s3_store.from_profile(profile, external)
 
 
 def _rehearse(database: Path) -> dict[str, object]:

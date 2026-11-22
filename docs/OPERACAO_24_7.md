@@ -75,3 +75,28 @@ dump (`LimitCORE=0` agora). Ainda **não** testado: `User=rocha-reis`, systemd d
 Avisar a equipe; `ops alertas` sem CRÍTICO; parar na ordem worker → webhook → painel; fazer a
 manutenção; subir webhook → painel → worker; conferir `/ready` e `ops alertas`. A Meta reenvia webhooks
 não confirmados durante a janela.
+
+## 6. Reinício e volume cifrado (Fase 18B-0)
+
+**O atendimento NÃO volta sozinho depois de um reinício** — e isso é intencional: a frase-senha do LUKS
+nunca fica no servidor. Consequências, testadas em laboratório (disco LUKS2 de loop + systemd do usuário):
+
+| Camada (`ops estado-servidor`) | Depois de um reinício, até o desbloqueio |
+|---|---|
+| Servidor ligado | sim (SSH, VPN, Caddy e timer de alertas sobem) |
+| Disco montado | **não** — `AGUARDANDO_DESBLOQUEIO` |
+| Banco, worker, webhook, painel | não avaliados / parados (falha de dependência, sem ciclo de reinício) |
+| Atendimento operacional | **não** — o webhook responde erro pelo Caddy; a Meta reenvia por um período limitado [prazo a confirmar na Fase 6B] |
+
+- **Como o servidor avisa:** `rocha-reis-alertas.timer` roda sem o volume e registra
+  `volume_aguardando_desbloqueio` (CRÍTICO) a cada 5 min no journal. Canal para pessoas: pendente (Decisão 11).
+- **Quem recupera:** quem tiver a frase LUKS (duas pessoas, Decisão 4), por SSH pela VPN, com
+  `rocha-reis-desbloquear`.
+- **Banco correto:** o portão confere UUID LUKS + marca contra o perfil em `/etc` (fora do volume); volume
+  errado, sem LUKS ou pasta vazia são recusados e nada é criado no disco de sistema.
+- **Filas:** itens em andamento voltam pelo lease; nada é perdido nem enviado duas vezes; `UNKNOWN` fica
+  para conferência humana (alerta `envio_incerto`), nunca reenviado automaticamente.
+- **24/7:** só pode ser declarado com um prazo de desbloqueio acordado e alguém de plantão para cumpri-lo
+  (`continuidade.prazo_desbloqueio_minutos` no perfil; `operacao_24_7` em `ops estado-servidor`). Hoje:
+  **não declarado.** Alternativa de produção, se o prazo for inaceitável: desbloqueio por servidor de chaves
+  (Clevis + Tang) em outro provedor — segurança menor, exige decisão (`SELECAO_INFRAESTRUTURA.md` §3.3).

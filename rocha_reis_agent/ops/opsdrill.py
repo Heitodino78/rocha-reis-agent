@@ -125,7 +125,7 @@ def run_drill(destination: Path, *, python: str | None = None) -> dict[str, obje
         package = deploy.build_package(destination / "pacotes")
         installed = deploy.install_release(package, root, python=python or sys.executable, create_venv=False)
         deploy.activate(root, str(installed["id"]))
-        deploy.prepare_instance(root, panel_origin=ORIGIN)
+        deploy.prepare_instance(root, panel_origin=ORIGIN, laboratorio=True)
         profile = deploy.layout(root)["config"]
         data = json.loads((profile / "perfil.json").read_text())
         data["settings"].update(channel_outbox_lease_seconds=2.0, channel_inbox_lease_seconds=2.0)
@@ -204,6 +204,7 @@ def run_drill(destination: Path, *, python: str | None = None) -> dict[str, obje
         root2 = destination / "servidor-restaurado"
         deploy.install_release(package, root2, python=python or sys.executable, create_venv=False)
         deploy.activate(root2, str(installed["id"]))
+        deploy.prepare_layout(root2)  # Fase 18B-0: pastas de dados só com o "volume" pronto (aqui: laboratório)
         paths1, paths2 = deploy.layout(root), deploy.layout(root2)
         config_text = (paths1["config"] / "perfil.json").read_text().replace(str(root), str(root2))
         os.chmod(paths2["config"], 0o700)

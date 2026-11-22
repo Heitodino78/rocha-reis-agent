@@ -69,6 +69,14 @@ habilitados do salão e da agência.
 - [ ] RPO/RTO aprovados (propostas em `SEGURANCA_ARMAZENAMENTO.md` §5).
 - [ ] Avaliar migração para PostgreSQL (vários escritores, réplicas) antes de volume real.
 
+## Volume de dados e backup externo (Fase 18B-0 — implementado e testado localmente; servidor NÃO)
+- [ ] Volume LUKS2 dedicado em `/var/lib/rocha-reis-agent`, marcado (`ops marcar-volume`), sem fstab/crypttab. *(Identidade UUID LUKS + marca conferida pelo banco, pelo portão `rocha-reis-volume`, por `validar-instalacao`, `atualizar` e `reverter --restaurar-banco`; testado com disco LUKS2 de loop.)*
+- [ ] Frase LUKS com duas pessoas + 2º keyslot de recuperação + cópia do cabeçalho fora do servidor.
+- [ ] Prazo de desbloqueio após reinício acordado com o salão (`continuidade.prazo_desbloqueio_minutos` no perfil) — sem isso, não é 24/7.
+- [ ] Canal externo para `volume_aguardando_desbloqueio` (Decisão 11; interface `ops/notify.py`, desligada).
+- [ ] Armazenamento externo contratado em OUTRO provedor, com Object Lock COMPLIANCE (B2) ou regra de bloqueio do bucket (R2), chave restrita sem exclusão.
+- [ ] Trava `EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED` aberta só com autorização escrita; teste de envio, tentativa de exclusão recusada e restauração em instância nova.
+
 ## Arquitetura de implantação
 - [ ] Decisão sobre a arquitetura recomendada em `STATUS_FASE_11.md` §F (servidor pequeno com disco cifrado, só o webhook público, painel atrás de VPN), após cotação de custos.
 

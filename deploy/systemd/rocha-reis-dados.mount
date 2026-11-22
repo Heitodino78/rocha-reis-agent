@@ -1,0 +1,19 @@
+# REFERÊNCIA (Fase 18B-0) — não instalado. Instalar com o nome que o systemd exige para o caminho:
+#   install -m 644 deploy/systemd/rocha-reis-dados.mount '/etc/systemd/system/var-lib-rocha\x2dreis\x2dagent.mount'
+# (o repositório fica num disco vfat, que não aceita "\" em nome de arquivo).
+# Montagem do volume de dados SÓ depois do desbloqueio manual: sem [Install] (nunca montado no boot) e sem
+# fstab/crypttab. Com o LUKS fechado o dispositivo não existe, a condição falha e a unidade é PULADA na hora;
+# os serviços, presos por BindsTo= + After=, não sobem (sem esperar o tempo-limite do dispositivo, sem ciclo).
+[Unit]
+Description=Rocha Reis — volume de dados cifrado (montado somente após o desbloqueio)
+ConditionPathExists=/dev/mapper/rocha-reis-dados
+# Fase 18B-0 (medido no laboratório): What= cria dependência implícita do DISPOSITIVO, e o systemd espera o
+# dispositivo aparecer por até 90 s ANTES de avaliar a condição — com o LUKS fechado, `systemctl start
+# rocha-reis.target` travava 90 s antes de falhar. 20 s sobra para montar o ext4 (inclusive com replay do diário).
+JobTimeoutSec=20s
+
+[Mount]
+What=/dev/mapper/rocha-reis-dados
+Where=/var/lib/rocha-reis-agent
+Type=ext4
+Options=nodev,nosuid,noexec

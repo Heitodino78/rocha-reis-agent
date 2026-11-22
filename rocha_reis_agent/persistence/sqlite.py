@@ -99,10 +99,12 @@ class SQLiteConversationRepository:
         archive_idle_hours: float = 24.0,
         fault_hook: Callable[[str], None] | None = None,
         environment: str | None = None, require_encrypted_volume: bool = False,
+        required_volume: dict[str, object] | None = None,
     ) -> None:
         self.path = Path(path).absolute()
         self.environment = environment
         self.require_encrypted_volume = require_encrypted_volume
+        self.required_volume = required_volume
         self.limits = limits or SimulationLimits()
         if (type(busy_timeout_ms) is not int or not 1 <= busy_timeout_ms <= 5000
             or type(max_bytes) is not int or max_bytes < 1024 * 1024
@@ -134,6 +136,14 @@ class SQLiteConversationRepository:
             raise StorageError("Use um arquivo local com sufixo .synthetic.sqlite3.")
         if any(part.is_symlink() for part in (self.path, *self.path.parents)):
             raise StorageError("Links simbólicos não são permitidos para o banco sintético.")
+        if self.required_volume is not None:
+            # Fase 18B-0: volume DEDICADO identificado. Conferido ANTES de criar qualquer coisa: nada de pasta
+            # nem banco novos num diretório vazio do disco de sistema quando o volume ainda está bloqueado.
+            from rocha_reis_agent.persistence.storage_security import check_data_volume
+            volume = check_data_volume(Path(str(self.required_volume["ponto_montagem"])), self.required_volume,
+                                       paths=(self.path.parent,), require_writable=True)
+            if not volume.ready:
+                raise StorageError(f"Volume de dados não verificado ({volume.state}): {volume.summary()}.")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if self.environment == "preproduction":
             status = self.path.parent.stat()

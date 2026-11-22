@@ -1,0 +1,476 @@
+{
+  "tipo": "TESTE COM SERVIÇO REAL — systemd do usuário (não é o servidor definitivo)",
+  "destino": "~/.local/share/rocha-reis-fase18/run-systemd-6",
+  "python": "~/.local/share/rocha-reis-fase18/py/python/bin/python3.13",
+  "systemd": "systemd 255 (255.4-1ubuntu8.15pop0~1778766128~24.04~85b5073)",
+  "volume": "volume cifrado verificado (dm-crypt LUKS2; cadeia: data-root → cryptdata)",
+  "desvios_do_servidor": [
+    "sem User=/Group= (exige root)",
+    "caminhos reescritos para a raiz de teste",
+    "ProtectHome=tmpfs + BindReadOnlyPaths da raiz/Python",
+    "bind somente leitura do NOTIFY_SOCKET do manager do usuário (escondido por ProtectHome; no servidor fica em /run/systemd)",
+    "systemd do usuário (namespace de usuário implícito)",
+    "WORKER_FAKE_SEND_LOG por drop-in (só transporte falso)"
+  ],
+  "versao": "0.14.0rc1.post5",
+  "release": "0.14.0rc1.post5-fb4c0b6d4c6a",
+  "resultado": "OK",
+  "etapas": [
+    {
+      "etapa": "instalacao_fluxo_oficial",
+      "ok": true,
+      "segundos": 11.28,
+      "problemas": [],
+      "travas": {
+        "meta_graph": false,
+        "meta_homologacao": false,
+        "gemini_real": false,
+        "dados_reais": false
+      }
+    },
+    {
+      "etapa": "unidades_carregadas",
+      "ok": true,
+      "segundos": 0.43,
+      "unidades": [
+        "rocha-reis-alerta@.service",
+        "rocha-reis-alertas.service",
+        "rocha-reis-alertas.timer",
+        "rocha-reis-backup.service",
+        "rocha-reis-backup.timer",
+        "rocha-reis-panel.service",
+        "rocha-reis-webhook.service",
+        "rocha-reis-worker.service"
+      ],
+      "verify": ""
+    },
+    {
+      "etapa": "inicializacao",
+      "ok": true,
+      "segundos": 2.05,
+      "worker": {
+        "Type": "notify",
+        "NotifyAccess": "main",
+        "WatchdogUSec": "1min",
+        "StatusText": "processando filas",
+        "LimitCORE": "0"
+      },
+      "estados": {
+        "rocha-reis-webhook.service": "running",
+        "rocha-reis-panel.service": "running",
+        "rocha-reis-worker.service": "running"
+      }
+    },
+    {
+      "etapa": "mensagens_via_servicos",
+      "ok": true,
+      "segundos": 1.24,
+      "http": [
+        200
+      ],
+      "saidas_aceitas": 12,
+      "aguardando_humano": 1
+    },
+    {
+      "etapa": "isolamento_e_segredos",
+      "ok": true,
+      "segundos": 0.04,
+      "rocha-reis-webhook.service": {
+        "segredo_no_ambiente_ou_linha_de_comando": false,
+        "NoNewPrivs": "1",
+        "Seccomp": "2",
+        "CapEff": "0000000000000000",
+        "CapBnd": "0000000000000000",
+        "perfil_montagem": "ro",
+        "dados_montagem": "rw",
+        "codigo_montagem": "ro",
+        "home_visivel": [
+          ".local"
+        ],
+        "ssh_visivel": false,
+        "tmp_privado": true,
+        "variaveis": [
+          "DBUS_SESSION_BUS_ADDRESS",
+          "DCONF_PROFILE",
+          "DISPLAY",
+          "GSM_SKIP_SSH_AGENT_WORKAROUND",
+          "GTK_MODULES",
+          "HOME",
+          "INVOCATION_ID",
+          "JOURNAL_STREAM",
+          "LANG",
+          "LOGNAME",
+          "MANAGERPID",
+          "MEMORY_PRESSURE_WATCH",
+          "MEMORY_PRESSURE_WRITE",
+          "PATH",
+          "PYTHONDONTWRITEBYTECODE",
+          "QT_ACCESSIBILITY",
+          "ROCHA_REIS_PROFILE",
+          "SHELL",
+          "SSH_AUTH_SOCK",
+          "SYSTEMD_EXEC_PID",
+          "USER",
+          "WAYLAND_DISPLAY",
+          "XDG_CURRENT_DESKTOP",
+          "XDG_DATA_DIRS",
+          "XDG_RUNTIME_DIR",
+          "XDG_SESSION_TYPE"
+        ]
+      },
+      "rocha-reis-panel.service": {
+        "segredo_no_ambiente_ou_linha_de_comando": false,
+        "NoNewPrivs": "1",
+        "Seccomp": "2",
+        "CapEff": "0000000000000000",
+        "CapBnd": "0000000000000000",
+        "perfil_montagem": "ro",
+        "dados_montagem": "rw",
+        "codigo_montagem": "ro",
+        "home_visivel": [
+          ".local"
+        ],
+        "ssh_visivel": false,
+        "tmp_privado": true,
+        "variaveis": [
+          "DBUS_SESSION_BUS_ADDRESS",
+          "DCONF_PROFILE",
+          "DISPLAY",
+          "GSM_SKIP_SSH_AGENT_WORKAROUND",
+          "GTK_MODULES",
+          "HOME",
+          "INVOCATION_ID",
+          "JOURNAL_STREAM",
+          "LANG",
+          "LOGNAME",
+          "MANAGERPID",
+          "MEMORY_PRESSURE_WATCH",
+          "MEMORY_PRESSURE_WRITE",
+          "PATH",
+          "PYTHONDONTWRITEBYTECODE",
+          "QT_ACCESSIBILITY",
+          "ROCHA_REIS_PROFILE",
+          "SHELL",
+          "SSH_AUTH_SOCK",
+          "SYSTEMD_EXEC_PID",
+          "USER",
+          "WAYLAND_DISPLAY",
+          "XDG_CURRENT_DESKTOP",
+          "XDG_DATA_DIRS",
+          "XDG_RUNTIME_DIR",
+          "XDG_SESSION_TYPE"
+        ]
+      },
+      "rocha-reis-worker.service": {
+        "segredo_no_ambiente_ou_linha_de_comando": false,
+        "NoNewPrivs": "1",
+        "Seccomp": "2",
+        "CapEff": "0000000000000000",
+        "CapBnd": "0000000000000000",
+        "perfil_montagem": "ro",
+        "dados_montagem": "rw",
+        "codigo_montagem": "ro",
+        "home_visivel": [
+          ".local"
+        ],
+        "ssh_visivel": false,
+        "tmp_privado": true,
+        "variaveis": [
+          "DBUS_SESSION_BUS_ADDRESS",
+          "DCONF_PROFILE",
+          "DISPLAY",
+          "GSM_SKIP_SSH_AGENT_WORKAROUND",
+          "GTK_MODULES",
+          "HOME",
+          "INVOCATION_ID",
+          "JOURNAL_STREAM",
+          "LANG",
+          "LOGNAME",
+          "MANAGERPID",
+          "MEMORY_PRESSURE_WATCH",
+          "MEMORY_PRESSURE_WRITE",
+          "NOTIFY_SOCKET",
+          "PATH",
+          "PYTHONDONTWRITEBYTECODE",
+          "QT_ACCESSIBILITY",
+          "ROCHA_REIS_PROFILE",
+          "SHELL",
+          "SSH_AUTH_SOCK",
+          "SYSTEMD_EXEC_PID",
+          "USER",
+          "WATCHDOG_PID",
+          "WATCHDOG_USEC",
+          "WAYLAND_DISPLAY",
+          "WORKER_FAKE_SEND_LOG",
+          "WORKER_HEARTBEAT_FILE",
+          "XDG_CURRENT_DESKTOP",
+          "XDG_DATA_DIRS",
+          "XDG_RUNTIME_DIR",
+          "XDG_SESSION_TYPE"
+        ]
+      }
+    },
+    {
+      "etapa": "sigterm_encerramento_limpo",
+      "ok": true,
+      "segundos": 2.66,
+      "rocha-reis-worker.service": {
+        "Result": "success",
+        "ExecMainCode": "0",
+        "ExecMainStatus": "0",
+        "ActiveState": "inactive",
+        "segundos": 0.12
+      },
+      "rocha-reis-webhook.service": {
+        "Result": "success",
+        "ExecMainCode": "0",
+        "ExecMainStatus": "0",
+        "ActiveState": "inactive",
+        "segundos": 0.25
+      },
+      "rocha-reis-panel.service": {
+        "Result": "success",
+        "ExecMainCode": "0",
+        "ExecMainStatus": "0",
+        "ActiveState": "inactive",
+        "segundos": 0.18
+      }
+    },
+    {
+      "etapa": "kill9_reinicio_sem_duplicidade",
+      "ok": true,
+      "segundos": 32.31,
+      "reinicio_s": 7.0,
+      "NRestarts": 1,
+      "envios": 52,
+      "duplicados": 0,
+      "situacoes": {
+        "ACCEPTED": 51,
+        "UNKNOWN": 1
+      },
+      "incertos": 1
+    },
+    {
+      "etapa": "incerto_nao_reenviado",
+      "ok": true,
+      "segundos": 4.03,
+      "incertos": 1,
+      "reenviados": 0,
+      "observacao": null
+    },
+    {
+      "etapa": "watchdog",
+      "ok": true,
+      "segundos": 67.11,
+      "pid_congelado": 297554,
+      "pid_novo": 297902,
+      "journal": [
+        "rocha-reis-worker.service: Watchdog timeout (limit 1min)!",
+        "rocha-reis-worker.service: Failed with result 'watchdog'."
+      ]
+    },
+    {
+      "etapa": "limite_de_reinicios_e_onfailure",
+      "ok": true,
+      "segundos": 38.16,
+      "estado": {
+        "Result": "signal",
+        "NRestarts": "6",
+        "ActiveState": "failed",
+        "kills": 6
+      },
+      "journal_limite": true,
+      "registros_de_alerta": 9,
+      "alerta_no_journal": [
+        "falha na unidade rocha-reis-worker.service"
+      ]
+    },
+    {
+      "etapa": "execstartpre_recusa_inseguro",
+      "ok": true,
+      "segundos": 9.17,
+      "com_perfil_0644": {
+        "MainPID": "0",
+        "Result": "exit-code",
+        "ActiveState": "activating",
+        "SubState": "auto-restart"
+      },
+      "painel_respondeu": null,
+      "observacao": "a recusa entra no ciclo de reinício (e alerta) até o limite; o painel nunca sobe"
+    },
+    {
+      "etapa": "backup_e_alertas_como_servico",
+      "ok": true,
+      "segundos": 2.53,
+      "backup": {
+        "Result": "success",
+        "ExecMainStatus": "0"
+      },
+      "arquivos_backup": [
+        ".backup.lock",
+        "rocha-reis-20261122T133948Z-ac20e3.rrbackup"
+      ],
+      "alertas_antes_do_backup": {
+        "Result": "exit-code",
+        "ExecMainStatus": "2"
+      },
+      "alertas_depois": {
+        "Result": "exit-code",
+        "ExecMainStatus": "2"
+      },
+      "saida_alertas": [
+        "  },",
+        "  \"notificacao_externa\": {",
+        "    \"habilitada\": false,",
+        "    \"seria_enviada\": true,",
+        "    \"enviada\": false,",
+        "    \"canal\": null",
+        "  }",
+        "}",
+        "rocha-reis-alertas.service: Main process exited, code=exited, status=2/INVALIDARGUMENT",
+        "rocha-reis-alertas.service: Failed with result 'exit-code'.",
+        "Failed to start rocha-reis-alertas.service - Rocha Reis — verificação de alertas operacionais.",
+        "rocha-reis-alertas.service: Triggering OnFailure= dependencies."
+      ],
+      "timers": [
+        "NEXT                        LEFT LAST                          PASSED UNIT                     ACTIVATES",
+        "Mon 2026-11-23 03:16:28 -03  16h Sun 2026-11-22 10:30:20 -03        - rocha-reis-backup.timer  rocha-reis-backup.service",
+        "-                              - Sun 2026-11-22 10:39:48 -03 13ms ago rocha-reis-alertas.timer rocha-reis-alertas.service",
+        ""
+      ],
+      "execucao_inicial": 1
+    },
+    {
+      "etapa": "alertas_provocados_nos_servicos",
+      "ok": true,
+      "segundos": 327.63,
+      "antes_do_primeiro_backup": [
+        "backup_atrasado",
+        "envio_incerto"
+      ],
+      "worker_parado_5min": [
+        [
+          "entrada_acumulada",
+          "entrada_parada",
+          "envio_incerto",
+          "falhas_login",
+          "worker_sem_batimento"
+        ],
+        "2"
+      ],
+      "worker_religado": [
+        [
+          "envio_incerto",
+          "falhas_login"
+        ],
+        "2"
+      ],
+      "teste_restauracao_corrompido": 2,
+      "restauracao_falhou": [
+        [
+          "envio_incerto",
+          "falhas_login",
+          "restauracao_falhou"
+        ],
+        "2"
+      ],
+      "backup_refeito": [
+        [
+          "envio_incerto",
+          "falhas_login"
+        ],
+        "2"
+      ],
+      "banco_ilegivel": [
+        [
+          "banco_inacessivel"
+        ],
+        "2"
+      ]
+    },
+    {
+      "etapa": "logs_sem_dados_sensiveis",
+      "ok": true,
+      "segundos": 0.16,
+      "ocorrencias": {
+        "segredos": 0,
+        "telefones": 0,
+        "texto_cliente": 0
+      },
+      "linhas_journal": 1155,
+      "logs_privados": {
+        "canal.log": "0o600"
+      }
+    },
+    {
+      "etapa": "exposicao_systemd_analyze",
+      "ok": true,
+      "segundos": 0.04,
+      "rocha-reis-webhook.service": 1.8,
+      "rocha-reis-panel.service": 1.8,
+      "rocha-reis-worker.service": 1.8
+    },
+    {
+      "etapa": "atualizacao_sob_systemd",
+      "ok": true,
+      "segundos": 15.87,
+      "resultado": "ATUALIZADA",
+      "etapas": [
+        "pacote_verificado",
+        "compatibilidade_conferida",
+        "versao_preparada",
+        "servicos_parados",
+        "backup_verificado",
+        "migracao_ensaiada_em_copia",
+        "versao_ativada",
+        "servicos_iniciados",
+        "prontidao_confirmada"
+      ],
+      "em_execucao": "18.0.14.0rc1.post5-ace491202d5f",
+      "erro": null
+    },
+    {
+      "etapa": "falha_na_atualizacao_reverte",
+      "ok": true,
+      "segundos": 54.04,
+      "resultado": "REVERTIDA",
+      "etapas": [
+        "pacote_verificado",
+        "compatibilidade_conferida",
+        "versao_preparada",
+        "servicos_parados",
+        "backup_verificado",
+        "migracao_ensaiada_em_copia",
+        "versao_ativada",
+        "servicos_iniciados",
+        "prontidao_falhou",
+        "versao_anterior_reativada"
+      ]
+    },
+    {
+      "etapa": "reversao_manual_de_codigo",
+      "ok": true,
+      "segundos": 3.06,
+      "resultado": "CODIGO_REVERTIDO",
+      "ativa": "0.14.0rc1.post5-fb4c0b6d4c6a",
+      "desativada": "18.0.14.0rc1.post5-ace491202d5f",
+      "em": "2026-11-22T13:46:27Z",
+      "proximo_passo": "reiniciar os serviços e conferir /ready"
+    },
+    {
+      "etapa": "integridade_final",
+      "ok": true,
+      "segundos": 0.02,
+      "integridade": "ok",
+      "envios": 108,
+      "duplicados": 0,
+      "conversas": 108,
+      "travas": {
+        "meta_graph": false,
+        "meta_homologacao": false,
+        "gemini_real": false,
+        "dados_reais": false
+      }
+    }
+  ]
+}

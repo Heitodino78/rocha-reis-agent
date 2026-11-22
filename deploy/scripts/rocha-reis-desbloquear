@@ -1,0 +1,50 @@
+#!/bin/bash
+# REFERÊNCIA (Fase 18B-0) — NÃO EXECUTADO nesta fase (exige root no servidor real).
+# Desbloqueio MANUAL do volume de dados após um reinício, por pessoa autorizada, num terminal (SSH pela VPN).
+#   1. abre o LUKS (a frase-senha é DIGITADA aqui; nunca gravada, nunca em argumento ou variável);
+#   2. monta em /var/lib/rocha-reis-agent pela unidade de montagem (nodev,nosuid,noexec);
+#   3. confere a identidade (UUID LUKS + marca) como o usuário do serviço — se não for o volume esperado,
+#      desmonta, fecha o LUKS e sai sem iniciar nada;
+#   4. confere integridade do banco (somente leitura) e inicia rocha-reis.target;
+#   5. mostra o estado em camadas (ops estado-servidor).
+# Uso: rocha-reis-desbloquear /dev/disk/by-uuid/<UUID-LUKS>
+set -euo pipefail
+umask 077
+DEVICE="${1:?informe o dispositivo LUKS: /dev/disk/by-uuid/<UUID-LUKS>}"
+NAME=rocha-reis-dados
+MOUNT=/var/lib/rocha-reis-agent
+PY=/opt/rocha-reis-agent/current/.venv/bin/python
+OPS=(runuser -u rocha-reis -- env PYTHONDONTWRITEBYTECODE=1 "$PY" -m rocha_reis_agent.ops)
+
+[ "$(id -u)" -eq 0 ] || { echo "Execute como root (sudo)." >&2; exit 2; }
+[ -t 0 ] || { echo "Recusado: a frase-senha só pode ser digitada num terminal." >&2; exit 2; }
+cd /opt/rocha-reis-agent/current
+
+if mountpoint -q "$MOUNT"; then
+  echo "Algo já está montado em $MOUNT; conferindo a identidade antes de continuar."
+else
+  if [ -n "$(ls -A "$MOUNT" 2>/dev/null)" ]; then
+    echo "Recusado: $MOUNT tem conteúdo SEM volume montado (dados no disco de sistema?). Investigue." >&2
+    exit 1
+  fi
+  [ -e "/dev/mapper/$NAME" ] || cryptsetup open --type luks2 "$DEVICE" "$NAME"
+  # Montagem pela unidade de referência (mesmas opções nodev,nosuid,noexec; systemd acompanha o estado).
+  systemctl start 'var-lib-rocha\x2dreis\x2dagent.mount'
+fi
+
+if ! "${OPS[@]}" verificar-volume --raiz /; then
+  echo "Volume INCORRETO ou inseguro: desmontando e fechando; nada foi iniciado." >&2
+  systemctl stop 'var-lib-rocha\x2dreis\x2dagent.mount' || umount "$MOUNT" || true
+  cryptsetup close "$NAME" || true
+  exit 1
+fi
+# Integridade SOMENTE LEITURA antes de iniciar (nenhuma cópia em claro fora do volume, nenhuma migração).
+runuser -u rocha-reis -- "$PY" -I -c '
+import json, sqlite3, pathlib, sys
+db = pathlib.Path(json.load(open("/etc/rocha-reis-agent/perfil.json"))["database"])
+r = sqlite3.connect(db.as_uri() + "?mode=ro", uri=True).execute("PRAGMA quick_check").fetchone()[0]
+sys.exit(0 if r == "ok" else print("Banco reprovado na verificação de integridade.", file=sys.stderr) or 1)'
+systemctl start rocha-reis.target
+sleep 5
+"${OPS[@]}" estado-servidor --raiz / || true
+echo "Conferir no painel: envios INCERTOS (UNKNOWN) exigem conferência humana; nada é reenviado sozinho."

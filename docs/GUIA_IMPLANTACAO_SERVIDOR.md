@@ -70,15 +70,18 @@ banco > 60% do `storage_max_bytes` (512 MB na instância) ou conversas ativas pe
 ## 4. Instalação (no servidor, como root; NÃO executado)
 
 ```sh
-# 0) Volume cifrado montado em /var/lib/rocha-reis-agent (LUKS) e usuário de serviço sem shell:
+# 0) Volume LUKS DEDICADO montado em /var/lib/rocha-reis-agent e MARCADO (Fase 18B-0 — passo a passo no §8;
+#    sem entrada no fstab/crypttab) e usuário de serviço sem shell:
 useradd --system --home /var/lib/rocha-reis-agent --shell /usr/sbin/nologin rocha-reis
+#    python -m rocha_reis_agent.ops marcar-volume --ponto-montagem /var/lib/rocha-reis-agent   (depois do passo 2)
 # 1) Pacote gerado e conferido na máquina da agência (reprodutível: mesmo conteúdo → mesmo SHA-256):
 python -m rocha_reis_agent.ops empacotar --destino ./pacotes          # anote o sha256 impresso
 sha256sum rocha-reis-agent-<versão>-<impressão>.tar.gz              # no servidor: deve bater
 # 2) Instalar (cria .venv com pip --require-hashes) e ativar a 1ª versão:
 python3.13 -m rocha_reis_agent.ops instalar --pacote rocha-reis-agent-...tar.gz --raiz /
 #    (sem internet no servidor: --pip-arg=--no-index --pip-arg=--find-links=/caminho/rodas)
-# 3) Instância de PRÉ-PRODUÇÃO SINTÉTICA (recusa volume sem cifragem verificada):
+# 3) Instância de PRÉ-PRODUÇÃO SINTÉTICA (recusa volume sem cifragem verificada e, desde a 18B-0, qualquer
+#    coisa que não seja o volume dedicado MARCADO; grava UUID LUKS + id da marca no perfil, em /etc):
 /opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops preparar-servidor --raiz / \
     --origem https://painel.<domínio-interno>
 chown -R rocha-reis: /etc/rocha-reis-agent /var/lib/rocha-reis-agent /var/log/rocha-reis-agent
@@ -86,7 +89,12 @@ chown -R rocha-reis: /etc/rocha-reis-agent /var/lib/rocha-reis-agent /var/log/ro
 sudo -u rocha-reis /opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops validar-instalacao --raiz /
 # 5) Unidades, proxy, firewall e VPN (revisar marcadores <...> antes):
 cp deploy/systemd/* /etc/systemd/system/ && systemd-analyze verify /etc/systemd/system/rocha-reis-*
-systemctl enable --now rocha-reis-webhook rocha-reis-panel rocha-reis-worker rocha-reis-backup.timer rocha-reis-alertas.timer
+install -m 644 deploy/systemd/rocha-reis-dados.mount '/etc/systemd/system/var-lib-rocha\x2dreis\x2dagent.mount'
+install -m 750 deploy/scripts/rocha-reis-desbloquear deploy/scripts/rocha-reis-bloquear /usr/local/sbin/
+# Fase 18B-0: o atendimento NÃO sobe no boot (o volume fica bloqueado); só os alertas são habilitados.
+systemctl enable rocha-reis-webhook rocha-reis-panel rocha-reis-worker rocha-reis-volume rocha-reis-backup.timer
+systemctl enable --now rocha-reis-alertas.timer        # avisa "volume_aguardando_desbloqueio" após reinício
+systemctl start rocha-reis.target                        # (ou rocha-reis-desbloquear após cada reinício)
 nft -c -f deploy/nftables/rocha-reis.nft.exemplo   # só verifica; aplicar depois de revisar
 # Fase 18: o Caddy depende do IP da VPN (bind 10.8.0.1). Ordem + sysctl para a VPN não derrubar o webhook:
 install -D -m 644 deploy/caddy/caddy.service.d-10-rocha-reis.conf /etc/systemd/system/caddy.service.d/10-rocha-reis.conf
@@ -166,3 +174,48 @@ alterações ao responsável** (o que será instalado, portas abertas, como desf
 
 18B só é concluída com todos os aceites no próprio servidor. VMs, contêineres e namespaces locais **não**
 contam (ver `STATUS_FASE_18.md`).
+
+## 8. Fase 18B-0 — procedimento completo do volume, do backup externo e da recuperação (NÃO executado)
+
+Preparado e **testado em laboratório** (`tests_infra/fase18b0_volume.py`, disco LUKS2 de loop + systemd do
+usuário; `tests/test_phase18b0_*.py`). **Nada disto foi executado num servidor.** Cada etapa exige a
+autorização da 18B.
+
+1. **Contratar** (pessoa habilitada, após aprovação de `ESPECIFICACAO_CONTRATACAO_SERVIDOR.md`): servidor
+   e volume em bloco na mesma região; armazenamento externo em OUTRO provedor; 2FA nas contas.
+2. **Criar o servidor**: Ubuntu 24.04 LTS oficial, chave SSH, firewall do provedor só 443/tcp e 51820/udp
+   (+22/tcp do IP da agência), volume de 40 GB anexado **sem** formatar pelo painel.
+3. **Preparar o volume** (uma vez, como root):
+   ```sh
+   cryptsetup luksFormat --type luks2 /dev/disk/by-id/<volume>        # frase DIGITADA pelo responsável
+   cryptsetup luksAddKey /dev/disk/by-id/<volume>                     # 2ª frase (recuperação, envelope lacrado)
+   cryptsetup luksHeaderBackup /dev/disk/by-id/<volume> --header-backup-file cabecalho-luks.img  # levar p/ fora
+   cryptsetup open --type luks2 /dev/disk/by-id/<volume> rocha-reis-dados
+   mkfs.ext4 -L rocha-reis-dados /dev/mapper/rocha-reis-dados
+   systemctl start 'var-lib-rocha\x2dreis\x2dagent.mount'   # unidade de referência (nodev,nosuid,noexec)
+   python -m rocha_reis_agent.ops marcar-volume --ponto-montagem /var/lib/rocha-reis-agent
+   blkid -s UUID -o value /dev/disk/by-id/<volume>      # UUID LUKS: anotar no registro da instalação
+   ```
+   **Nunca** colocar o volume no `/etc/crypttab` nem no `/etc/fstab` (com chave no disco a cifragem não
+   protege nada; sem chave o boot ficaria esperando senha no console).
+4. **Desbloquear após cada reinício**: `rocha-reis-desbloquear /dev/disk/by-uuid/<UUID-LUKS>` (SSH pela
+   VPN ou pelo IP autorizado). O script recusa pasta com conteúdo sem volume montado, confere a identidade
+   como `rocha-reis`, fecha o LUKS se o volume for outro e só então inicia `rocha-reis.target`.
+5. **Iniciar os serviços**: `systemctl start rocha-reis.target`. Sem o volume, os serviços falham por
+   **dependência** (sem ciclo de reinício, sem banco novo no disco de sistema); se o volume sair com tudo
+   rodando, `BindsTo=` para os serviços.
+6. **Armazenamento externo**: bucket com **Object Lock em COMPLIANCE** (Backblaze B2) ou com **regra de
+   bloqueio do bucket** (Cloudflare R2), chave **restrita ao bucket** sem permissão de apagar; credencial em
+   `/etc/rocha-reis-agent/chaves/armazenamento-externo.json` (0600); seção `backup.externo` no perfil.
+   **O envio real exige abrir a trava `EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED`** (revisão de código +
+   autorização escrita) — hoje o adaptador só fala com 127.0.0.1.
+7. **Testar o backup**: `ops backup-agendado`, `ops backup-externo --perfil ... --s3`, conferir
+   `estado-copia-externa.json` (enviados, bytes, sem falhas) e tentar apagar um objeto com a credencial do
+   servidor (deve ser recusado).
+8. **Restaurar numa instância nova**: servidor novo → passos 2–3 com volume novo → `ops baixar-externo
+   --perfil ... --s3 --nome <arquivo> --para <pasta>` → `ops verificar` → `ops restaurar` (arquivo novo) →
+   conferir contagens → `promover` só com confirmação.
+9. **Reiniciar o servidor**: `reboot` → o atendimento fica parado, o alerta `volume_aguardando_desbloqueio`
+   aparece no journal a cada 5 min → passo 4.
+10. **Verificar a prontidão**: `ops estado-servidor --raiz /` com todas as camadas `ok` (saída 0); `UNKNOWN`
+    listados para conferência humana — nunca reenviados automaticamente.

@@ -32,6 +32,12 @@ class ConfigurationError(RuntimeError):
 REAL_DATA_ACTIVATION_AUTHORIZED: Final = False
 PREPROD_DB_SUFFIX = ".preprod.synthetic.sqlite3"
 
+# Fase 18B-0 — trava do envio REAL de backups ao armazenamento externo (S3 compatível), independente das
+# quatro acima. Falsa: com ela fechada o adaptador só conversa com 127.0.0.1 (servidor S3 FALSO dos
+# testes); qualquer endpoint externo é recusado ANTES de abrir conexão. Abri-la exige conta contratada,
+# credencial restrita e autorização escrita do responsável.
+EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED: Final = False
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -138,6 +144,11 @@ class Settings(BaseSettings):
     data_classification: Literal["synthetic", "real"] = "synthetic"
     # Exige volume cifrado VERIFICADO (dm-crypt) para o banco; sempre exigido em pré-produção.
     storage_require_encrypted_volume: bool = False
+    # Fase 18B-0: identidade do volume de dados DEDICADO (do perfil, fora do volume). Quando definida, todo
+    # processo confere, ao abrir o banco, que o volume LUKS correto está montado (ver storage_security).
+    storage_volume_mount: Path | None = None
+    storage_volume_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    storage_volume_luks_uuid: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     panel_history_page_size: int = Field(default=50, ge=10, le=200)
     panel_environment_label: str | None = Field(default=None, max_length=40, pattern=r"^[\w À-ÿ.-]{1,40}$")
     panel_sse_poll_seconds: float = Field(default=1.0, ge=0.1, le=10)

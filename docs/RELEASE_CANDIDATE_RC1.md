@@ -3,11 +3,11 @@
 **Versão candidata à homologação interna e aos testes com o salão. NÃO é versão de produção.**
 Funciona só nesta máquina (127.0.0.1), com dados fictícios, IA e WhatsApp simulados.
 
-> **Atualização (Fase 18):** a candidata em uso é **`0.14.0rc1.post5`**, impressão **`7823a5ac7f45ce34`**
-> (316 arquivos): Fase 17 + correções achadas com systemd, Caddy, WireGuard e nftables reais
-> (`STATUS_FASE_18.md`), congelada no manifesto `docs/homologacao/RC1_MANIFESTO.json`. Confira com
+> **Atualização (Fase 18B-0):** a candidata em uso é **`0.14.0rc1.post6`**, impressão **`47b17956c8132cfe`**
+> (333 arquivos): Fase 18 + volume LUKS identificado, portão systemd e adaptador S3 desativado
+> (`STATUS_FASE_18B_0.md`), congelada no manifesto `docs/homologacao/RC1_MANIFESTO.json`. Confira com
 > `python -m rocha_reis_agent.ops verificar-rc`. Diferenças e resultados em
-> `RELATORIO_PRONTIDAO_RC1.md`. Histórico: `0.14.0rc1.post1` (Fase 15, impressão `92597a901d64a153`); `0.14.0rc1.post2` (Fase 16, `b67636df59849361`); `0.14.0rc1.post3` (revisão final, `ed50508486b8437c`); `0.14.0rc1.post4` (Fase 17, `7fa848b6eeec4bb2`).
+> `RELATORIO_PRONTIDAO_RC1.md`. Histórico: `0.14.0rc1.post1` (Fase 15, impressão `92597a901d64a153`); `0.14.0rc1.post2` (Fase 16, `b67636df59849361`); `0.14.0rc1.post3` (revisão final, `ed50508486b8437c`); `0.14.0rc1.post4` (Fase 17, `7fa848b6eeec4bb2`); `0.14.0rc1.post5` (Fase 18, `7823a5ac7f45ce34`).
 > A tabela abaixo é o registro original da Fase 14.
 
 ## 1. Identificação (registrada em 20/11/2026)

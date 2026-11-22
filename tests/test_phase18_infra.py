@@ -107,7 +107,8 @@ def test_alerts_unit_can_write_the_sqlite_wal_index():
     o alerta virava 'banco_inacessivel' CRÍTICO a cada 5 min. Só o diretório do banco recebe escrita."""
     text = _units()["rocha-reis-alertas.service"]
     writable = [line.split("=", 1)[1].split() for line in text.splitlines() if line.startswith("ReadWritePaths=")]
-    assert [["/var/lib/rocha-reis-agent/dados"]] == writable
+    # Fase 18B-0: "-" só tolera a pasta AUSENTE (volume bloqueado); continua sendo o único caminho gravável.
+    assert [["-/var/lib/rocha-reis-agent/dados"]] == writable
     assert "PrivateNetwork=true" in text and "RestrictAddressFamilies=AF_UNIX" in text
 
 
@@ -221,7 +222,11 @@ def test_systemd_harness_changes_only_the_documented_lines(monkeypatch):
         kept = {l for l in rendered.splitlines() if l and not l.startswith("#")}
         removed = {l for l in original - kept
                    if not any(p in l for p in ("/opt/", "/etc/rocha", "/var/lib/", "/var/log/", "--raiz /"))}
-        assert removed <= {"User=rocha-reis", "Group=rocha-reis", "ProtectHome=true"}, (name, removed)
+        assert removed <= {"User=rocha-reis", "Group=rocha-reis", "ProtectHome=true",
+                           # Fase 18B-0: dependências do volume dedicado, omitidas SÓ no roteiro da 18A
+                           "Requires=rocha-reis-volume.service", "After=rocha-reis-volume.service",
+                           r"BindsTo=var-lib-rocha\x2dreis\x2dagent.mount",
+                           r"After=var-lib-rocha\x2dreis\x2dagent.mount"}, (name, removed)
         added = {l for l in kept - original if not str(root) in l}
         assert added <= {"ProtectHome=tmpfs", f"BindReadOnlyPaths={python_home}",
                          "BindReadOnlyPaths=-/run/user/1000/systemd/notify"}, (name, added)
@@ -248,9 +253,11 @@ def test_wireguard_test_keys_match_rfc7748_and_reference_parses():
 def test_release_identification_moved_with_phase_18():
     from rocha_reis_agent import RELEASE_NAME, __version__
     from rocha_reis_agent import config as c
-    assert RELEASE_NAME == "Rocha Reis Agent — RC1 Offline" and __version__ == "0.14.0rc1.post5"
+    # Fase 18B-0: post6; e a quinta trava (backup externo real) também fechada.
+    assert RELEASE_NAME == "Rocha Reis Agent — RC1 Offline" and __version__ == "0.14.0rc1.post6"
     assert not any((c.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED, c.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
-                    c.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED, c.REAL_DATA_ACTIVATION_AUTHORIZED))
+                    c.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED, c.REAL_DATA_ACTIVATION_AUTHORIZED,
+                    c.EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED))
 
 
 @pytest.mark.parametrize("name", ["fase18_systemd.py", "fase18_rede.py", "wgnl.py"])

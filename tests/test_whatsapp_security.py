@@ -82,6 +82,10 @@ def test_network_client_is_confined_to_the_disabled_graph_adapter():
     """Fase 5: só channels/graph_transport.py usa cliente HTTP, e ele não é carregado
     pela aplicação, pela CLI ou pelo worker enquanto a trava de ativação for falsa."""
     allowed = ROOT / "rocha_reis_agent" / "channels" / "graph_transport.py"
+    # Fase 18B-0: o adaptador S3 do backup externo é o SEGUNDO (e único outro) cliente de rede: só
+    # `http.client` da biblioteca padrão, atrás da trava EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED, e nunca
+    # carregado pela aplicação, pela CLI ou pelo worker (conferido no fim deste teste).
+    s3_adapter = ROOT / "rocha_reis_agent" / "ops" / "s3_store.py"
     # Fase 8: a avaliação offline importa httpx2 SOMENTE para o transporte em memória
     # (MockTransport). Nenhum cliente com transporte real; a execução bloqueia sockets
     # (tests/test_evaluation.py::offline).
@@ -99,7 +103,8 @@ def test_network_client_is_confined_to_the_disabled_graph_adapter():
         source = path.read_text(encoding="utf-8")
         for forbidden in ("import httpx2", "import httpx\n", "import requests", "urllib.request", "http.client",
                           "import aiohttp", "socket.create_connection"):
-            if path != allowed and not (path in (in_memory, gemini) and forbidden == "import httpx2"):
+            if path != allowed and not (path in (in_memory, gemini) and forbidden == "import httpx2") \
+                    and not (path == s3_adapter and forbidden == "http.client"):
                 assert forbidden not in source, (path.name, forbidden)
         if path != allowed:
             assert "graph.facebook.com" not in source
@@ -111,9 +116,12 @@ def test_network_client_is_confined_to_the_disabled_graph_adapter():
             assert path.name == "bootstrap.py"  # importação tardia, atrás da trava
     import subprocess, sys
     probe = ("import sys; import rocha_reis_agent.main, rocha_reis_agent.channels.local_cli, "
-             "rocha_reis_agent.simulator; print('graph_transport' in ' '.join(sys.modules), 'httpx2' in sys.modules)")
+             "rocha_reis_agent.simulator, rocha_reis_agent.worker, rocha_reis_agent.ops.__main__; "
+             "print('graph_transport' in ' '.join(sys.modules), 'httpx2' in sys.modules, "
+             "'rocha_reis_agent.ops.s3_store' in sys.modules)")
     result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, cwd=ROOT, timeout=60)
     assert result.stdout.split()[0] == "False"
+    assert result.stdout.split()[2] == "False", result.stdout  # adaptador S3 só sob demanda (backup-externo --s3)
 
 
 def test_enabled_channel_exposes_only_health_and_webhook_without_admin_routes(tmp_path):

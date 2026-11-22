@@ -10,11 +10,14 @@ User=rocha-reis
 Group=rocha-reis
 WorkingDirectory=/opt/rocha-reis-agent/current
 ExecStart=/opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops alertas --perfil /etc/rocha-reis-agent --batimento /var/lib/rocha-reis-agent/estado/worker.json
-ReadOnlyPaths=/etc/rocha-reis-agent /var/lib/rocha-reis-agent
+# Fase 18B-0: os alertas NÃO dependem do volume — são eles que avisam "volume_aguardando_desbloqueio".
+# O prefixo "-" tolera as pastas ausentes enquanto o volume está bloqueado (sem ele a unidade falharia
+# ao montar o namespace e o aviso não sairia).
+ReadOnlyPaths=/etc/rocha-reis-agent -/var/lib/rocha-reis-agent
 # Fase 18 (achado no systemd REAL): SQLite em modo WAL precisa escrever no índice "-shm" até para LER; com o
 # diretório do banco somente leitura a avaliação dava "banco_inacessivel" (CRÍTICO) a cada 5 minutos e
 # escondia os alertas verdadeiros. O banco continua aberto com mode=ro (nenhum dado é alterado).
-ReadWritePaths=/var/lib/rocha-reis-agent/dados
+ReadWritePaths=-/var/lib/rocha-reis-agent/dados
 RestrictAddressFamilies=AF_UNIX
 PrivateNetwork=true
 MemoryMax=256M

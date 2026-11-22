@@ -1,0 +1,254 @@
+{
+  "tipo": "TESTE COM SERVIÇO REAL — disco LUKS2 de loop (udisks) + systemd do usuário; não é o servidor definitivo",
+  "destino": "~/.local/share/rocha-reis-fase18/run-volume-5",
+  "systemd": "systemd 255 (255.4-1ubuntu8.15pop0~1778766128~24.04~85b5073)",
+  "udisks": true,
+  "desvios_do_servidor": [
+    "sem User=/Group= (exige root)",
+    "systemd do usuário",
+    "código e perfil dentro do disco de teste (udisks monta em /media/$USER/<etiqueta>)",
+    "portão com --identidade fora do disco; alertas com cópia do perfil fora do disco",
+    "portão e alertas executados do repositório (Python da ferramenta), fora do disco",
+    "desbloqueio pelo udisks com arquivo de frase-senha do laboratório",
+    "unidade de montagem de referência com condição 'ponto montado' (udisks monta; no servidor: 'dispositivo LUKS aberto existe')",
+    "diretório sem montagem e montagem sem LUKS: namespace de montagem isolado"
+  ],
+  "versao": "0.14.0rc1.post5",
+  "release": "0.14.0rc1.post5-fb4c0b6d4c6a",
+  "limpeza": {
+    "montagem": true,
+    "loops_do_laboratorio": []
+  },
+  "resultado": "OK",
+  "etapas": [
+    {
+      "etapa": "disco_luks2_real",
+      "ok": true,
+      "segundos": 7.26,
+      "montagem": "Mounted /dev/dm-3 at /media/$USER/RRLAB",
+      "tipo": "LUKS2",
+      "cadeia_dm": "/dev/mapper/luks-4a7f0b9e-ef81-4c3f-8c34-35763f60c5f5",
+      "uuid_confere_com_udisks": true
+    },
+    {
+      "etapa": "instalacao_com_volume_dedicado",
+      "ok": true,
+      "segundos": 12.01,
+      "volume": {
+        "estado": "PRONTO",
+        "problemas": [],
+        "ponto_montagem": "/media/$USER/RRLAB",
+        "dispositivo": "/dev/mapper/luks-4a7f0b9e-ef81-4c3f-8c34-35763f60c5f5 (252:3, ext4)",
+        "luks_uuid": "4a7f0b9eef814c3f8c3435763f60c5f5",
+        "id_volume": "ca5c822e30780b94aea7c4a17e0e2257",
+        "somente_leitura": false
+      },
+      "travas": {
+        "meta_graph": false,
+        "meta_homologacao": false,
+        "gemini_real": false,
+        "dados_reais": false
+      },
+      "problemas": []
+    },
+    {
+      "etapa": "unidades_carregadas",
+      "ok": true,
+      "segundos": 0.73,
+      "verify": "",
+      "montagem": {
+        "LoadState": "loaded",
+        "ActiveState": "active",
+        "FragmentPath": "/run/user/1000/systemd/user/media-$USER-RRLAB.mount"
+      },
+      "dependencias_webhook": {
+        "Requires": "basic.target rocha-reis-volume.service app.slice media-$USER-RRLAB.mount",
+        "BindsTo": "media-$USER-RRLAB.mount",
+        "After": "rocha-reis-volume.service app.slice -.mount basic.target media-$USER-RRLAB.mount network-online.target"
+      }
+    },
+    {
+      "etapa": "volume_correto_atendimento",
+      "ok": true,
+      "segundos": 3.94,
+      "portao": {
+        "Result": "success",
+        "NRestarts": "0",
+        "ActiveState": "active",
+        "SubState": "exited"
+      },
+      "camadas": {
+        "servidor_ligado": true,
+        "disco_montado": true,
+        "banco_disponivel": true,
+        "worker_funcionando": true,
+        "webhook_pronto": true,
+        "painel_pronto": true,
+        "atendimento_operacional": true
+      },
+      "operacao_24_7": false
+    },
+    {
+      "etapa": "perda_do_volume_para_servicos",
+      "ok": true,
+      "segundos": 19.31,
+      "http_rajada": [
+        "200"
+      ],
+      "servicos": {
+        "rocha-reis-webhook.service": {
+          "Result": "success",
+          "NRestarts": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        },
+        "rocha-reis-panel.service": {
+          "Result": "success",
+          "NRestarts": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        },
+        "rocha-reis-worker.service": {
+          "Result": "success",
+          "NRestarts": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        },
+        "rocha-reis-volume.service": {
+          "Result": "success",
+          "NRestarts": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        }
+      },
+      "alerta": [
+        "volume_aguardando_desbloqueio"
+      ],
+      "saida_alertas": "2"
+    },
+    {
+      "etapa": "reinicio_com_disco_bloqueado",
+      "ok": true,
+      "segundos": 28.22,
+      "systemctl": {
+        "codigo": 1,
+        "saida": "A dependency job for rocha-reis.target failed. See 'journalctl -xe' for details."
+      },
+      "montagem": {
+        "ActiveState": "inactive",
+        "ConditionResult": "no"
+      },
+      "servicos": {
+        "rocha-reis-webhook.service": {
+          "Result": "success",
+          "NRestarts": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        },
+        "rocha-reis-panel.service": {
+          "Result": "success",
+          "NRestarts": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        },
+        "rocha-reis-worker.service": {
+          "Result": "success",
+          "NRestarts": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        },
+        "rocha-reis-volume.service": {
+          "Result": "success",
+          "NRestarts": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        }
+      },
+      "unidades_em_falha": null
+    },
+    {
+      "etapa": "disco_inexistente",
+      "ok": true,
+      "segundos": 23.29,
+      "systemctl": {
+        "codigo": 1,
+        "saida": "A dependency job for rocha-reis.target failed. See 'journalctl -xe' for details."
+      }
+    },
+    {
+      "etapa": "volume_errado_recusado",
+      "ok": true,
+      "segundos": 11.48,
+      "portao": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ActiveState": "failed",
+        "SubState": "failed"
+      },
+      "motivo": [
+        "    \"volume INCORRETO: UUID LUKS diferente do esperado no perfil\","
+      ],
+      "alerta_journal": true
+    },
+    {
+      "etapa": "cenarios_isolados",
+      "ok": true,
+      "segundos": 0.71,
+      "diretorio_sem_montagem": {
+        "codigo": 3,
+        "estado": "AGUARDANDO_DESBLOQUEIO",
+        "problemas": [
+          "diretório presente, mas nenhum volume montado nele"
+        ]
+      },
+      "montagem_sem_luks": {
+        "codigo": 1,
+        "estado": "RECUSADO",
+        "problemas": [
+          "volume montado SEM dm-crypt/LUKS",
+          "volume sem marca de identificação (ops marcar-volume)",
+          "pasta de dados ausente no volume: dados",
+          "pasta de dados ausente no volume: backups",
+          "pasta de dados ausente no volume: backups-secundario",
+          "pasta de dados ausente no volume: estado"
+        ]
+      },
+      "outro_volume_luks": {
+        "codigo": 1,
+        "estado": "RECUSADO",
+        "problemas": [
+          "volume sem marca de identificação (ops marcar-volume)",
+          "volume INCORRETO: UUID LUKS diferente do esperado no perfil",
+          "pasta de dados ausente no volume: dados",
+          "pasta de dados ausente no volume: backups",
+          "pasta de dados ausente no volume: backups-secundario",
+          "pasta de dados ausente no volume: estado"
+        ]
+      }
+    },
+    {
+      "etapa": "desbloqueio_manual_e_retomada",
+      "ok": true,
+      "segundos": 5.49,
+      "verificar_volume": "PRONTO",
+      "mensagens_recebidas": 10,
+      "envios": 10,
+      "duplicados": 0,
+      "aceitos": 10,
+      "incertos_UNKNOWN": 0,
+      "integridade": "ok",
+      "nota": "UNKNOWN nunca é reenviado sozinho; aparece no painel e no alerta envio_incerto"
+    },
+    {
+      "etapa": "pos_recuperacao",
+      "ok": true,
+      "segundos": 1.25,
+      "alertas": [
+        "backup_atrasado"
+      ],
+      "saida": "2",
+      "operacao_24_7": false,
+      "observacao": "24/7 NÃO declarado: após reinício o atendimento só volta com desbloqueio manual, sem prazo de resposta acordado"
+    }
+  ]
+}

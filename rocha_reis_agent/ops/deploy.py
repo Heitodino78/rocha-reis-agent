@@ -74,11 +74,14 @@ def layout(root: Path) -> dict[str, Path]:
 PRIVATE = ("config", "chaves", "dados", "backups", "secundario", "estado", "logs")
 
 
-def prepare_layout(root: Path) -> dict[str, Path]:
-    """Cria a árvore com permissões restritas (idempotente; nunca afrouxa permissões existentes)."""
+def prepare_layout(root: Path, *, include_data: bool = True) -> dict[str, Path]:
+    """Cria a árvore com permissões restritas (idempotente; nunca afrouxa permissões existentes).
+
+    Fase 18B-0: `include_data=False` (instalação do CÓDIGO) não cria as pastas do volume de dados — com o
+    volume ainda bloqueado elas nasceriam no disco de sistema, debaixo do ponto de montagem."""
     paths = layout(root)
     for name, path in paths.items():
-        if name == "current":
+        if name == "current" or (not include_data and name in VOLUME_DIRS):
             continue
         if path.is_symlink():
             raise DeployError(f"Diretório '{name}' não pode ser link simbólico.")
@@ -120,27 +123,78 @@ def check_layout(root: Path) -> list[str]:
 DATABASE = "rocha-reis.preprod.synthetic.sqlite3"
 
 
-def prepare_instance(root: Path, *, panel_origin: str = "https://painel.interno") -> dict[str, object]:
+SERVER_VOLUME = Path("/var/lib") / APP          # ponto de montagem do volume LUKS dedicado no servidor
+VOLUME_DIRS = ("dados", "backups", "secundario", "estado")
+
+
+def is_server_root(root: Path) -> bool:
+    return Path(root).resolve() == Path("/")
+
+
+def volume_mount_for(root: Path, mount_point: Path | None) -> Path:
+    """Ponto de montagem do volume: no servidor é SEMPRE /var/lib/rocha-reis-agent; num laboratório pode ser
+    um ancestral (ex.: disco de teste montado pelo udisks, com a raiz de teste dentro dele)."""
+    data_root = layout(root)["dados"].parent
+    mount = Path(mount_point).absolute() if mount_point else data_root
+    if is_server_root(root) and mount != SERVER_VOLUME:
+        raise DeployError(f"No servidor o volume de dados é montado em {SERVER_VOLUME}.")
+    if mount != data_root and mount not in data_root.parents:
+        raise DeployError("O ponto de montagem precisa conter var/lib/rocha-reis-agent.")
+    return mount
+
+
+def volume_status(root: Path, spec: dict[str, object] | None = None, *, require_writable: bool = False):  # type: ignore[no-untyped-def]
+    """Estado do volume dedicado da instância (spec = seção "volume" do perfil)."""
+    from rocha_reis_agent.persistence.storage_security import check_data_volume
+    if spec is None:
+        spec = json.loads((layout(root)["config"] / "perfil.json").read_text(encoding="utf-8")).get("volume") or {}
+    if not spec.get("id"):
+        raise DeployError("Perfil sem volume dedicado identificado (instância de laboratório).")
+    paths = layout(root)
+    return check_data_volume(Path(str(spec["ponto_montagem"])), spec, paths=tuple(paths[n] for n in VOLUME_DIRS),
+                             require_writable=require_writable)
+
+
+def prepare_instance(root: Path, *, panel_origin: str = "https://painel.interno", volume_mount: Path | None = None,
+                     laboratorio: bool = False) -> dict[str, object]:
     """Cria a instância de PRÉ-PRODUÇÃO SINTÉTICA no layout do servidor (nunca recria nem apaga).
 
     O perfil (etc/rocha-reis-agent/perfil.json, 0600) aponta para caminhos ABSOLUTOS: banco e backups em
     var/lib, chaves em etc/.../chaves (fora dos dados e dos backups). Exige volume com cifragem VERIFICADA.
     Segundo fator obrigatório, cookie Secure, origem HTTPS, transporte e IA simulados, só dados sintéticos.
+
+    Fase 18B-0: por padrão exige o volume LUKS DEDICADO já montado e marcado (`ops marcar-volume`); a
+    identidade (UUID LUKS + id da marca) vai para o perfil, FORA do volume. `laboratorio=True` (só fora da
+    raiz "/") dispensa o volume dedicado para ensaios locais — e fica registrado no perfil.
     """
     import secrets
     from rocha_reis_agent.ops.backup import generate_key
     from rocha_reis_agent.ops.demo import _write_private, profile_settings
-    from rocha_reis_agent.persistence.storage_security import volume_protection
+    from rocha_reis_agent.persistence.storage_security import check_data_volume, volume_protection
     if not panel_origin.startswith("https://"):
         raise DeployError("A origem do painel no servidor precisa ser HTTPS (endereço da VPN).")
+    if laboratorio and is_server_root(root):
+        raise DeployError("Modo laboratório não é permitido na raiz do servidor.")
+    if (layout(root)["config"] / "perfil.json").exists():
+        raise DeployError("A instância já existe; nunca é recriada ou apagada automaticamente.")
+    volume_spec: dict[str, object] = {"modo": "laboratorio"}
+    if not laboratorio:
+        # Conferido ANTES de criar as pastas: com o volume bloqueado elas iriam parar no disco de sistema.
+        mount = volume_mount_for(root, volume_mount)
+        status = check_data_volume(mount, None, require_writable=True)
+        if not status.ready:
+            raise DeployError(f"Volume de dados dedicado não verificado ({status.state}): {status.summary()}.")
+        volume_spec = {"ponto_montagem": str(mount), "id": status.volume_id, "luks_uuid": status.luks_uuid}
     paths = prepare_layout(root)
     profile = paths["config"] / "perfil.json"
-    if profile.exists():
-        raise DeployError("A instância já existe; nunca é recriada ou apagada automaticamente.")
     protection = volume_protection(paths["dados"])
     if not (protection.encrypted and protection.persistent):
         raise DeployError(f"Volume dos dados sem cifragem verificada: {protection.describe()}.")
-    config = {"version": 1, "kind": "preproduction", "profile": "preproduction",
+    if not laboratorio:
+        status = volume_status(root, volume_spec, require_writable=True)
+        if not status.ready:
+            raise DeployError(f"Pastas de dados fora do volume dedicado: {status.summary()}.")
+    config = {"version": 1, "kind": "preproduction", "profile": "preproduction", "volume": volume_spec,
               "database": str(paths["dados"] / DATABASE), "panel_origin": panel_origin,
               "mfa_key": str(paths["chaves"] / "mfa.key"),
               "backup": {"primario": str(paths["backups"]), "secundario": str(paths["secundario"]),
@@ -196,6 +250,7 @@ def validate_installation(root: Path) -> dict[str, object]:
              "meta_homologacao": c.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
              "gemini_real": c.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED, "dados_reais": c.REAL_DATA_ACTIVATION_AUTHORIZED}
     settings = None
+    volume_report: dict[str, object] = {}
     if not (paths["config"] / "perfil.json").is_file():
         problems.append("perfil.json ausente (crie a instância com ops preparar-servidor)")
     else:
@@ -219,12 +274,29 @@ def validate_installation(root: Path) -> dict[str, object]:
         protection = volume_protection(paths["dados"])
         if not (protection.encrypted and protection.persistent):
             problems.append("volume dos dados sem cifragem verificada")
+        # Fase 18B-0: identidade do volume dedicado (UUID LUKS + marca) e proibição do modo laboratório em "/".
+        spec = json.loads((paths["config"] / "perfil.json").read_text(encoding="utf-8")).get("volume") or {}
+        if not spec.get("id"):
+            volume_report = {"modo": "laboratorio"}
+            if is_server_root(root):
+                problems.append("servidor sem volume de dados dedicado identificado (ops marcar-volume)")
+        else:
+            try:
+                volume_mount_for(root, Path(str(spec["ponto_montagem"])))
+                status = volume_status(root, spec)
+                volume_report = status.as_dict()
+                if not status.ready:
+                    problems.append(f"volume de dados {status.state}: {status.summary()}")
+            except DeployError as error:
+                volume_report = {"estado": "RECUSADO"}
+                problems.append(str(error))
         if settings.data_classification != "synthetic" and not c.REAL_DATA_ACTIVATION_AUTHORIZED:
             problems.append("dados não sintéticos com a trava de dados reais fechada")
     current = paths["current"]
     if not current.is_symlink() or not (current / MANIFEST_NAME).is_file():
         problems.append("nenhuma versão ativa (link current)")
-    return {"ok": not problems, "problemas": problems, "travas": locks, "versao_ativa": current_release(root)}
+    return {"ok": not problems, "problemas": problems, "travas": locks, "versao_ativa": current_release(root),
+            "volume": volume_report if settings is not None else None}
 
 
 # ------------------------------------------------------------------ pacote
@@ -332,7 +404,7 @@ def release_id(manifest: dict[str, object]) -> str:
 def install_release(package: Path, root: Path, *, python: str | None = None, create_venv: bool = True,
                     pip_args: tuple[str, ...] = ()) -> dict[str, object]:
     """Instala uma versão ao lado das outras (não ativa). Reutiliza se idêntica; recusa se divergente."""
-    paths = prepare_layout(root)
+    paths = prepare_layout(root, include_data=False)
     with tempfile.TemporaryDirectory(dir=paths["releases"], prefix=".novo-") as tmp:
         staging = Path(tmp) / "codigo"
         manifest = verify_package(package, staging)
@@ -517,6 +589,7 @@ def update(package: Path, root: Path, *, database: Path, key_file: Path, confirm
            stop: Callable[[], None], start: Callable[[], None], ready: Callable[[], bool],
            python: str | None = None, create_venv: bool = True, pip_args: tuple[str, ...] = ()) -> dict[str, object]:
     """Fluxo completo. Retorna o relatório; nunca restaura o banco sozinho."""
+    _require_volume_if_dedicated(root)  # Fase 18B-0: antes de criar qualquer pasta (volume bloqueado)
     paths = prepare_layout(root)
     report: dict[str, object] = {"iniciado_em": _now(), "etapas": []}
     steps: list[str] = report["etapas"]  # type: ignore[assignment]
@@ -632,6 +705,7 @@ def restore_database(root: Path, *, database: Path, key_file: Path, backup_name:
     backup = paths["backups"] / backup_name
     if backup.parent != paths["backups"] or not backup.is_file():
         raise DeployError("Backup não encontrado no diretório de backups da instalação.")
+    _require_volume_if_dedicated(root)
     material = KeyMaterial("keyfile", key_file=key_file)
     with tempfile.TemporaryDirectory(dir=paths["dados"], prefix=".restaurando-") as tmp:
         restored = Path(tmp) / "restaurado.synthetic.sqlite3"
@@ -641,6 +715,21 @@ def restore_database(root: Path, *, database: Path, key_file: Path, backup_name:
               "em": _now()}
     _history(root, {"resultado": "BANCO_RESTAURADO", **result})
     return result
+
+
+def _require_volume_if_dedicated(root: Path) -> None:
+    """Fase 18B-0: nada substitui ou cria banco se o perfil declara volume dedicado e ele não está PRONTO."""
+    profile = layout(root)["config"] / "perfil.json"
+    try:
+        spec = json.loads(profile.read_text(encoding="utf-8")).get("volume") or {} if profile.exists() else {}
+    except (OSError, ValueError):
+        raise DeployError("Perfil da instância ilegível.") from None
+    if spec.get("id"):
+        status = volume_status(root, spec, require_writable=True)
+        if not status.ready:
+            raise DeployError(f"Volume de dados {status.state}: {status.summary()}. Nada foi alterado.")
+    elif is_server_root(root):
+        raise DeployError("Servidor sem volume de dados dedicado identificado. Nada foi alterado.")
 
 
 def _prune_releases(root: Path, *, keep: set[str]) -> None:

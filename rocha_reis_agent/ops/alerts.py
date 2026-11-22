@@ -198,6 +198,25 @@ def evaluate(database: Path, *, backups: Path | None = None, heartbeat: Path | N
     return _result(alerts, m, now)
 
 
+def evaluate_volume(volume: dict[str, object], *, now: datetime | None = None) -> dict[str, object] | None:
+    """Fase 18B-0: volume de dados dedicado. Sem ele montado e conferido, nada mais é avaliado (o banco não
+    está lá) e os serviços estão bloqueados por dependência — o atendimento está PARADO."""
+    now = now or datetime.now(timezone.utc)
+    alerts: list[dict[str, object]] = []
+
+    def add(code: str, level: str, message: str, value: object = None) -> None:
+        alerts.append({"codigo": code, "nivel": level, "mensagem": message, "valor": value})
+
+    state = volume.get("estado")
+    if state == "AGUARDANDO_DESBLOQUEIO":
+        add("volume_aguardando_desbloqueio", "CRITICO", "Volume de dados cifrado não montado (reinício?): "
+            "atendimento PARADO até o desbloqueio manual por pessoa autorizada.", volume.get("ponto_montagem"))
+    elif state != "PRONTO":
+        add("volume_incorreto", "CRITICO", "Algo montado no lugar do volume de dados não é o volume esperado "
+            "(ou é inseguro): serviços bloqueados.", "; ".join(map(str, volume.get("problemas") or [])))
+    return _result(alerts, {"volume": state}, now) if alerts else None
+
+
 def _result(alerts: list[dict[str, object]], metrics: dict[str, object], now: datetime) -> dict[str, object]:
     level = max((LEVELS.index(str(a["nivel"])) for a in alerts), default=0)
     return {"nivel": LEVELS[level], "gerado_em": now.isoformat(timespec="seconds"), "alertas": alerts,

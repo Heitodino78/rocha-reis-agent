@@ -1,0 +1,15 @@
+#!/bin/bash
+# REFERÊNCIA (Fase 18B-0) — NÃO EXECUTADO nesta fase (exige root no servidor real).
+# Parada controlada com bloqueio do volume (manutenção, suspeita de acesso indevido, antes de snapshot).
+# Para o atendimento (os itens em andamento voltam à fila pelo lease), desmonta e fecha o LUKS.
+set -euo pipefail
+NAME=rocha-reis-dados
+MOUNT=/var/lib/rocha-reis-agent
+[ "$(id -u)" -eq 0 ] || { echo "Execute como root (sudo)." >&2; exit 2; }
+systemctl stop rocha-reis.target rocha-reis-webhook.service rocha-reis-panel.service rocha-reis-worker.service \
+  rocha-reis-backup.timer rocha-reis-backup.service rocha-reis-volume.service
+sync
+systemctl stop 'var-lib-rocha\x2dreis\x2dagent.mount' || true
+if mountpoint -q "$MOUNT"; then umount "$MOUNT"; fi
+if [ -e "/dev/mapper/$NAME" ]; then cryptsetup close "$NAME"; fi
+echo "Volume bloqueado. Para voltar: rocha-reis-desbloquear /dev/disk/by-uuid/<UUID-LUKS>"

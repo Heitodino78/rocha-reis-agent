@@ -46,8 +46,21 @@ alta: `journalctl -p err -t rocha-reis-alerta`). Canal de aviso para pessoas (e-
 | `restauracao_falhou` | CRÍTICO | Último `ops teste-restauracao` falhou (Fase 18; antes não havia alerta) |
 | `copia_externa_atrasada` | ATENÇÃO | Cópia externa > 26 h ou nunca feita |
 | `banco_inacessivel` | CRÍTICO | Banco não pôde ser lido |
+| `volume_aguardando_desbloqueio` | CRÍTICO | Volume LUKS de dados não montado (reinício, queda): atendimento PARADO até o desbloqueio manual. Avaliado ANTES de tudo; os demais alertas não rodam sem o banco (Fase 18B-0) |
+| `volume_incorreto` | CRÍTICO | Algo montado no ponto do volume não é o volume esperado (UUID LUKS/marca diferentes, sem LUKS, pastas fora): serviços bloqueados (Fase 18B-0) |
 
 Sinais complementares: `/health` (vida) e `/ready` (banco, esquema, WAL, disco ≥ 50 MB) em cada
 aplicação — usados pela atualização; o `/ready` do painel só pela VPN/127.0.0.1.
 
 Saída sem conteúdo pessoal: só contagens, idades e códigos (teste garante ausência de telefone e texto).
+
+## Fase 18B-0 — volume de dados e aviso externo
+
+- O timer de alertas roda **mesmo com o volume bloqueado** (a unidade não depende do volume; as pastas de
+  dados têm prefixo `-`). É ele que registra `volume_aguardando_desbloqueio` a cada 5 minutos, com saída 2 →
+  `rocha-reis-alerta@` no journal.
+- A saída JSON traz `notificacao_externa` (`habilitada: false`, `seria_enviada`). O canal externo (e-mail,
+  mensageria, monitoramento) continua sendo a Decisão 11; a interface está em `rocha_reis_agent/ops/notify.py`
+  e o resumo enviável contém só códigos, níveis e horário.
+- `ops estado-servidor --raiz /` mostra as camadas: servidor ligado → disco montado → banco disponível →
+  worker → webhook → painel → atendimento operacional (saída 0, 3 = aguardando desbloqueio, 1 = outra camada).

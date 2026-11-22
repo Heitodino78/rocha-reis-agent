@@ -106,5 +106,5 @@ def installed_root(base: Path) -> Path:
     root = base / "raiz"
     result = deploy.install_release(package, root, python=PYTHON, create_venv=False)
     deploy.activate(root, str(result["id"]))
-    deploy.prepare_instance(root)
+    deploy.prepare_instance(root, laboratorio=True)
     return root

@@ -230,7 +230,25 @@ estática não pegava (atualização real sempre cancelada, instalador alterando
 sem VPN, rajada do limite de conexões, IP completo no log do Caddy, falha de restauração sem alerta).
 Revisão `0.14.0rc1.post5`. Evidências e matriz do que foi testado em cada ambiente: `STATUS_FASE_18.md`.
 **18B (servidor real) NÃO iniciada:** não há servidor autorizado — roteiro em `GUIA_IMPLANTACAO_SERVIDOR.md`
-§7. **Commit/push não executados** (aguardam autorização específica). **11B continua pendente.**
+§7. Versionada no commit `2b0335e` (autorizado). **11B continua pendente.**
+
+**Seleção da infraestrutura (pesquisa, 21/11/2026):** comparação de Vultr, Magalu Cloud, DigitalOcean,
+Hetzner e Locaweb, análise do LUKS e do backup externo em `SELECAO_INFRAESTRUTURA.md`; documento para o
+responsável financeiro em `ESPECIFICACAO_CONTRATACAO_SERVIDOR.md`. Recomendação: Vultr São Paulo (A) ou
+Magalu Cloud br-se1 (B), backup externo em Backblaze B2 (A) ou Cloudflare R2 (B), desbloqueio **manual**
+do LUKS após reinício. **Nada contratado**; decisões I-1 a I-7 aguardam aprovação.
+
+## Fase 18B-0 — Correções pré-contratação, backup externo e verificação final (21/11/2026)
+
+Identidade do volume LUKS (UUID + marca, conferida por todo processo, portão systemd, validação,
+atualização e restauração); unidade de montagem de referência + portão + `rocha-reis.target` (nada sobe
+sem o volume certo, sem ciclo de falhas; perda do volume para os serviços); scripts de desbloqueio e
+bloqueio manuais; adaptador S3 do backup externo **desativado** pela trava
+`EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED` e testado só contra servidor S3 falso; estado em camadas
+(`ops estado-servidor`) e alertas de volume. Testado com disco **LUKS2 real** de loop (udisks, sem root) e
+systemd do usuário. Verificação final dos provedores: plano de 4 GB da Vultr SP **indisponível**; ordem
+invertida (Magalu condicionada a Ubuntu 24.04 + console). Detalhes: `STATUS_FASE_18B_0.md`. **18B real não
+iniciada; nada contratado; sem commit.**
 
 ## Atendimento humano operacional — planejamento original (histórico)
 

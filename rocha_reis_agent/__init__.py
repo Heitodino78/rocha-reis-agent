@@ -13,5 +13,8 @@
 # caminho final do venv (atualização real era sempre cancelada), chmod sem seguir o link do Python base, reversão
 # que nunca volta para a versão que falhou, alertas que abrem o banco em WAL, LimitCORE=0, fronteira da VPN no
 # firewall, rajada explícita, log do Caddy sem IP completo e alertas de backup/restauração com falha.
-__version__ = "0.14.0rc1.post5"
+# 0.14.0rc1.post6 (Fase 18B-0): volume LUKS de dados IDENTIFICADO (UUID + marca) conferido por todo processo,
+# portão/montagem/alvo systemd, instalar sem criar pastas de dados, batimento do worker que não derruba o processo,
+# adaptador S3 do backup externo atrás da trava EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED, estado em camadas.
+__version__ = "0.14.0rc1.post6"
 RELEASE_NAME = "Rocha Reis Agent — RC1 Offline"

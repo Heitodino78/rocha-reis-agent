@@ -1,0 +1,10 @@
+# REFERÊNCIA (Fase 18B-0) — não instalado. Agrupa o atendimento: portão do volume, webhook, painel, worker e
+# timer do backup. NÃO é iniciado no boot (não tem [Install] em multi-user.target): após qualquer reinício o
+# volume LUKS continua BLOQUEADO até uma pessoa autorizada desbloquear; `rocha-reis-desbloquear` monta,
+# confere e só então executa `systemctl start rocha-reis.target`. O timer de alertas (timers.target) roda
+# mesmo com o volume bloqueado e avisa "volume_aguardando_desbloqueio".
+[Unit]
+Description=Rocha Reis — atendimento (somente com o volume de dados desbloqueado)
+Requires=rocha-reis-volume.service
+After=rocha-reis-volume.service
+Wants=rocha-reis-webhook.service rocha-reis-panel.service rocha-reis-worker.service rocha-reis-backup.timer

@@ -8,12 +8,12 @@ prontidão para produção.
 
 | Campo | Valor |
 |---|---|
-| Versão | Rocha Reis Agent — RC1 Offline `0.14.0rc1.post5` (Fase 16 + revisão final + Fases 17 e 18) |
-| Commit | Base `88ad523` (`main`, Fase 16); revisão final e Fase 17 **ainda sem commit** |
-| Impressão digital | `7823a5ac7f45ce34` (316 arquivos; post4 era `7fa848b6eeec4bb2`) |
-| Manifesto | `docs/homologacao/RC1_MANIFESTO.json` (hash de cada arquivo; congelado em 2026-11-21T02:38:12Z) |
+| Versão | Rocha Reis Agent — RC1 Offline `0.14.0rc1.post6` (Fase 16 + revisão final + Fases 17, 18 e 18B-0) |
+| Commit | Base `2b0335e` (`main`, Fases 17-18A); Fase 18B-0 no commit seguinte |
+| Impressão digital | `47b17956c8132cfe` (333 arquivos; post5 era `7823a5ac7f45ce34`) |
+| Manifesto | `docs/homologacao/RC1_MANIFESTO.json` (hash de cada arquivo; congelado em 2026-11-22T14:15:56Z) |
 | Esquema do banco | 11 (migrações 001–011, hashes no manifesto) |
-| Travas | Meta Graph, Meta homologação, Gemini real, dados reais: **todas `False`** |
+| Travas | Meta Graph, Meta homologação, Gemini real, dados reais e (Fase 18B-0) backup externo real: **todas `False`** |
 | Demonstração | Perfil isolado `demo` (dados, contas e segredos fictícios gerados a cada criação; 2FA opcional) |
 
 **Antes de cada sessão:** `python -m rocha_reis_agent.ops verificar-rc` precisa mostrar

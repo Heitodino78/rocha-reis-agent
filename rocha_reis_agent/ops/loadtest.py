@@ -76,7 +76,7 @@ def run_load(destination: Path, *, conversations: int = 1000, operators: int = 4
     package = deploy.build_package(destination / "pacotes")
     installed = deploy.install_release(package, root, python=python or sys.executable, create_venv=False)
     deploy.activate(root, str(installed["id"]))
-    deploy.prepare_instance(root, panel_origin=ORIGIN)
+    deploy.prepare_instance(root, panel_origin=ORIGIN, laboratorio=True)
     profile = deploy.layout(root)["config"]
     initial = conversations - 201  # + 1 conversa longa + 200 que chegam durante a medição = total pedido
     services = LocalServices(root, python=python)

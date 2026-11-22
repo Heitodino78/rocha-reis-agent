@@ -637,7 +637,7 @@ def outer(dest: Path, caddy: str, python: str) -> int:
     package = deploy.build_package(dest / "pacotes")
     installed = deploy.install_release(package, root, python=python, create_venv=False)
     deploy.activate(root, str(installed["id"]))
-    deploy.prepare_instance(root, panel_origin=ORIGIN)
+    deploy.prepare_instance(root, panel_origin=ORIGIN, laboratorio=True)
     validation = deploy.validate_installation(root)
     if not validation["ok"]:
         raise SystemExit(f"Instalação inválida: {validation['problemas']}")

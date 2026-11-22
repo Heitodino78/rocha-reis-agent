@@ -98,6 +98,10 @@ def test_install_layout_is_private_read_only_and_atomic(tmp_path):
     again = deploy.install_release(package, root, create_venv=False)
     assert again["reutilizada"] is True and again["id"] == first["id"]
     paths = deploy.layout(root)
+    # Fase 18B-0: instalar o CÓDIGO não cria as pastas do volume de dados (com o volume bloqueado elas
+    # nasceriam no disco de sistema); elas são criadas com o volume montado, com as mesmas permissões.
+    assert not any(paths[name].exists() for name in deploy.VOLUME_DIRS)
+    deploy.prepare_layout(root)
     for name in deploy.PRIVATE:
         assert stat.S_IMODE(paths[name].stat().st_mode) == 0o700, name
     code = paths["releases"] / first["id"] / "rocha_reis_agent" / "worker.py"
@@ -134,15 +138,19 @@ def test_installation_validation_refuses_insecure_configuration():
         os.chmod(profile, 0o600)
         assert set(deploy.validate_installation(root)["travas"].values()) == {False}
         with pytest.raises(deploy.DeployError, match="já existe"):
-            deploy.prepare_instance(root)
+            deploy.prepare_instance(root, laboratorio=True)
 
 
 def test_instance_requires_verified_encryption_and_https(tmp_path):
     with pytest.raises(deploy.DeployError, match="HTTPS"):
         deploy.prepare_instance(tmp_path / "r", panel_origin="http://painel.interno")
     with pytest.raises(deploy.DeployError, match="cifragem"):
-        deploy.prepare_instance(tmp_path / "r")  # /tmp é memória: recusado
+        deploy.prepare_instance(tmp_path / "r", laboratorio=True)  # /tmp é memória: recusado
     assert not (deploy.layout(tmp_path / "r")["config"] / "perfil.json").exists()
+    # Fase 18B-0: sem o modo laboratório, exige o volume dedicado montado — e não cria pasta nenhuma antes.
+    with pytest.raises(deploy.DeployError, match="Volume de dados dedicado não verificado"):
+        deploy.prepare_instance(tmp_path / "s")
+    assert not (tmp_path / "s").exists()
 
 
 def test_services_load_configuration_from_profile_variable(monkeypatch, tmp_path):
