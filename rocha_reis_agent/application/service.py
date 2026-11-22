@@ -14,6 +14,7 @@ from rocha_reis_agent.ai.validation import (
     validate_structure_v2,
 )
 from rocha_reis_agent.application.conversations import ConversationManager
+from rocha_reis_agent.application.courtesy import is_isolated_courtesy
 from rocha_reis_agent.application.handoff import HandoffAction, HumanHandoffManager
 from rocha_reis_agent.application.ports import IntentDetector, KnowledgeRepository
 from rocha_reis_agent.application.retry import retry_conflicts
@@ -26,6 +27,16 @@ from rocha_reis_agent.responses import SYNTHETIC_LABEL, ResponseGenerator
 from rocha_reis_agent.knowledge_projection import authorize_knowledge
 
 logger = logging.getLogger("rocha_reis_agent")
+
+# U1 (22/11): rótulos do que NÃO é texto. O conteúdo nunca é baixado, lido nem interpretado.
+MEDIA_LABELS = {"audio": "um áudio", "voice": "um áudio", "image": "uma imagem", "video": "um vídeo",
+                "document": "um documento", "sticker": "uma figurinha", "location": "uma localização",
+                "contacts": "um contato", "interactive": "uma resposta de botão/lista", "button": "uma resposta de botão",
+                "reaction": "uma reação", "text_invalid": "um texto que não pôde ser lido"}
+
+
+class _MediaNotRecorded(SimulationError):
+    """Aborta a unidade de trabalho sem gravar nada (mídia em conversa automática: comportamento anterior)."""
 
 
 class AgentService:
@@ -89,6 +100,11 @@ class AgentService:
             detection = Detection(())
             fact_keys: tuple[str, ...] = ()
             used_prompt: str | None = None
+            if conversation.state == ConversationState.RESOLVED and not is_isolated_courtesy(message.text):
+                # Revisão funcional (22/11, ADR-134/U1): volta para a fila humana, sem resposta automática.
+                # Cortesia isolada ("Obrigada! 😊") fica só no histórico: continua ENCERRADA, sem aviso.
+                # Regra PROVISÓRIA de produto (validação do salão na 11B); na dúvida, reabre.
+                self.handoff.reopen_by_client(conversation)
             if conversation.state == ConversationState.AUTO:
                 context_before = (conversation.service_context, conversation.context_age)
                 try:
@@ -185,6 +201,56 @@ class AgentService:
             if effects is not None:
                 effects(result, conversation.session_id)
             return result
+
+    @retry_conflicts
+    def handle_media(
+        self, event_id: str, conversation_id: str, media_type: str, received_at,  # type: ignore[no-untyped-def]
+        *, effects: Callable[[AgentResult, str], None] | None = None,
+    ) -> AgentResult | None:
+        """Mensagem NÃO textual (áudio, imagem, documento, localização, interativa…) — U1, 22/11.
+
+        Em conversa com atendimento humano ou ENCERRADA, entra no histórico como aviso ("[O cliente enviou um
+        áudio…]"), nunca interpretada nem respondida; numa ENCERRADA reabre (mídia nunca é cortesia). Em
+        conversa AUTOMÁTICA, ou de contato sem conversa, devolve None e nada é gravado: o canal mantém o
+        tratamento anterior (registrada na entrada, sem resposta — decisão pendente em DADOS_PENDENTES).
+        """
+        label = MEDIA_LABELS.get(media_type, "um conteúdo não reconhecido")
+        text = f"[O cliente enviou {label}. Conteúdo não exibido nem interpretado pelo sistema.]"
+        message = InboundMessage(event_id, conversation_id, text, received_at)
+        digest = sha256(f"media:{media_type}".encode("utf-8")).hexdigest()
+        try:
+            with self.conversations.edit(conversation_id) as conversation:
+                previous = conversation.processed_events.get(event_id)
+                original = conversation.event_results.get(event_id)
+                if previous is None:
+                    known = self.conversations.known_event(conversation_id, event_id)
+                    if known is not None:
+                        previous, original = known[0], known[1]  # type: ignore[assignment]
+                if previous is not None:
+                    if previous != digest:
+                        raise SimulationError("ID de evento reutilizado com conteúdo diferente.")
+                    duplicate = (replace(original, reply=None, duplicate=True) if original is not None else
+                                 AgentResult(conversation_id, event_id, conversation.state, duplicate=True))
+                    if effects is not None:
+                        effects(duplicate, conversation.session_id)
+                    return duplicate
+                if conversation.closed or conversation.state == ConversationState.AUTO:
+                    raise _MediaNotRecorded("Mídia em conversa automática: tratamento anterior.")
+                conversation.history.append(HistoryEntry("client", message.text, received_at, event_id))
+                if conversation.state == ConversationState.RESOLVED:
+                    self.handoff.reopen_by_client(conversation)
+                conversation.processed_events[event_id] = digest
+                result = AgentResult(conversation_id, event_id, conversation.state)
+                conversation.event_results[event_id] = result
+                if effects is not None:
+                    effects(result, conversation.session_id)
+                return result
+        except _MediaNotRecorded:
+            return None
+        except SimulationError as error:
+            if "não encontrada" in str(error):
+                return None
+            raise
 
     def _inherit(self, conversation: Conversation, control: Detection, base) -> tuple[Detection, str | None]:  # type: ignore[no-untyped-def]
         """Pergunta elíptica ("e a escova?") herda PREÇO da pergunta anterior do MESMO cliente.

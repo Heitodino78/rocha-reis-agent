@@ -16,6 +16,7 @@
 /operator reply Resposta humana fictícia; nenhuma reserva foi feita pelo simulador.
 /operator resolve
 /send a8 Pode retomar?
+/operator resolve
 /operator resume
 /send a9 E quanto custa?
 /send a9 E quanto custa?

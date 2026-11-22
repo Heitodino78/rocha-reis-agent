@@ -9,7 +9,7 @@
       lista os arquivos alterados — **não** fazer a sessão até resolver). Anotar versão e impressão digital.
 - [ ] `python -m rocha_reis_agent.ops roteiro` → **13/13 OK** (perfil separado, não afeta a demonstração).
 - [ ] `sh iniciar.sh --nova-demo` → painel abre; faixa **DEMONSTRAÇÃO** visível.
-- [ ] Sistema (admin.demo): quatro travas **bloqueadas**; "Perfil do ambiente: demo".
+- [ ] Sistema (admin.demo): cinco travas **bloqueadas** (desde a 18B-0 inclui o envio real de backups ao armazenamento externo); "Perfil do ambiente: demo".
 - [ ] Credenciais fictícias impressas, uma folha por papel; o arquivo **não** é projetado.
 - [ ] Segundo terminal pronto para `sh iniciar.sh --mensagem "..."`.
 - [ ] (Opcional, AT-13/14) um celular **de teste** com aplicativo autenticador.
@@ -40,6 +40,7 @@ deve ser mudado para a sessão (sem expor porta, sem desligar segurança, sem t�
 - [ ] Cada resultado anotado **na hora**, pelo observador, com o que o participante fez e disse.
 - [ ] Cada problema anotado no registro (§5 do plano) com tipo e gravidade.
 - [ ] Pedidos novos anotados como "Pedido de nova funcionalidade" — sem promessa.
+- [ ] **Regra provisória U1:** mostrar ao responsável que "Obrigada!"/👍 depois de finalizar NÃO reabre e que "Obrigada, mas…", perguntas, áudio e imagem reabrem; registrar se aprova a lista ou o que mudar (ADR-136).
 - [ ] Entre grupos: Ctrl+C → `sh iniciar.sh --nova-demo`.
 
 ## 3. Depois

@@ -51,10 +51,7 @@ def release_info() -> dict[str, object]:
         "dependencias": {name: _version(name) for name in PACKAGES},
         "esquema_banco": SCHEMA_VERSION,
         "migracoes": {p.name: sha256(p.read_bytes()).hexdigest()[:12] for p in sorted(MIGRATIONS.glob("*.sql"))},
-        "travas": {"meta_graph": c.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED,
-                   "meta_homologacao": c.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
-                   "gemini_real": c.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED,
-                   "dados_reais": c.REAL_DATA_ACTIVATION_AUTHORIZED},
+        "travas": c.activation_locks(),
     }
 
 

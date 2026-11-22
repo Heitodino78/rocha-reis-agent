@@ -1,17 +1,21 @@
 {
- "experiment_id": "rocha-reis-9c-gemini-v1",
- "registered_at": "2026-11-20T00:00:00-03:00",
+ "experiment_id": "rocha-reis-9c-gemini-v2",
+ "registered_at": "2026-11-22T00:00:00-03:00",
+ "supersedes": {
+  "experiment_id": "rocha-reis-9c-gemini-v1",
+  "reason": "Revisão funcional de 22/11/2026 (ADR-107, decisão do responsável): cliente que volta a escrever após o encerramento reabre a conversa na fila humana. O cenário crítico H6 mudou (suíte v4) e, pela política de mudança, o experimento v1 deixou de valer. Nenhuma execução real do v1 ocorreu; nenhuma do v2 está autorizada."
+ },
  "status": "PRÉ-REGISTRADO — nenhuma execução real autorizada até a assinatura do responsável",
  "change_policy": "Qualquer mudança em cenários, catálogo, critérios ou prompt invalida os hashes: a execução real é recusada até um NOVO experimento (experiment_id novo), com justificativa escrita.",
  "pinned_files": {
-  "evals/scenarios.synthetic.json": "91adcff18ca1877c",
+  "evals/scenarios.synthetic.json": "95a41789bc9a084d",
   "evals/catalog.synthetic.json": "5e8de26b2fe63c37",
   "evals/criteria.json": "e8ba214decc38c0f",
   "prompts/v4.json": "249511fccf46c6b8"
  },
  "suite": {
   "suite_id": "rocha-reis-synthetic",
-  "version": "3",
+  "version": "4",
   "scenarios": 129,
   "data": "synthetic_only"
  },

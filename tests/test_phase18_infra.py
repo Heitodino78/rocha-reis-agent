@@ -253,8 +253,8 @@ def test_wireguard_test_keys_match_rfc7748_and_reference_parses():
 def test_release_identification_moved_with_phase_18():
     from rocha_reis_agent import RELEASE_NAME, __version__
     from rocha_reis_agent import config as c
-    # Fase 18B-0: post6; e a quinta trava (backup externo real) também fechada.
-    assert RELEASE_NAME == "Rocha Reis Agent — RC1 Offline" and __version__ == "0.14.0rc1.post6"
+    # Fase 18B-0: post6; revisão funcional (22/11): post7. A quinta trava (backup externo real) também fechada.
+    assert RELEASE_NAME == "Rocha Reis Agent — RC1 Offline" and __version__ == "0.14.0rc1.post7"
     assert not any((c.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED, c.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
                     c.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED, c.REAL_DATA_ACTIVATION_AUTHORIZED,
                     c.EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED))

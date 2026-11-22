@@ -98,6 +98,17 @@ class HumanHandoffManager:
             raise SimulationError("Transição inválida para o estado atual.")
         self._change(conversation, State.WAITING_HUMAN, "owner_deactivated", operator.audit_id)
 
+    def reopen_by_client(self, conversation: Conversation) -> None:
+        """Cliente volta a escrever num atendimento ENCERRADO (RESOLVED → WAITING_HUMAN).
+
+        Decisão do responsável (22/11/2026, revisão funcional): antes a mensagem era só gravada — sem
+        resposta, sem fila, sem aviso — e o cliente ficava sem atendimento sem ninguém saber. Agora volta à
+        fila humana; a automação CONTINUA suspensa (só a retomada explícita leva a AUTO, como no ADR-012).
+        """
+        if conversation.closed or conversation.state != State.RESOLVED:
+            raise SimulationError("Reabertura só para atendimento encerrado.")
+        self._change(conversation, State.WAITING_HUMAN, "client_returned", None)
+
     def record_transfer(self, conversation: Conversation, operator: VerifiedOperator) -> None:
         """Transferência entre funcionários: sem mudança de estado, mas versionada e auditada."""
         if conversation.state != State.HUMAN_ACTIVE or conversation.closed:

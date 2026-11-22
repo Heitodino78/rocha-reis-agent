@@ -36,6 +36,7 @@ const TRANSITION_LABEL = {
   validated_ai_suggestion: "sugestão validada do assistente", operator_request: "enviada para a fila pela administração",
   assume: "assumido", transfer: "transferido", resolve: "finalizado", resume: "automação retomada",
   owner_deactivated: "responsável desativado; voltou para a fila",
+  client_returned: "cliente voltou a escrever; voltou para a fila",
 };
 const ROLE_LABEL = { client: "Cliente", assistant: "Assistente automático", operator: "Equipe" };
 
@@ -59,7 +60,19 @@ function el(tag, options = {}, children = []) {
   return node;
 }
 
+// U3 (22/11): espaço INSEPARÁVEL antes do "·": a linha pode quebrar depois do separador, nunca antes dele.
+const SEP = "\u00a0· ";
+// "Cliente ··6a15ce" não pode quebrar entre a palavra e o código (o código começaria a linha com "··").
+const who = (label) => (label || "").replace(/ (?=·)/g, "\u00a0");
+
 function announce(message) { $("live").textContent = message; }
+
+// Revisão funcional (22/11): no tablet/celular as tabelas largas viram cartões (CSS .responsive-table);
+// cada célula leva o nome da coluna para o rótulo do cartão. Nada é escondido: só muda a disposição.
+function labelCells(tbody) {
+  const heads = [...tbody.closest("table").tHead.rows[0].cells].map((th) => th.textContent.trim());
+  for (const row of tbody.rows) [...row.cells].forEach((cell, i) => { if (heads[i]) cell.dataset.label = heads[i]; });
+}
 
 const TOAST_LIMIT = 3;  // Fase 16: nunca mais que 3 avisos flutuantes cobrindo a tela
 function toast(message, kind = "info") {
@@ -104,6 +117,7 @@ class ApiError extends Error {
 async function api(path, { method = "GET", body } = {}) {
   const headers = { Accept: "application/json" };
   if (method !== "GET") { headers["Content-Type"] = "application/json"; headers["X-CSRF-Token"] = state.csrf; }
+  const generation = sessionGeneration;  // a sessão que FEZ o pedido
   let response;
   try {
     response = await fetch(API + path, { method, headers, credentials: "same-origin",
@@ -111,7 +125,9 @@ async function api(path, { method = "GET", body } = {}) {
   } catch {
     throw new ApiError(0, "Sem conexão com o servidor local.");
   }
-  if (response.status === 401 && !path.startsWith("/auth/login") && state.user) {
+  // Revisão (22/11): um 401 ATRASADO de pedido feito pela sessão anterior derrubava a sessão nova logo após o
+  // novo login (e apagava a senha digitada). Só encerra a sessão que fez o pedido.
+  if (response.status === 401 && !path.startsWith("/auth/login") && state.user && generation === sessionGeneration) {
     sessionEnded();
   }
   if (response.status === 204) return null;
@@ -270,7 +286,7 @@ function renderItem(item) {
   const stateKey = item.closed ? "CLOSED" : item.state;
   const button = el("button", { className: `conv${item.needs_human ? " needs-human" : ""}`, attrs: { type: "button" } }, [
     el("span", { className: "conv-avatar", text: initials(item.label), attrs: { "aria-hidden": "true" } }),
-    el("span", { className: "conv-name", text: item.label }),
+    el("span", { className: "conv-name", text: who(item.label) }),
     el("span", { className: "conv-time", text: formatTime(item.last_message ? item.last_message.at : item.updated_at) }),
     el("span", { className: "conv-preview", text: item.last_client_text
       || (item.last_message ? `${ROLE_LABEL[item.last_message.role]}: ${item.last_message.text}` : "Sem mensagens") }),
@@ -344,10 +360,11 @@ function renderDetail() {
   const mine = d.assigned && d.assigned.id === me.id;
   const admin = me.role === "ADMIN";
   $("detail-empty").hidden = true; $("detail").hidden = false;
-  $("detail-title").textContent = d.label;
+  $("detail-title").textContent = who(d.label);
   $("detail-title").setAttribute("tabindex", "-1");
   const badge = $("detail-state"); badge.className = `badge ${stateKey}`; badge.textContent = STATE_LABEL[stateKey];
-  $("detail-automation").textContent = d.state === "AUTO" && !d.closed ? "· Automação ativa" : "· Automação suspensa";
+  // U3 (22/11): sem "·" no texto — a linha é flex com espaçamento; o separador ficava sozinho no início da linha.
+  $("detail-automation").textContent = d.state === "AUTO" && !d.closed ? "Automação ativa" : "Automação suspensa";
   $("detail-owner").textContent = d.assigned ? `Responsável: ${d.assigned.name}` : "Sem responsável";
 
   const actions = [];
@@ -687,7 +704,7 @@ async function loadNotifications() {
       toast(`${fresh.length} aviso(s) pendente(s) — veja no sino de avisos.`, critical ? "error" : "info");
     }
   } else {
-    for (const n of fresh.slice(0, 2)) toast(`${n.label ? `${n.label}: ` : ""}${n.text}`, n.severity === "critical" ? "error" : "info");
+    for (const n of fresh.slice(0, 2)) toast(`${n.label ? `${who(n.label)}: ` : ""}${n.text}`, n.severity === "critical" ? "error" : "info");
     if (fresh.length > 2) toast(`Mais ${fresh.length - 2} aviso(s) no painel de avisos.`);
   }
   if (fresh.length) {
@@ -714,7 +731,7 @@ function renderNotifications() {
   $("notif-list").replaceChildren(...items.map((n) => {
     const body = el("button", { className: `notif ${n.severity}${state.notif.read.has(n.key) ? "" : " unread-notif"}`, attrs: { type: "button" } }, [
       el("span", { className: "notif-text", text: n.text }),
-      el("span", { className: "notif-meta muted small", text: [n.label, formatTime(n.at), n.mandatory ? "obrigatório" : ""].filter(Boolean).join(" · ") }),
+      el("span", { className: "notif-meta muted small", text: [who(n.label), formatTime(n.at), n.mandatory ? "obrigatório" : ""].filter(Boolean).join(SEP) }),
     ]);
     body.addEventListener("click", () => {
       state.notif.read.add(n.key); rememberKeys("read", state.notif.read); renderNotifications();
@@ -784,7 +801,8 @@ async function loadSystem() {
     $("system-status").replaceChildren(...rows.map(([key, value, warn]) => el("li", {}, [
       el("span", { className: "kv-key", text: key }), el("span", { className: `kv-value${warn ? " attention-text" : ""}`, text: value })])));
     const lockText = { meta_graph: "Envio real pela Meta (Graph API)", meta_homologation: "Homologação real Meta",
-      gemini_real: "Google Gemini real", real_data: "Uso de dados reais de clientes" };
+      gemini_real: "Google Gemini real", real_data: "Uso de dados reais de clientes",
+      external_backup: "Envio real de backups ao armazenamento externo" };
     $("system-locks").replaceChildren(...Object.entries(data.locks).map(([key, on]) => el("li", { className: on ? "lock-on" : "lock-off" }, [
       el("span", { text: lockText[key] || key }),
       el("span", { className: "lock-pill", text: on ? "LIBERADA NO CÓDIGO" : "bloqueada" })])));
@@ -792,9 +810,11 @@ async function loadSystem() {
     $("retired-body").replaceChildren(...retired.map((r) => {
       const button = el("button", { className: "btn btn-ghost btn-small", text: "Reativar", attrs: { type: "button" } });
       button.addEventListener("click", () => reinstateDialog(r));
-      return el("tr", {}, [el("td", { text: r.label }), el("td", { text: formatTime(r.retired_at) }),
-        el("td", { text: String(r.attempts) }), el("td", { text: formatTime(r.last_attempt_at) || "—" }), el("td", {}, [button])]);
+      return el("tr", {}, [el("td", { text: who(r.label) }), el("td", { text: formatTime(r.retired_at) }),
+        el("td", { text: String(r.attempts) }), el("td", { text: formatTime(r.last_attempt_at) || "—" }),
+        el("td", { className: "actions" }, [el("div", { className: "row-actions" }, [button])])]);
     }));
+    labelCells($("retired-body"));
     $("retired-empty").hidden = retired.length > 0;
   } catch (error) { if (error.status !== 401) toast(error.message, "error"); }
 }
@@ -995,6 +1015,7 @@ async function loadTeam() {
         el("td", { text: formatTime(u.last_login_at) || "—" }), el("td", { className: "actions" }, [buttons]),
       ]);
     }));
+    labelCells($("users-body"));
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -1033,10 +1054,11 @@ async function loadAudit() {
     $("audit-body").append(...rows.map((r) => el("tr", {}, [
       el("td", { text: formatTime(r.at) }), el("td", { text: r.actor || "—" }),
       el("td", { text: ACTION_LABEL[r.action] || r.action }),
-      el("td", { text: r.entity_type === "conversation" && r.entity_id ? `Cliente ··${r.entity_id.slice(-6)}` : r.entity_type }),
+      el("td", { text: r.entity_type === "conversation" && r.entity_id ? `Cliente\u00a0··${r.entity_id.slice(-6)}` : r.entity_type }),
       el("td", {}, [pill({ success: "Sucesso", denied: "Negado", failed: "Falhou" }[r.outcome] || r.outcome,
         { success: "ok", denied: "warn", failed: "bad" }[r.outcome] || "")]),
     ])));
+    labelCells($("audit-body"));
     state.auditBefore = rows.length ? rows[rows.length - 1].id : state.auditBefore;
     $("audit-more").hidden = rows.length < 100;
   } catch (error) { toast(error.message, "error"); }
@@ -1101,7 +1123,7 @@ function summarize(data) {
     return `${item.name}${item.active ? "" : " (inativo)"}${users.length ? ` — serviços: ${users.join(", ")}` : ""}`;
   }
   if (["identity", "location", "hours"].includes(data.kind)) return data.text;
-  if (["professionals", "policy", "cancellation"].includes(data.kind)) return data.items.join(" · ");
+  if (["professionals", "policy", "cancellation"].includes(data.kind)) return data.items.join(SEP);
   if (data.kind === "booksy") return data.url;
   if (data.kind === "service") {
     const aliases = data.service.aliases && data.service.aliases.length ? ` (${data.service.aliases.join(", ")})` : "";
@@ -1113,7 +1135,7 @@ function summarize(data) {
       extra.push(`profissionais: ${data.service.professional_ids.map((id) => nameOf("professional", id)).join(", ")}`);
     }
     return `${data.service.name}${aliases}${data.service.description ? ` — ${data.service.description}` : ""}`
-      + (extra.length ? ` [${extra.join(" · ")}]` : "");
+      + (extra.length ? ` [${extra.join(SEP)}]` : "");
   }
   if (data.kind === "price") {
     const value = { on_evaluation: "mediante avaliação", starting: `a partir de ${money(data.amount)}`,
@@ -1191,6 +1213,7 @@ function renderKnowledge() {
       el("td", { text: record.in_use ? "Sim" : "Não" }), el("td", { className: "actions" }, [actions]),
     ]);
   }));
+  labelCells($("knowledge-body"));
   $("knowledge-empty").hidden = rows.length > 0;
 }
 

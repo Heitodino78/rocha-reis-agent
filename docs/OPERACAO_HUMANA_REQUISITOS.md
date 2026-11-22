@@ -25,7 +25,10 @@ empresarial nem legal: os itens marcados **[DECISÃO]** dependem do responsável
    conversas), o motivo do pedido e se há envio pendente ou incerto (UNKNOWN).
 4. **Responder:** a resposta sai pela mesma outbox (janela de 24h, sem reenvio cego),
    registrada com a identidade verificada do funcionário.
-5. **Encerrar:** RESOLVED. A automação continua suspensa.
+5. **Encerrar:** RESOLVED. A automação continua suspensa. Se o cliente voltar a escrever, a conversa volta
+   para a fila (WAITING_HUMAN) e a equipe é avisada (ADR-134, 22/11/2026); antes ficava em silêncio.
+   **Regra provisória U1 (ADR-136):** cortesia isolada ("Obrigada!", "Ok", 👍) fica só no histórico, sem reabrir
+   nem avisar; pedido, mensagem mista, ambígua, áudio ou imagem reabrem. Depende de validação do salão (11B).
 6. **Retomar:** ação explícita e auditada volta para AUTO.
 7. **Ninguém disponível:** mensagens continuam registradas sem resposta automática.
    **[DECISÃO]** texto de expectativa (horário de atendimento humano, SLA), sem

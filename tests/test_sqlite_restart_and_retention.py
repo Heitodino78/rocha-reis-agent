@@ -64,7 +64,7 @@ def test_real_process_restart_preserves_context_waiting_human_history_audit_and_
     assert "[automático pausado; mensagem registrada]" in second
     assert "[duplicata ignorada]" in second
     assert "R$" not in second and "HUMAN_ACTIVE" in second
-    third = cli(path, "/use cliente-a\n/send active E quanto custa?\n/operator resolve\n/send resolved Pode retomar?\n/operator resume\n/send price E quanto custa?\n/provenance\n/storage-audit\n/quit\n", tmp_path)
+    third = cli(path, "/use cliente-a\n/send active E quanto custa?\n/operator resolve\n/send resolved Pode retomar?\n/operator resolve\n/operator resume\n/send price E quanto custa?\n/provenance\n/storage-audit\n/quit\n", tmp_path)
     assert third.count("[automático pausado; mensagem registrada]") == 2
     assert "Estado: AUTO" in third and "R$ 45,00" in third
     assert "prompt=v1" in third and "price:corte@1" in third

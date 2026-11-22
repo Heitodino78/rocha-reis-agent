@@ -16,5 +16,8 @@
 # 0.14.0rc1.post6 (Fase 18B-0): volume LUKS de dados IDENTIFICADO (UUID + marca) conferido por todo processo,
 # portão/montagem/alvo systemd, instalar sem criar pastas de dados, batimento do worker que não derruba o processo,
 # adaptador S3 do backup externo atrás da trava EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED, estado em camadas.
-__version__ = "0.14.0rc1.post6"
+# 0.14.0rc1.post7 (revisão funcional, 22/11/2026): cliente que volta após o encerramento reabre (exceto cortesia
+# isolada — regra PROVISÓRIA U1, validação na 11B); mídia não some; corrida desativação×atribuição; reinício na
+# mesma porta; fonte única das cinco travas; tabelas responsivas; separadores que não começam linha.
+__version__ = "0.14.0rc1.post7"
 RELEASE_NAME = "Rocha Reis Agent — RC1 Offline"

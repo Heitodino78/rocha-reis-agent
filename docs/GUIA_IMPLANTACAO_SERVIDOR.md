@@ -57,7 +57,7 @@ segredo na linha de comando, no ambiente da unidade ou no repositório.
 | CPU | 1 vCPU | 2 vCPU |
 | RAM | 1 GB (3 processos ≈ 210 MB medidos + SO) | 2 GB |
 | Disco | 20 GB SSD, **com LUKS** no volume dos dados | 40 GB SSD |
-| Python | 3.13 (`requirements.lock` com hashes) | Igual |
+| Python | 3.13 (`requirements.lock` com hashes). **Não vem no Ubuntu 24.04/Debian 12** (trazem 3.12/3.11): binário portátil verificado ou PPA — decisão I-5; ver §4 passo 2 | Igual |
 | Rede | IPv4 público; portas 443/tcp e 51820/udp; SSH só do IP da agência | + IPv6 |
 | Backup externo | Armazenamento de objetos em **outro provedor/região** | + versionamento/retenção imutável |
 
@@ -70,16 +70,34 @@ banco > 60% do `storage_max_bytes` (512 MB na instância) ou conversas ativas pe
 ## 4. Instalação (no servidor, como root; NÃO executado)
 
 ```sh
-# 0) Volume LUKS DEDICADO montado em /var/lib/rocha-reis-agent e MARCADO (Fase 18B-0 — passo a passo no §8;
-#    sem entrada no fstab/crypttab) e usuário de serviço sem shell:
+# ORDEM (Fase 18B-0): §8 passos 1–3 (contratar, criar o servidor, preparar e MONTAR o volume) → este §4 →
+# §8 passos 4–10. Todos os comandos abaixo rodam a partir de /opt/rocha-reis-agent/current depois do passo 2.
+# 0) Volume LUKS DEDICADO já montado em /var/lib/rocha-reis-agent (§8 passo 3; sem fstab/crypttab) e
+#    usuário de serviço sem shell:
 useradd --system --home /var/lib/rocha-reis-agent --shell /usr/sbin/nologin rocha-reis
-#    python -m rocha_reis_agent.ops marcar-volume --ponto-montagem /var/lib/rocha-reis-agent   (depois do passo 2)
 # 1) Pacote gerado e conferido na máquina da agência (reprodutível: mesmo conteúdo → mesmo SHA-256):
-python -m rocha_reis_agent.ops empacotar --destino ./pacotes          # anote o sha256 impresso
-sha256sum rocha-reis-agent-<versão>-<impressão>.tar.gz              # no servidor: deve bater
-# 2) Instalar (cria .venv com pip --require-hashes) e ativar a 1ª versão:
-python3.13 -m rocha_reis_agent.ops instalar --pacote rocha-reis-agent-...tar.gz --raiz /
-#    (sem internet no servidor: --pip-arg=--no-index --pip-arg=--find-links=/caminho/rodas)
+# (na agência, a partir da raiz do repositório, com o venv do README; "python" sozinho não existe no Ubuntu)
+/tmp/rocha-reis-agent-venv/bin/python -m rocha_reis_agent.ops empacotar --destino ./pacotes   # anote o sha256 impresso
+# Copiar o pacote para /root/ no servidor (scp pela VPN/IP autorizado) e conferir LÁ:
+sha256sum /root/rocha-reis-agent-<versão>-<impressão>.tar.gz        # deve bater com o sha256 anotado
+# 2) Instalar e ativar a 1ª versão. Revisão (22/11, simulado literalmente): o servidor limpo NÃO tem o código
+#    nem as bibliotecas do instalador; "python3.13 -m rocha_reis_agent.ops instalar" direto falha
+#    (ModuleNotFoundError). Sequência que funciona:
+# 2a) Python 3.13 em /opt/python3.13 (decisão I-5: binário portátil com soma conferida, como na Fase 18A,
+#     ou PPA). Exemplo com o portátil já conferido: tar -xzf cpython-3.13.*.tar.gz -C /opt && mv /opt/python /opt/python3.13
+PY313=/opt/python3.13/bin/python3.13
+# 2b) Extrair o pacote CONFERIDO e criar um ambiente TEMPORÁRIO só para rodar o instalador:
+install -d -m 700 /root/rr-instalacao
+tar -xzf /root/rocha-reis-agent-<versão>-<impressão>.tar.gz -C /root/rr-instalacao   # conteúdo na raiz (sem subpasta)
+$PY313 -m venv /root/rr-instalacao/.venv-instalador
+/root/rr-instalacao/.venv-instalador/bin/pip install --require-hashes --no-deps -r /root/rr-instalacao/requirements.lock
+# 2c) Instalar (cria o .venv da versão com pip --require-hashes) e ativar a 1ª versão:
+cd /root/rr-instalacao && .venv-instalador/bin/python -m rocha_reis_agent.ops instalar \
+    --pacote /root/rocha-reis-agent-<versão>-<impressão>.tar.gz --raiz / --python $PY313
+#    (sem internet no servidor: --pip-arg=--no-index --pip-arg=--find-links=/caminho/rodas, também no 2b)
+cd / && rm -rf /root/rr-instalacao   # o ambiente temporário não é mais necessário (sair da pasta antes)
+# 2d) Marcar o volume (uma única vez; nunca sobrescreve) — exige o código instalado no passo 2c:
+/opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops marcar-volume --ponto-montagem /var/lib/rocha-reis-agent
 # 3) Instância de PRÉ-PRODUÇÃO SINTÉTICA (recusa volume sem cifragem verificada e, desde a 18B-0, qualquer
 #    coisa que não seja o volume dedicado MARCADO; grava UUID LUKS + id da marca no perfil, em /etc):
 /opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops preparar-servidor --raiz / \
@@ -88,8 +106,11 @@ chown -R rocha-reis: /etc/rocha-reis-agent /var/lib/rocha-reis-agent /var/log/ro
 # 4) Conferir (o mesmo comando roda em ExecStartPre de cada serviço):
 sudo -u rocha-reis /opt/rocha-reis-agent/current/.venv/bin/python -m rocha_reis_agent.ops validar-instalacao --raiz /
 # 5) Unidades, proxy, firewall e VPN (revisar marcadores <...> antes):
-cp deploy/systemd/* /etc/systemd/system/ && systemd-analyze verify /etc/systemd/system/rocha-reis-*
+cd /opt/rocha-reis-agent/current
+# Só .service/.timer/.target: a montagem precisa do nome escapado (com outro nome o systemd a recusa).
+cp deploy/systemd/*.service deploy/systemd/*.timer deploy/systemd/*.target /etc/systemd/system/
 install -m 644 deploy/systemd/rocha-reis-dados.mount '/etc/systemd/system/var-lib-rocha\x2dreis\x2dagent.mount'
+systemctl daemon-reload && systemd-analyze verify /etc/systemd/system/rocha-reis-* '/etc/systemd/system/var-lib-rocha\x2dreis\x2dagent.mount'
 install -m 750 deploy/scripts/rocha-reis-desbloquear deploy/scripts/rocha-reis-bloquear /usr/local/sbin/
 # Fase 18B-0: o atendimento NÃO sobe no boot (o volume fica bloqueado); só os alertas são habilitados.
 systemctl enable rocha-reis-webhook rocha-reis-panel rocha-reis-worker rocha-reis-volume rocha-reis-backup.timer
@@ -192,10 +213,13 @@ autorização da 18B.
    cryptsetup luksHeaderBackup /dev/disk/by-id/<volume> --header-backup-file cabecalho-luks.img  # levar p/ fora
    cryptsetup open --type luks2 /dev/disk/by-id/<volume> rocha-reis-dados
    mkfs.ext4 -L rocha-reis-dados /dev/mapper/rocha-reis-dados
-   systemctl start 'var-lib-rocha\x2dreis\x2dagent.mount'   # unidade de referência (nodev,nosuid,noexec)
-   python -m rocha_reis_agent.ops marcar-volume --ponto-montagem /var/lib/rocha-reis-agent
+   install -d -m 755 /var/lib/rocha-reis-agent
+   # Só nesta primeira vez a montagem é manual (as unidades ainda não existem); depois, sempre pela unidade.
+   mount -o nodev,nosuid,noexec /dev/mapper/rocha-reis-dados /var/lib/rocha-reis-agent
    blkid -s UUID -o value /dev/disk/by-id/<volume>      # UUID LUKS: anotar no registro da instalação
    ```
+   Em seguida: §4 completo (instalar → **marcar o volume** no passo 2d → instância → unidades) e depois os
+   passos 4–10 abaixo.
    **Nunca** colocar o volume no `/etc/crypttab` nem no `/etc/fstab` (com chave no disco a cifragem não
    protege nada; sem chave o boot ficaria esperando senha no console).
 4. **Desbloquear após cada reinício**: `rocha-reis-desbloquear /dev/disk/by-uuid/<UUID-LUKS>` (SSH pela
@@ -218,4 +242,6 @@ autorização da 18B.
 9. **Reiniciar o servidor**: `reboot` → o atendimento fica parado, o alerta `volume_aguardando_desbloqueio`
    aparece no journal a cada 5 min → passo 4.
 10. **Verificar a prontidão**: `ops estado-servidor --raiz /` com todas as camadas `ok` (saída 0); `UNKNOWN`
-    listados para conferência humana — nunca reenviados automaticamente.
+    listados para conferência humana — nunca reenviados automaticamente. Desde a revisão de 22/11 a saída
+    traz também `travas` com as **cinco** (Meta Graph, homologação Meta, Gemini, dados reais, backup externo),
+    todas `false` até autorização escrita; elas não mudam o código de saída.

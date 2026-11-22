@@ -19,6 +19,8 @@ def test_provider_never_runs_during_human_pause_or_before_explicit_resume(agent,
     assert send("/operator resume").reply is None
     agent.operator_action("cliente-a",Action.RESOLVE,operator_id=OPERATOR)
     assert send("Pode retomar?").reply is None
+    assert not provider_spy.requests  # ADR-134 (22/11): cliente voltou → fila; re-encerrar antes da retomada explícita
+    agent.operator_action("cliente-a",Action.RESOLVE,operator_id=OPERATOR)
     assert not provider_spy.requests
     agent.operator_action("cliente-a",Action.RESUME,operator_id=OPERATOR)
     assert "R$ 45,00" in send("Quanto custa o corte?").reply

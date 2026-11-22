@@ -1,7 +1,7 @@
 {
   "_comentario": "EXEMPLO FICTÍCIO (Fase 9C-B, Etapa 1 — piloto inicial). Copiar para FORA do repositório, preencher, remover esta chave e aplicar chmod 600. NÃO é uma autorização: os limites são a PROPOSTA de docs/HOMOLOGACAO_IA_FASE9.md. Etapa 2 exige NOVA autorização com o MESMO usage_ledger (contadores cumulativos).",
   "schema_version": 3,
-  "experiment_id": "rocha-reis-9c-gemini-v1",
+  "experiment_id": "rocha-reis-9c-gemini-v2",
   "stages": [
     "smoke",
     "pilot",

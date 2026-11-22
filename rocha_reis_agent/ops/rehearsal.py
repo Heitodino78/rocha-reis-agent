@@ -67,8 +67,7 @@ def run_rehearsal(workspace: Path | None = None) -> dict[str, object]:
     from rocha_reis_agent.panel.app import create_panel_app
     from rocha_reis_agent.persistence.sqlite_channel import SQLiteChannelStore
 
-    if any((config_module.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED, config_module.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
-            config_module.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED, config_module.REAL_DATA_ACTIVATION_AUTHORIZED)):
+    if any(config_module.activation_locks().values()):  # as cinco (fonte única em config.py)
         raise BackupError("Alguma trava de integração real está aberta: o roteiro se recusa a executar.")
     base = Path(workspace) if workspace else Path(tempfile.mkdtemp(prefix="rr-roteiro-"))
     base.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -6,6 +6,7 @@
 /send ativa Quanto custa?
 /operator resolve
 /send resolvida Pode retomar?
+/operator resolve
 /operator resume
 /send preco E quanto custa?
 /provenance

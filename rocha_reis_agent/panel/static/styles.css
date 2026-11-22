@@ -250,8 +250,9 @@ fieldset { min-width: 0; }
   --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E"); }
 .search input { padding-left: 34px; background: var(--surface-2); }
 /* Filtros: uma linha rolável (antes quebravam em 3 linhas). */
-.chips { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 2px;
-  scroll-padding-inline: 16px; }
+/* Revisão (22/11): antes rolavam de lado sem barra e o último filtro ficava cortado na borda da lista (inclusive
+   no notebook: "Em atendim…"). Agora quebram linha: todos os filtros visíveis. */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0 0 2px; }
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: none; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 4px 12px;
   font: inherit; font-size: var(--fs-sm); font-weight: 500; cursor: pointer; min-height: 32px; white-space: nowrap;
@@ -512,16 +513,25 @@ fieldset { min-width: 0; }
 
 /* ============================================================ 9. Conhecimento, ajuda, 2FA */
 .knowledge-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
-.knowledge-filter input, .knowledge-filter select { flex: 1 1 180px; width: auto; }
+/* min-width: 0 — sem isso o <select> media o texto da opção mais longa e passava da borda em 320 px. */
+.knowledge-filter input, .knowledge-filter select { flex: 1 1 180px; width: auto; min-width: 0; max-width: 100%; }
 .knowledge-filter input { flex-basis: 300px; background: var(--surface); }
 .preview-box { background: var(--surface-2); border: 1px dashed var(--line-strong); border-radius: var(--r-md); padding: 12px; min-height: 1.5em;
   margin-top: 12px; font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
 .preview-box:empty { display: none; }
 [data-fields][hidden] { display: none; }
 /* Fase 16: a coluna de ações ficava fora da área visível (só aparecia rolando a tabela de lado). */
-#knowledge-body td:nth-child(1), #knowledge-body td:nth-child(2) { white-space: normal; min-width: 104px; overflow-wrap: anywhere; }
+/* Revisão (22/11): "anywhere" quebrava palavras no meio ("funcionam|ento"). Tipo: só entre palavras (a coluna
+   cresce até a maior palavra). Identificador: códigos sem espaço podem quebrar, mas só onde não couberem. */
+#knowledge-body td:nth-child(1) { white-space: normal; min-width: 104px; overflow-wrap: normal; word-break: normal; }
+#knowledge-body td:nth-child(2) { white-space: normal; min-width: 104px; overflow-wrap: break-word; }
 #knowledge-body td.wrap { min-width: 180px; }
 #knowledge-body .knowledge-actions { flex-wrap: wrap; width: 196px; justify-content: flex-start; }
+/* Revisão (22/11): na Equipe os botões ficavam fora do quadro abaixo de 1920 px (só apareciam rolando de lado).
+   Os botões quebram linha DENTRO da célula; a situação ("Ativo · senha temporária") também pode quebrar. */
+#users-body .row-actions { flex-wrap: wrap; justify-content: flex-end; max-width: 15rem; margin-left: auto; }
+#users-body td:nth-child(4) { white-space: normal; }
+#users-body td:nth-child(4) .cell-pill { white-space: normal; }
 #knowledge-pending > li { font-size: var(--fs-sm); }
 #knowledge-history > li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
 #knowledge-history > li:last-child { border-bottom: 0; }
@@ -569,6 +579,53 @@ fieldset { min-width: 0; }
   .scrim[hidden] { display: none !important; }
 }
 
+/* Revisão (22/11): tabelas largas viram CARTÕES no tablet e no celular (cada célula com o nome da coluna).
+   Antes: ações e colunas ficavam fora do quadro, acessíveis só rolando a tabela de lado. */
+@media (max-width: 1100px) {
+  .responsive-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td { display: block; width: 100%; }
+  .responsive-table tbody tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .responsive-table tbody tr:last-child { border-bottom: 0; }
+  .data-table.responsive-table td { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 2px 12px; align-items: start;
+    padding: 4px 0; border: 0; white-space: normal; min-width: 0; max-width: none; overflow-wrap: break-word; }
+  .data-table.responsive-table td::before { content: attr(data-label); color: var(--muted); font-size: var(--fs-xs); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .03em; padding-top: 2px;
+    white-space: nowrap; overflow-wrap: normal; }
+  .data-table.responsive-table td:first-child { font-size: var(--fs-md); }
+  .data-table.responsive-table td.actions { width: 100%; padding-top: 10px; }
+  .data-table.responsive-table td.actions::before { content: none; }
+  .data-table.responsive-table td.actions { display: block; }
+  .responsive-table .row-actions, #knowledge-body .knowledge-actions, #users-body .row-actions { flex-wrap: wrap; justify-content: flex-start;
+    width: auto; max-width: none; margin-left: 0; }
+  .responsive-table .row-actions .btn { min-height: 40px; }
+  .data-table.responsive-table td > .cell-pill { justify-self: start; }
+}
+/* Equipe e Conhecimento têm 7 colunas: no notebook com o menu aberto (1280–1366 px) ainda não cabiam. */
+@media (max-width: 1439px) {
+  .responsive-wide thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .responsive-wide, .responsive-wide tbody, .responsive-wide tr, .responsive-wide td { display: block; width: 100%; }
+  .responsive-wide tbody tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .responsive-wide tbody tr:last-child { border-bottom: 0; }
+  .data-table.responsive-wide td { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 2px 12px; align-items: start;
+    padding: 4px 0; border: 0; white-space: normal; min-width: 0; max-width: none; overflow-wrap: break-word; }
+  .data-table.responsive-wide td::before { content: attr(data-label); color: var(--muted); font-size: var(--fs-xs); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .03em; padding-top: 2px;
+    white-space: nowrap; overflow-wrap: normal; }
+  .data-table.responsive-wide td:first-child { font-size: var(--fs-md); }
+  .data-table.responsive-wide td.actions { width: 100%; padding-top: 10px; }
+  .data-table.responsive-wide td.actions::before { content: none; }
+  .data-table.responsive-wide td.actions { display: block; }
+  .responsive-wide .row-actions, #knowledge-body .knowledge-actions, #users-body .row-actions { flex-wrap: wrap; justify-content: flex-start;
+    width: auto; max-width: none; margin-left: 0; }
+  .responsive-wide .row-actions .btn { min-height: 40px; }
+  .data-table.responsive-wide td > .cell-pill { justify-self: start; }
+}
+
+/* Celular estreito (até ~420 px): rótulo do cartão acima do valor, para o valor ter a largura toda. */
+@media (max-width: 420px) {
+  .data-table.responsive-table td, .data-table.responsive-wide td { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Celular: lista e conversa em telas alternadas */
 @media (max-width: 720px) {
   body { font-size: var(--fs-md); }
@@ -578,6 +635,7 @@ fieldset { min-width: 0; }
   .workspace.showing-detail .list-pane { display: none; }
   .workspace:not(.showing-detail) .detail-pane { display: none; }
   .list-pane { border-right: 0; }
+
   .back-btn { display: inline-grid; }
   .detail-head { flex-wrap: wrap; padding: 12px 14px; gap: 10px; }
   .detail-actions { width: 100%; justify-content: flex-start; }

@@ -454,7 +454,7 @@ def test_report_has_reproducibility_metadata_denominators_and_criteria():
     report = evaluate(_subset({"C1", "D2", "H1", "H10", "Q3", "W2"}), provider="gemini-simulated",
                       prompt_version="v4", model="gemini-3.5-flash-lite")
     run, metrics = report["run"], report["metrics"]
-    assert run["suite_id"] == "rocha-reis-synthetic" and run["suite_version"] == "3"
+    assert run["suite_id"] == "rocha-reis-synthetic" and run["suite_version"] == "4"
     assert run["model"] == "gemini-3.5-flash-lite" and run["output_contract"] == "ai-response-v2"
     assert run["catalog_sha256_16"] is None or len(run["catalog_sha256_16"]) == 16
     assert {"python", "commit", "uncommitted_changes"} <= set(run["environment"])
@@ -494,7 +494,7 @@ def _authorization(tmp_path, **changes):
     data = {"schema_version": 3,
             "confirmed_pricing": {MODEL: {"input": 0.25, "output": 1.50}}, "meta_remains_disabled": True,
             "google_billing_controls": "orçamento de teste com alerta (fictício)", "residual_billing_risk_accepted": True, "authorized_by": "Responsável fictício", "executor": "Executor fictício",
-            "experiment_id": "rocha-reis-9c-gemini-v1", "stages": ["smoke", "pilot", "e2e", "full", "repeat"],
+            "experiment_id": "rocha-reis-9c-gemini-v2", "stages": ["smoke", "pilot", "e2e", "full", "repeat"],
             "usage_ledger": str(tmp_path / "ledger" / "uso.ai-homolog.synthetic.sqlite3"),
             "stop_file": str(tmp_path / "PARAR"),
             "google_account": "conta fictícia", "project_id": "projeto-ficticio-teste", "billing": "paid_cloud_project",

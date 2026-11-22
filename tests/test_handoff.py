@@ -29,12 +29,17 @@ def test_complete_handoff_preserves_context_and_requires_explicit_resume(agent, 
     agent.operator_reply("cliente-a", "Resposta fictícia do operador.", operator_id=OPERATOR)
     assert agent.operator_action("cliente-a", Action.RESOLVE, operator_id=OPERATOR) == State.RESOLVED
     assert send("Oi, pode retomar automaticamente?").reply is None
+    assert agent.conversations.snapshot("cliente-a").state == State.WAITING_HUMAN  # ADR-134 (22/11): cliente voltou → fila; re-encerrar antes da retomada explícita
+    with pytest.raises(SimulationError, match="Transição inválida"):
+        agent.operator_action("cliente-a", Action.RESUME, operator_id=OPERATOR)  # não pula a fila
+    assert agent.operator_action("cliente-a", Action.RESOLVE, operator_id=OPERATOR) == State.RESOLVED
     assert agent.operator_action("cliente-a", Action.RESUME, operator_id=OPERATOR) == State.AUTO
     assert "R$ 45,00" in send("E quanto custa?").reply
     conversation = agent.conversations.snapshot("cliente-a")
     assert [t.current for t in conversation.transitions] == [
-        State.WAITING_HUMAN, State.HUMAN_ACTIVE, State.RESOLVED, State.AUTO
+        State.WAITING_HUMAN, State.HUMAN_ACTIVE, State.RESOLVED, State.WAITING_HUMAN, State.RESOLVED, State.AUTO
     ]
+    assert conversation.transitions[3].action == "client_returned" and conversation.transitions[3].operator_id is None
     assert any(h.role == "operator" for h in conversation.history)
 
 

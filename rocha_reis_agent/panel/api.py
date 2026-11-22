@@ -145,6 +145,11 @@ async def _json(request: Request, model: type[Body]) -> Body:
         raise PanelError(422, "Dados inválidos.") from None
 
 
+# Nomes das cinco travas na API do painel (contrato estável com app.js) ← nomes de config.activation_locks().
+PANEL_LOCK_KEYS = {"meta_graph": "meta_graph", "meta_homologacao": "meta_homologation", "gemini_real": "gemini_real",
+                   "dados_reais": "real_data", "backup_externo": "external_backup"}
+
+
 def build_panel_router(ctx: PanelContext) -> APIRouter:
     router = APIRouter(prefix="/api/panel")
     settings = ctx.settings
@@ -593,10 +598,9 @@ def build_panel_router(ctx: PanelContext) -> APIRouter:
                 "transport": settings.whatsapp_transport, "ai_provider": settings.ai_provider,
                 "dispatch_halted": ctx.channel.halt_status(),
                 # Somente leitura: travas de código. A interface NÃO pode alterá-las.
-                "locks": {"meta_graph": config_module.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED,
-                          "meta_homologation": config_module.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
-                          "gemini_real": config_module.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED,
-                          "real_data": config_module.REAL_DATA_ACTIVATION_AUTHORIZED},
+                # Revisão (22/11): derivadas da fonte única; a chave inglesa da API é só um nome de exibição.
+                # Trava nova sem nome aqui = KeyError (o teste de divergência acusa antes de qualquer entrega).
+                "locks": {PANEL_LOCK_KEYS[name]: value for name, value in config_module.activation_locks().items()},
                 # Fase 13: saúde do backup automático (datas, contagens e resultado; sem caminhos/segredos).
                 "backup": _backup_health(settings), "release": _release(),
                 # Fase 12: ambiente e proteção em repouso CONSTATADA (dm-crypt), sem caminhos ou segredos.
@@ -654,11 +658,13 @@ def build_panel_router(ctx: PanelContext) -> APIRouter:
 
     @router.get("/knowledge")
     async def knowledge_overview(request: Request) -> dict[str, object]:
-        return knowledge().overview(admin(request).user)  # type: ignore[attr-defined]
+        session = admin(request)  # revisão (22/11): permissão ANTES da configuração (atendente via 409, não 403)
+        return knowledge().overview(session.user)  # type: ignore[attr-defined]
 
     @router.get("/knowledge/history")
     async def knowledge_history(request: Request, fact_id: str) -> list[dict[str, object]]:
-        return knowledge().history(admin(request).user, fact_id)  # type: ignore[attr-defined]
+        session = admin(request)
+        return knowledge().history(session.user, fact_id)  # type: ignore[attr-defined]
 
     @router.post("/knowledge/drafts", status_code=201)
     async def knowledge_draft(request: Request) -> dict[str, object]:

@@ -307,7 +307,15 @@ APIs e limitações em [`STATUS_FASE_7.md`](docs/STATUS_FASE_7.md).
 ```
 
 Testes de navegador (Chromium headless) ficam em `tests_e2e/`, com venv próprio
-descrito em `requirements-e2e.txt`.
+descrito em `requirements-e2e.txt`. Depois de instalado (comandos no topo daquele arquivo):
+
+```sh
+/tmp/rocha-reis-e2e-venv/bin/python -m pytest -q -p no:cacheprovider tests_e2e   # ~13 min; só 127.0.0.1
+```
+
+No terminal do VS Code em **Flatpak**, o navegador baixado pelo `playwright install` fica em
+`~/.var/app/com.visualstudio.code/cache/ms-playwright` (não em `~/.cache`). Os dois venvs ficam em `/tmp`
+e somem quando o sistema limpa a pasta (por exemplo, após reiniciar): basta repetir a instalação.
 
 ## IA generativa, conhecimento aprovado e avaliações — Fase 8 (somente local)
 
@@ -415,7 +423,10 @@ $PY -m rocha_reis_agent.ops restaurar ~/rr-backups/ARQUIVO.rrbackup --para /cami
 $PY -m rocha_reis_agent.ops desempenho --conversas 1000 --mensagens 400
 ```
 
-O volume do repositório não guarda permissão de execução: use `sh iniciar.sh`. Os
+O volume do repositório não guarda permissão de execução: use `sh iniciar.sh`. A demonstração fica em
+`${XDG_DATA_HOME:-~/.local/share}/rocha-reis-agent/demo` — no terminal do VS Code em **Flatpak** isso é
+`~/.var/app/com.visualstudio.code/data/rocha-reis-agent/demo`; a linha **PRONTO** mostra o caminho exato
+das senhas fictícias. Os
 **backups são cifrados; o banco ativo não é**. Relatório em
 [`STATUS_FASE_10.md`](docs/STATUS_FASE_10.md); manual da equipe em
 [`MANUAL_PAINEL.md`](docs/MANUAL_PAINEL.md).
@@ -436,9 +447,10 @@ pré-produção) em [`STATUS_FASE_11.md`](docs/STATUS_FASE_11.md).
 
 ```sh
 PY=/tmp/rocha-reis-agent-venv/bin/python
+RR_DADOS="${XDG_DATA_HOME:-$HOME/.local/share}/rocha-reis-agent"   # VS Code em Flatpak: ~/.var/app/com.visualstudio.code/data/...
 $PY -m rocha_reis_agent.ops preprod            # perfil de PRÉ-PRODUÇÃO sintético (exige volume cifrado verificado)
-$PY -m rocha_reis_agent.ops ambiente --perfil ~/.local/share/rocha-reis-agent/preprod   # diagnóstico
-$PY -m rocha_reis_agent.ops metricas --perfil ~/.local/share/rocha-reis-agent/demo     # indicadores sem dados pessoais
+$PY -m rocha_reis_agent.ops ambiente --perfil "$RR_DADOS/preprod"   # diagnóstico
+$PY -m rocha_reis_agent.ops metricas --perfil "$RR_DADOS/demo"      # indicadores sem dados pessoais
 $PY -m rocha_reis_agent.ops reter ~/rr-backups --manter 14 --dias 30                   # plano de retenção (não apaga)
 ```
 
@@ -452,10 +464,11 @@ Relatório em [`STATUS_FASE_12.md`](docs/STATUS_FASE_12.md); arquitetura em
 
 ```sh
 PY=/tmp/rocha-reis-agent-venv/bin/python
-$PY -m rocha_reis_agent.ops backup-agendado --perfil ~/.local/share/rocha-reis-agent/demo   # uma rodada
-$PY -m rocha_reis_agent.ops teste-restauracao --perfil ~/.local/share/rocha-reis-agent/demo
-$PY -m rocha_reis_agent.ops ensaio-recuperacao --perfil ~/.local/share/rocha-reis-agent/demo --destino /tmp/ensaio-vazio
-$PY -m rocha_reis_agent.ops mfa-rotacionar --perfil ~/.local/share/rocha-reis-agent/demo
+RR_DADOS="${XDG_DATA_HOME:-$HOME/.local/share}/rocha-reis-agent"   # VS Code em Flatpak: ~/.var/app/com.visualstudio.code/data/...
+$PY -m rocha_reis_agent.ops backup-agendado --perfil "$RR_DADOS/demo"   # uma rodada
+$PY -m rocha_reis_agent.ops teste-restauracao --perfil "$RR_DADOS/demo"
+$PY -m rocha_reis_agent.ops ensaio-recuperacao --perfil "$RR_DADOS/demo" --destino /tmp/ensaio-vazio
+$PY -m rocha_reis_agent.ops mfa-rotacionar --perfil "$RR_DADOS/demo"
 ```
 
 Verificação em duas etapas (TOTP) no painel em **Minha conta**; obrigatória em pré-produção, que
@@ -491,8 +504,12 @@ python tests_infra/fase18b0_volume.py --destino DIR_NOVO --python /caminho/pytho
 ```
 
 Detalhes: [`STATUS_FASE_18B_0.md`](docs/STATUS_FASE_18B_0.md); provedores e custos:
-[`SELECAO_INFRAESTRUTURA.md`](docs/SELECAO_INFRAESTRUTURA.md). RC1 na revisão `0.14.0rc1.post6`. Nada
+[`SELECAO_INFRAESTRUTURA.md`](docs/SELECAO_INFRAESTRUTURA.md). RC1 na revisão `0.14.0rc1.post6` (Fase 18B-0); depois da revisão funcional, `0.14.0rc1.post7`. Nada
 contratado nem instalado em servidor.
+
+**Revisão funcional e visual (22/11/2026, local, sem commit):** problemas, correções, telas e fluxos
+executados, cinco travas e regressão (pytest 1100, Chromium 60, roteiro 13/13) em
+[`STATUS_REVISAO_FUNCIONAL.md`](docs/STATUS_REVISAO_FUNCIONAL.md).
 
 ## Servidor e operação contínua — Fase 17
 

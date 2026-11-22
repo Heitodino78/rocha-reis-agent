@@ -22,6 +22,7 @@ def test_complete_cli_flow_with_two_customers_and_human_operator(agent):
 /send a6 Olá
 /operator resolve
 /send a7 Pode retomar?
+/operator resolve
 /operator resume
 /send a8 E quanto custa?
 /send a8 E quanto custa?
@@ -44,6 +45,7 @@ def test_complete_cli_flow_with_two_customers_and_human_operator(agent):
     assert "[automático pausado; mensagem registrada]" in text
     assert "operator: Atendimento humano fictício." in text
     assert "client_request: AUTO -> WAITING_HUMAN" in text
+    assert "client_returned: RESOLVED -> WAITING_HUMAN" in text  # ADR-134 (22/11)
     assert agent.conversations.snapshot("cliente-b").service_context == ()
 
 

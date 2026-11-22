@@ -241,7 +241,7 @@
           <p class="muted">Quem acessa o painel. Desativar encerra as sessões abertas da pessoa na hora.</p>
         </header>
         <div class="team-layout">
-          <div class="table-wrap"><table class="data-table" aria-label="Funcionários">
+          <div class="table-wrap"><table class="data-table responsive-table responsive-wide" aria-label="Funcionários">
             <thead><tr><th scope="col">Nome</th><th scope="col">Login</th><th scope="col">Papel</th><th scope="col">Situação</th><th scope="col">Duas etapas</th><th scope="col">Último acesso</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
             <tbody id="users-body"></tbody>
           </table></div>
@@ -268,7 +268,7 @@
           <h2 id="audit-title">Auditoria</h2>
           <p class="muted">Registro somente de inclusão. Sem senhas, tokens ou conteúdo de mensagens.</p>
         </header>
-        <div class="table-wrap"><table class="data-table" aria-label="Registros de auditoria">
+        <div class="table-wrap"><table class="data-table responsive-table" aria-label="Registros de auditoria">
           <thead><tr><th scope="col">Quando</th><th scope="col">Quem</th><th scope="col">Ação</th><th scope="col">Alvo</th><th scope="col">Resultado</th></tr></thead>
           <tbody id="audit-body"></tbody>
         </table></div>
@@ -338,6 +338,7 @@
             <li>Escreva a resposta e clique em <strong>Enviar</strong> (ou Ctrl+Enter).</li>
             <li>Para passar a um colega, use <strong>Transferir</strong>. Ao terminar, use <strong>Finalizar atendimento</strong>.</li>
             <li>Depois de finalizado, a automação continua desligada até a administração usar <strong>Retomar automação</strong>.</li>
+            <li>Se a cliente voltar a escrever depois de finalizado, a conversa volta para <strong>Aguardando atendimento</strong> (sem responsável) e a equipe é avisada. Só um agradecimento ou confirmação simples ("Obrigada!", "Ok", 👍) fica no histórico sem reabrir — regra provisória, em validação com o salão.</li>
           </ol>
         </div>
         <div class="panel-card">
@@ -384,7 +385,7 @@
         <div class="panel-card">
           <h3>Contatos com dados excluídos</h3>
           <p class="muted small">Tentativas de contato posteriores à exclusão. Reativar começa uma conversa nova e vazia; nada do que foi excluído volta.</p>
-          <div class="table-wrap"><table class="data-table" aria-label="Contatos excluídos">
+          <div class="table-wrap"><table class="data-table responsive-table" aria-label="Contatos excluídos">
             <thead><tr><th scope="col">Contato</th><th scope="col">Excluído em</th><th scope="col">Tentativas</th><th scope="col">Última tentativa</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
             <tbody id="retired-body"></tbody>
           </table></div>
@@ -414,7 +415,7 @@
             <option value="APPROVED">Aprovado</option><option value="REJECTED">Rejeitado</option><option value="ARCHIVED">Revogado</option>
           </select>
         </form>
-        <div class="table-wrap"><table class="data-table" aria-label="Registros de conhecimento">
+        <div class="table-wrap"><table class="data-table responsive-table responsive-wide" aria-label="Registros de conhecimento">
           <thead><tr><th scope="col">Tipo</th><th scope="col">Identificador</th><th scope="col">Conteúdo</th><th scope="col">Versão</th><th scope="col">Situação</th><th scope="col">Em uso</th><th scope="col"><span class="visually-hidden">Ações</span></th></tr></thead>
           <tbody id="knowledge-body"></tbody>
         </table></div>

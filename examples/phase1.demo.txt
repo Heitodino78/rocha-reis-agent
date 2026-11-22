@@ -14,6 +14,7 @@
 /send a7 Olá, você está aí?
 /operator resolve
 /send a8 Pode retomar?
+/operator resolve
 /operator resume
 /send a9 E quanto custa?
 /send a9 E quanto custa?

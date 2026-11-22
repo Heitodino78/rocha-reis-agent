@@ -79,7 +79,7 @@ def test_admin_on_notebook_sees_attention_approves_knowledge_and_version(browser
     expect(page.locator("#knowledge-preview")).to_contain_text("a partir de R$ 120,00")
     page.locator(".nav-item[data-view='system']").click()
     expect(page.locator("#system-status")).to_contain_text("RC1 Offline")
-    expect(page.locator("#system-locks li")).to_have_count(4)
+    expect(page.locator("#system-locks li")).to_have_count(5)  # Fase 18B-0: + backup externo real
     page.locator(".nav-item[data-view='help']").click()
     expect(page.locator("#release-info")).to_contain_text("Não é versão de produção")
     assert page.errors == []

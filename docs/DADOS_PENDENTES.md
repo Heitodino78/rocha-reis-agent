@@ -79,7 +79,8 @@ Opções, vantagens, riscos e recomendação de cada uma em [`DECISOES_PENDENTES
 - [ ] Onde guardar App Secret, Verify Token, token de acesso e chave de pseudonimização (gerenciador de segredos).
 - [ ] Versão da Graph API a adotar (v26.0 era a mais recente confirmada em 19/11/2026) e confirmação, com conta de teste, do formato real de `from_user_id`/BSUID, `biz_opaque_callback_data` em status e envio para BSUID.
 - [ ] Textos aprovados para respostas reais (hoje todas carregam rótulo de simulação).
-- [ ] Comportamento desejado para áudio/imagem/outros tipos (hoje: registrados sem resposta).
+- [ ] Comportamento desejado para áudio/imagem/outros tipos (hoje: sem resposta; em conversa **automática** ficam só na entrada; com atendimento humano ou encerrada entram no histórico como aviso, sem conteúdo, e a encerrada reabre — U1, 22/11/2026).
+- [ ] **Regra provisória U1 (ADR-136):** confirmar com o salão quais mensagens depois do encerramento NÃO devem reabrir o atendimento (hoje: só agradecimento/confirmação isolados de uma lista fechada). Exemplos em `STATUS_REVISAO_FUNCIONAL.md` §U1.
 - [ ] Política operacional para envios UNKNOWN/FAILED (quem verifica, em quanto tempo).
 - [ ] Limites e retenção para clientes reais: nº de conversas ativas, horas até arquivar, dias até anonimizar (Fase 5 removeu o bloqueio permanente; valores atuais são sintéticos).
 - [ ] Decisão do controlador: cliente cujos dados foram excluídos a pedido (`retire`) pode voltar a conversar? *(Fase 10: padrão continua "bloquear", agora visível à administração e reversível; a opção "permitir nova conversa" existe, mas **não foi escolhida por ninguém**.)*

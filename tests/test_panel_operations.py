@@ -101,10 +101,12 @@ def test_full_human_flow_with_agent_paused(env):
     assert reply(ana, cid).status_code == 200
     assert ana.post(f"/conversations/{cid}/resolve").status_code == 204
     assert customer(tmp_path, "wamid.d3", "Oi?") == ["recorded_without_reply"]  # finalizar ≠ retomar
+    assert admin.post(f"/conversations/{cid}/resume").status_code == 409  # ADR-134 (22/11): cliente voltou → fila; re-encerrar antes da retomada explícita
+    assert admin.post(f"/conversations/{cid}/resolve").status_code == 204
     assert admin.post(f"/conversations/{cid}/resume").status_code == 204
     assert customer(tmp_path, "wamid.d4", "Quanto custa o corte?") == ["replied", "ACCEPTED"]
     actions = [t["action"] for t in admin.get(f"/conversations/{cid}").json()["transitions"]]
-    assert actions == ["client_request", "assume", "resolve", "resume"]
+    assert actions == ["client_request", "assume", "resolve", "client_returned", "resolve", "resume"]
     audit = {e["action"] for e in admin.get("/audit").json()}
     assert {"conversation_assumed", "operator_message_queued", "conversation_resolved", "automation_resumed"} <= audit
 

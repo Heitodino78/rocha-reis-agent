@@ -44,8 +44,8 @@ def preflight(profile: Path, port: int) -> list[str]:
         raise LaunchError("Use uma porta entre 1024 e 65535.")
     settings = profile_settings(profile, port=port)
     from rocha_reis_agent import config as config_module
-    if (config_module.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED or config_module.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED
-            or config_module.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED):
+    # Revisão (22/11): conferia só 3 travas; dados reais (Fase 12) e backup externo (18B-0) ficavam de fora.
+    if any(config_module.activation_locks().values()):
         raise LaunchError("Trava de integração real ativa no código: o iniciador local recusa executar.")
     if settings.whatsapp_transport != "fake" or settings.ai_provider != "fake":
         raise LaunchError("O iniciador local só executa com transporte e IA SIMULADOS.")
@@ -61,6 +61,10 @@ def preflight(profile: Path, port: int) -> list[str]:
         raise LaunchError(f"Banco inválido: {error}") from None
     done.append("banco íntegro e migrado")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        # Revisão (22/11): sem SO_REUSEADDR, conexões em TIME_WAIT do servidor anterior (Ctrl+C com o painel
+        # aberto) davam "Porta ocupada" por ~60 s, embora o uvicorn (que usa SO_REUSEADDR) subisse. No Linux a
+        # opção NÃO libera uma porta com alguém escutando: o conflito real continua recusado.
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             probe.bind((HOST, port))
         except OSError:
@@ -116,8 +120,9 @@ def launch(profile: Path, *, port: int = 8000, check_only: bool = False) -> int:
                     lines.append("  Certificado de DESENVOLVIMENTO (autoassinado): o navegador vai alertar; "
                                  "não é certificado público.")
                 if logins:
-                    lines.append(f"  Logins fictícios: {', '.join(logins)}  (senhas em {credentials[0].name}, "
-                                 "neste computador)")
+                    # Caminho COMPLETO: no VS Code em Flatpak a pasta de dados não é ~/.local/share (achado real).
+                    lines.append(f"  Logins fictícios: {', '.join(logins)}")
+                    lines.append(f"  Senhas (só neste computador): {credentials[0]}")
                 lines.append("  Para encerrar com segurança: Ctrl+C\n")
                 print("\n".join(lines), flush=True)  # de uma vez: o aviso nunca sai pela metade
         threading.Thread(target=wait, daemon=True).start()

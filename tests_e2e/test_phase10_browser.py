@@ -205,7 +205,7 @@ def test_system_view_locks_and_retired_contact_reinstatement(browser, server):
     admin = open_page(browser, server)
     login(admin, "admin.teste"); live(admin)
     admin.locator(".nav-item[data-view='system']").click()
-    expect(admin.locator("#system-locks li")).to_have_count(4)  # Fase 12: + trava de dados reais
+    expect(admin.locator("#system-locks li")).to_have_count(5)  # Fase 12: dados reais; 18B-0: backup externo
     for item in admin.locator("#system-locks li").all():
         expect(item).to_contain_text("bloqueada")
     row = admin.get_by_role("row", name=re.compile(cid[-6:]))

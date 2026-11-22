@@ -48,7 +48,7 @@ fechar.
 | **Meus atendimentos** | Atendimentos **em andamento** sob sua responsabilidade (os finalizados ficam em **Encerradas**) |
 | **Automáticas** | Conversas que o assistente automático está atendendo |
 | **Com outros funcionários** | (administração) atendimentos de colegas |
-| **Encerradas** | Atendimentos já finalizados (histórico) |
+| **Encerradas** | Atendimentos já finalizados (histórico). Se a cliente voltar a escrever, a conversa sai daqui e volta para **Aguardando atendimento**, sem responsável, com aviso para a equipe. **Exceção provisória (U1):** agradecimento ou confirmação **isolados** ("Obrigada!", "Valeu", "Ok", 👍) ficam só no histórico e a conversa continua aqui, sem aviso. Qualquer outra coisa reabre — inclusive "Obrigada, mas…", perguntas, áudio e imagem |
 | **Ajuda** | Resumo deste manual, dentro do painel |
 | **Equipe, Auditoria, Conhecimento, Configurações, Sistema** | Só para a administração |
 

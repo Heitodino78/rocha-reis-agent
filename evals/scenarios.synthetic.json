@@ -2,8 +2,8 @@
  "schema_version": 2,
  "synthetic": true,
  "suite_id": "rocha-reis-synthetic",
- "version": "3",
- "description": "Cenários sintéticos do atendimento do salão. v1 (Fase 8): 77 cenários A–T, preservados com os mesmos IDs. v2 (Fase 9A): +35 cenários (contestações U, mudanças de assunto V, respostas parcialmente válidas W, fora do escopo X, falhas HTTP do adaptador e casos difíceis). Fase 9B: modos HTTP simulam a Gemini API; W2 passou de 'fallback servido' (Anthropic) para 'modelo efetivo diferente do solicitado', mesmas expectativas. Textos e dados fictícios; inclui casos que o detector de regras NÃO resolve.",
+ "version": "4",
+ "description": "Cenários sintéticos do atendimento do salão. v1 (Fase 8): 77 cenários A–T, preservados com os mesmos IDs. v2 (Fase 9A): +35 cenários (contestações U, mudanças de assunto V, respostas parcialmente válidas W, fora do escopo X, falhas HTTP do adaptador e casos difíceis). Fase 9B: modos HTTP simulam a Gemini API; W2 passou de 'fallback servido' (Anthropic) para 'modelo efetivo diferente do solicitado', mesmas expectativas. v4 (22/11/2026, ADR-107): H6 — cliente que volta a escrever após o encerramento reabre a conversa na fila humana (WAITING_HUMAN, sem resposta automática); a retomada continua explícita. Textos e dados fictícios; inclui casos que o detector de regras NÃO resolve.",
  "scenarios": [
   {"id": "A1", "category": "A", "title": "Saudação simples", "turns": [
    {"text": "Oi", "expect": {"intents_all": ["greeting"], "state": "AUTO", "contains": ["assistente virtual"]}}]},
@@ -92,7 +92,9 @@
    {"operator": "assume", "expect": {"state": "HUMAN_ACTIVE"}},
    {"text": "Quanto custa o corte?", "expect": {"reply": "none", "state": "HUMAN_ACTIVE"}},
    {"operator": "resolve", "expect": {"state": "RESOLVED"}},
-   {"text": "Oi de novo", "expect": {"reply": "none", "state": "RESOLVED"}},
+   {"text": "Oi de novo", "expect": {"reply": "none", "state": "WAITING_HUMAN"}},
+   {"operator": "assume", "expect": {"state": "HUMAN_ACTIVE"}},
+   {"operator": "resolve", "expect": {"state": "RESOLVED"}},
    {"operator": "resume", "expect": {"state": "AUTO"}},
    {"text": "Quanto custa o corte?", "expect": {"state": "AUTO", "contains": ["R$ 45,00"]}}]},
   {"id": "H7", "category": "H", "title": "Negação direta não é pedido humano", "turns": [

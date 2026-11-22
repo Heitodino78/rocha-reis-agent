@@ -125,10 +125,7 @@ def diagnose(profile: Path) -> dict[str, object]:
         "protecao_em_repouso": {"banco": protection.describe(),
                                 "backups": volume_protection(profile / "backups").describe()},
         "integracoes": {"transporte": settings.whatsapp_transport, "ia": settings.ai_provider,
-                        "travas": {"meta_graph": config_module.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED,
-                                   "meta_homologacao": config_module.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
-                                   "gemini_real": config_module.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED,
-                                   "dados_reais": config_module.REAL_DATA_ACTIVATION_AUTHORIZED}},
+                        "travas": config_module.activation_locks()},
         "seguranca": _security(profile, data, settings),
         "dados_reais": {"situacao": "BLOQUEADOS", "requisitos": real_data_requirements(settings, protection)},
     }

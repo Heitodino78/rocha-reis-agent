@@ -37,6 +37,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import zlib
 from typing import Callable
 import socket
 from urllib.parse import urlsplit
@@ -246,9 +247,7 @@ def validate_installation(root: Path) -> dict[str, object]:
     from rocha_reis_agent.config import ConfigurationError
     problems = check_layout(root)
     paths = layout(root)
-    locks = {"meta_graph": c.GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED,
-             "meta_homologacao": c.HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
-             "gemini_real": c.GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED, "dados_reais": c.REAL_DATA_ACTIVATION_AUTHORIZED}
+    locks = c.activation_locks()  # as cinco travas (fonte única em config.py)
     settings = None
     volume_report: dict[str, object] = {}
     if not (paths["config"] / "perfil.json").is_file():
@@ -372,7 +371,9 @@ def verify_package(package: Path, into: Path) -> dict[str, object]:
         with tarfile.open(package, mode="r:gz") as archive:
             members = _safe_members(archive)
             contents = {m.name: archive.extractfile(m).read() for m in members}  # type: ignore[union-attr]
-    except (tarfile.TarError, OSError, EOFError) as error:
+    # Revisão (22/11): byte adulterado no meio do fluxo comprimido levanta zlib.error (não é OSError) e escapava
+    # como erro bruto em vez da recusa controlada (achado por falha que dependia do conteúdo do pacote).
+    except (tarfile.TarError, OSError, EOFError, zlib.error) as error:
         raise DeployError("Pacote ilegível ou corrompido.") from error
     try:
         manifest = json.loads(contents.pop(MANIFEST_NAME))

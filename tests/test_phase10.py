@@ -69,7 +69,8 @@ def test_typed_settings_are_validated_in_backend_and_audited(env):
     assert "setting_retired_contact_policy_allow_new_conversation" in actions
     # Travas reais seguem somente leitura e desligadas.
     assert admin.get("/system").json()["locks"] == {"meta_graph": False, "meta_homologation": False,
-                                                    "gemini_real": False, "real_data": False}
+                                                    "gemini_real": False, "real_data": False,
+                                                    "external_backup": False}  # Fase 18B-0
 
 
 def test_store_rejects_out_of_range_values_even_without_api(env):

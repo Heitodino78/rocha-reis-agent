@@ -526,6 +526,10 @@ class SQLiteConversationRepository:
             self._audit(connection, "session_reset", key, "operator", "committed")
         if original and value.history and value.history[-1].role == "operator" and value.history != original.history:
             self._audit(connection, "operator_reply", key, "operator", "committed")
+        if any(c.action == "client_returned" and c not in old_changes for c in value.transitions):
+            # Reaberto pelo cliente: o responsável anterior (mantido ao finalizar, para o histórico) sai,
+            # senão a conversa não entra na fila sem responsável nem gera o aviso "cliente aguardando".
+            connection.execute("DELETE FROM panel_assignments WHERE conversation_id=?", (key,))
         connection.execute("DELETE FROM transitions WHERE conversation_id=?", (key,))
         for ordinal, change in enumerate(value.transitions[-self.limits.max_history_entries:]):
             connection.execute("INSERT INTO transitions(conversation_id,ordinal,previous,current,action,operator_id,recorded_at) VALUES(?,?,?,?,?,?,?)",

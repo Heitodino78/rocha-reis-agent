@@ -102,6 +102,8 @@ def test_human_handoff_suspends_agent_until_explicit_administrative_resume(tmp_p
     assert say(s, "wamid.5", "Oi?") == ["recorded_without_reply"]
     s.agent.operator_action(key, Action.RESOLVE, operator_id=OPERATOR)
     assert say(s, "wamid.6", "Pode retomar?") == ["recorded_without_reply"]
+    assert s.agent.conversations.snapshot(key).state == State.WAITING_HUMAN  # ADR-134 (22/11): cliente voltou → fila; re-encerrar antes da retomada explícita
+    s.agent.operator_action(key, Action.RESOLVE, operator_id=OPERATOR)
     s.agent.operator_action(key, Action.RESUME, operator_id=OPERATOR)
     assert say(s, "wamid.7", "E quanto custa?") == ["replied", "ACCEPTED"]
     assert len(replies(s)) == 3 and "R$ 45,00" in replies(s)[-1]

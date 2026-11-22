@@ -64,7 +64,7 @@ que vamos entregar (`COLETA_DADOS_OFICIAIS.md`)."
 - Cada pessoa tem o seu acesso; atendente não vê administração (mostrar com ana.demo).
 - Verificação em duas etapas (código do celular), obrigatória quando for para valer.
 - Tudo fica registrado na Auditoria; backups criptografados.
-- Sistema → quatro travas **bloqueadas**: WhatsApp real, Gemini real e dados reais estão desligados.
+- Sistema → cinco travas **bloqueadas**: envio real pela Meta, homologação Meta, Gemini real, dados reais e envio real de backups ao armazenamento externo estão desligados.
 
 ## 7. Rotina (2 min)
 

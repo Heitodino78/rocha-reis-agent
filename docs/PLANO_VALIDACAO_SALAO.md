@@ -26,7 +26,7 @@ fictício e marcado com a faixa **DEMONSTRAÇÃO**.
 ## 3. Preparação
 
 Seguir `CHECKLIST_HOMOLOGACAO_11B.md` §1. Em resumo: `sh iniciar.sh --nova-demo`, conferir a faixa
-DEMONSTRAÇÃO e as quatro travas bloqueadas em Sistema, entregar em papel os logins fictícios
+DEMONSTRAÇÃO e as cinco travas bloqueadas em Sistema, entregar em papel os logins fictícios
 (`admin.demo`, `ana.demo`, `bia.demo`) e, para novos clientes durante a sessão, usar
 `sh iniciar.sh --mensagem "texto"` num segundo terminal. Recriar a demonstração entre grupos.
 **Proibido:** dados, nomes ou números de clientes reais; WhatsApp ou Gemini reais.
@@ -71,7 +71,7 @@ Leia o objetivo e os passos em voz alta, sem mostrar onde clicar. Resultado real
 | AD-07 | Dados estruturados | — | Cadastrar categoria "Teste" e um profissional fictício, aprovar e usá-los numa nova versão de serviço com duração 40–60 min | A prévia mostra categoria, "Duração estimada" e o profissional | | | Com no máximo uma ajuda |
 | AD-08 | Configurar | — | Mudar o tempo de urgência para 10 min | Salvo; aparece na Auditoria | | | Sem ajuda |
 | AD-09 | Auditoria | AD-04 | Achar quem aprovou a informação | Acha "Aprovou informação" | | | Sem ajuda |
-| AD-10 | Travas | — | Em Sistema, confirmar o bloqueio | Quatro travas "bloqueada" | | | Sem ajuda |
+| AD-10 | Travas | — | Em Sistema, confirmar o bloqueio | Cinco travas "bloqueada" | | | Sem ajuda |
 | AD-11 | Contato excluído | — | Em Sistema, achar o contato que voltou a escrever | Entende que reativar é decisão do responsável pelos dados | | | Explicação correta |
 | AD-12 | Redefinir 2 etapas | AT-13 feito por uma atendente; admin com 2 etapas ativas | Redefinir com justificativa | Atendente precisa cadastrar de novo; registro na Auditoria | | | Sem ajuda |
 | AD-13 | Segurança | Login `ana.demo` | Tentar abrir Equipe/Sistema/Conhecimento | Itens não aparecem; nada administrativo acessível | | | Confirmado |

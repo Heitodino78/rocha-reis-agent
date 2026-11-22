@@ -458,6 +458,12 @@ class SQLitePanelStore:
                                          (conversation_id,)).fetchone()
             if (current["user_id"] if current else None) != expected:
                 raise AssignmentLost("Responsável mudou durante a operação.")
+            # Revisão (22/11): o destino era conferido como ATIVO só antes da transação. Uma desativação
+            # simultânea (que devolve à fila o que a pessoa tem DEPOIS de gravar active=0) deixava a conversa em
+            # atendimento com alguém desativado. Conferido aqui, sob o mesmo BEGIN IMMEDIATE do commit.
+            target = connection.execute("SELECT active FROM panel_users WHERE id=?", (user_id,)).fetchone()
+            if target is None or not target["active"]:
+                raise AssignmentLost("Funcionário de destino desativado durante a operação.")
             connection.execute(
                 "INSERT INTO panel_assignments(conversation_id,user_id,assigned_at,assigned_by) VALUES(?,?,?,?) "
                 "ON CONFLICT(conversation_id) DO UPDATE SET user_id=excluded.user_id,assigned_at=excluded.assigned_at,"

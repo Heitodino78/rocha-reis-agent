@@ -3,7 +3,13 @@
 **Versão candidata à homologação interna e aos testes com o salão. NÃO é versão de produção.**
 Funciona só nesta máquina (127.0.0.1), com dados fictícios, IA e WhatsApp simulados.
 
-> **Atualização (Fase 18B-0):** a candidata em uso é **`0.14.0rc1.post6`**, impressão **`47b17956c8132cfe`**
+> **Atualização (revisão funcional, 22/11/2026):** a candidata em uso é **`0.14.0rc1.post7`**, impressão
+> **`bacba7673c1f5e1e`** (340 arquivos, cinco travas `False`), congelada **sobre o commit `e8ea38d` com
+> alterações ainda não versionadas** (`versionada_no_git: false`). Recongelar no commit autorizado. Correções e
+> regressão em `STATUS_REVISAO_FUNCIONAL.md`; a regra U1 é **provisória** (validação do salão na 11B). O
+> manifesto prova integridade de arquivos, **não** implantação nem homologação com funcionários.
+>
+> **Atualização (Fase 18B-0):** a candidata em uso era **`0.14.0rc1.post6`**, impressão **`47b17956c8132cfe`**
 > (333 arquivos): Fase 18 + volume LUKS identificado, portão systemd e adaptador S3 desativado
 > (`STATUS_FASE_18B_0.md`), congelada no manifesto `docs/homologacao/RC1_MANIFESTO.json`. Confira com
 > `python -m rocha_reis_agent.ops verificar-rc`. Diferenças e resultados em

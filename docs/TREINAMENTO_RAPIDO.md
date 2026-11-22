@@ -15,7 +15,9 @@ do próprio painel (menu **Ajuda**).
    atende, o assistente automático fica calado com esse cliente.
 5. **Transferir:** botão **Transferir**, escolha o colega.
 6. **Finalizar:** **Finalizar atendimento**. O assistente só volta a falar com esse cliente quando a
-   administração **retomar a automação**.
+   administração **retomar a automação**. Se o cliente escrever de novo depois de finalizado, a conversa
+   volta sozinha para **Aguardando atendimento** (sem responsável) e a equipe recebe o aviso. Só um
+   agradecimento ou "ok" **isolado** ("Obrigada!", 👍) fica no histórico sem reabrir (regra em teste com o salão).
 7. **Problemas no envio:**
    - **Falhou** → não saiu; escreva de novo se ainda for necessário.
    - **Resultado incerto** → pode ter chegado; **não reenvie às cegas**, avise a administração.

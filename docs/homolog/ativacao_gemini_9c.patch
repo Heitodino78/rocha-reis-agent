@@ -6,7 +6,7 @@
  # existência de GEMINI_API_KEY (ou GOOGLE_API_KEY) no ambiente NUNCA ativa nada.
 -GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED: Final = False
 +# Fase 9C-B: ATIVAÇÃO TEMPORÁRIA autorizada por <RESPONSÁVEL> em <DATA> (autorização assinada,
-+# experimento rocha-reis-9c-gemini-v1, dados sintéticos). Reverter (False) ao final da execução.
++# experimento rocha-reis-9c-gemini-v2, dados sintéticos). Reverter (False) ao final da execução.
 +GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED: Final = True
  
  

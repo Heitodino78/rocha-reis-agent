@@ -59,7 +59,7 @@ def authorization(tmp_path, **changes):
     (tmp_path / "ledger").mkdir(mode=0o700, exist_ok=True)
     data = {"schema_version": 3,
             "confirmed_pricing": {MODEL: {"input": 0.25, "output": 1.50}}, "meta_remains_disabled": True,
-            "google_billing_controls": "orçamento de teste com alerta (fictício)", "residual_billing_risk_accepted": True, "experiment_id": "rocha-reis-9c-gemini-v1", "stages": ["smoke", "pilot", "full"],
+            "google_billing_controls": "orçamento de teste com alerta (fictício)", "residual_billing_risk_accepted": True, "experiment_id": "rocha-reis-9c-gemini-v2", "stages": ["smoke", "pilot", "full"],
             "usage_ledger": str(tmp_path / "ledger" / "uso.ai-homolog.synthetic.sqlite3"),
             "stop_file": str(tmp_path / "PARAR"), "authorized_by": "Responsável fictício",
             "executor": "Executor fictício", "google_account": "conta fictícia", "project_id": "projeto-ficticio-teste",
@@ -126,19 +126,19 @@ def test_authorization_schema_2_checks(tmp_path, monkeypatch, changes, message):
 
 
 def test_experiment_is_pinned_by_hash_and_prompt(tmp_path, monkeypatch):
-    manifest = verify_experiment("rocha-reis-9c-gemini-v1", prompt_version="v4", model=MODEL)
+    manifest = verify_experiment("rocha-reis-9c-gemini-v2", prompt_version="v4", model=MODEL)
     assert set(manifest["pinned_files"]) == {"evals/scenarios.synthetic.json", "evals/catalog.synthetic.json",
                                              "evals/criteria.json", "prompts/v4.json"}
     with pytest.raises(RealRunRefused, match="prompt"):
-        verify_experiment("rocha-reis-9c-gemini-v1", prompt_version="v3", model=MODEL)
+        verify_experiment("rocha-reis-9c-gemini-v2", prompt_version="v3", model=MODEL)
     with pytest.raises(RealRunRefused, match="Modelo"):
-        verify_experiment("rocha-reis-9c-gemini-v1", prompt_version="v4", model="gemini-2.5-flash")
+        verify_experiment("rocha-reis-9c-gemini-v2", prompt_version="v4", model="gemini-2.5-flash")
     altered = json.loads(EXPERIMENT.read_text())
     altered["pinned_files"]["evals/criteria.json"] = "0" * 16          # critérios "mudados" após o pré-registro
     fake = tmp_path / "experiment.json"
     fake.write_text(json.dumps(altered))
     with pytest.raises(RealRunRefused, match="mudaram"):
-        verify_experiment("rocha-reis-9c-gemini-v1", prompt_version="v4", model=MODEL, manifest_path=fake)
+        verify_experiment("rocha-reis-9c-gemini-v2", prompt_version="v4", model=MODEL, manifest_path=fake)
 
 
 def test_stop_file_blocks_before_and_during_a_run(tmp_path, monkeypatch):
@@ -242,7 +242,7 @@ def test_contradictory_classification_fails_safe(tmp_path):
 def test_priority_scenarios_are_present_and_stages_are_pre_registered():
     scenarios = load_scenarios(DEFAULT_SCENARIOS)
     ids = {s.id for s in scenarios.scenarios}
-    assert len(scenarios.scenarios) == 129 and scenarios.version == "3" and set(PRIORITY) <= ids
+    assert len(scenarios.scenarios) == 129 and scenarios.version == "4" and set(PRIORITY) <= ids
     assert [s.id for s in select_stage(scenarios, "smoke")] == ["A1"]
     pilot = [s.id for s in select_stage(scenarios, "pilot")]
     assert len(pilot) == 15 and set(PRIORITY) <= set(pilot)

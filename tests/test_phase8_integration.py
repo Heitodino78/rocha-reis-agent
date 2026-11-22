@@ -115,7 +115,9 @@ def test_human_states_never_call_the_model_nor_enqueue_automatic_replies(tmp_pat
     assert say(s, "wamid.2", "Quanto custa o corte?") == ["recorded_without_reply"]
     assert model.calls == 0 and len(s["store"].outbox_rows()) == 1
     s["agent"].operator_action(cid, HandoffAction.RESOLVE, operator_id="operador-local")
-    assert say(s, "wamid.3", "Oi?") == ["recorded_without_reply"] and model.calls == 0
+    assert say(s, "wamid.3", "Oi?") == ["recorded_without_reply"] and model.calls == 0  # ADR-134 (22/11): cliente voltou → fila; re-encerrar antes da retomada explícita
+    s["agent"].operator_action(cid, HandoffAction.RESOLVE, operator_id="operador-local")
+    assert model.calls == 0 and len(s["store"].outbox_rows()) == 1
     s["agent"].operator_action(cid, HandoffAction.RESUME, operator_id="operador-local")
     assert say(s, "wamid.4", "Quanto custa o corte?") == ["replied", "ACCEPTED"] and model.calls == 1
     assert say(s, "wamid.5", "Quanto custa o corte?", sender=CLIENT_B)[0] == "replied"  # outro cliente intocado

@@ -102,7 +102,10 @@ def server_state(root: Path, *, probe: Callable[..., int | None] | None = None,
     continuity = (profile or {}).get("continuidade") or {}
     deadline = continuity.get("prazo_desbloqueio_minutos")
     first_down = next((n for n in ORDER if not layers[n]["ok"]), None)
+    from rocha_reis_agent import config as config_module
     return {"gerado_em": now.isoformat(timespec="seconds"), "camadas": layers,
+            # Revisão (22/11): o diagnóstico do servidor não mostrava as travas. Só informa (não muda a saída).
+            "travas": config_module.activation_locks(),
             "primeira_camada_parada": first_down, "atendimento_operacional": first_down is None,
             "operacao_24_7": bool(deadline) and first_down is None,
             "continuidade": {"desbloqueio": "manual", "prazo_desbloqueio_minutos": deadline,

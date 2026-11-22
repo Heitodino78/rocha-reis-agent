@@ -39,6 +39,17 @@ PREPROD_DB_SUFFIX = ".preprod.synthetic.sqlite3"
 EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED: Final = False
 
 
+def activation_locks() -> dict[str, bool]:
+    """As CINCO travas, num só lugar (revisão 22/11). Antes cada relatório tinha a própria lista, e as travas
+    novas (dados reais, backup externo) ficaram de fora de vários deles. Lido na hora da chamada: só reflete
+    o código (e os testes que abrem uma trava em memória)."""
+    return {"meta_graph": GRAPH_TRANSPORT_ACTIVATION_AUTHORIZED,
+            "meta_homologacao": HOMOLOGATION_TRANSPORT_ACTIVATION_AUTHORIZED,
+            "gemini_real": GEMINI_REAL_PROVIDER_ACTIVATION_AUTHORIZED,
+            "dados_reais": REAL_DATA_ACTIVATION_AUTHORIZED,
+            "backup_externo": EXTERNAL_BACKUP_ACTIVATION_AUTHORIZED}
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",

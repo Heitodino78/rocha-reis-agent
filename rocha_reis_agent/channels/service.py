@@ -106,6 +106,13 @@ class InboundProcessor:
     def _process(self, item: ClaimedInbound, worker: str) -> str:
         if item.kind == InboundKind.STATUS:
             return self.store.apply_status(item, worker)
+        if item.kind == InboundKind.UNSUPPORTED and item.conversation_id is not None \
+                and not self.store.repository.is_retired(item.conversation_id):
+            # U1 (22/11): áudio/imagem/documento… numa conversa com atendimento humano ou ENCERRADA não pode
+            # sumir: entra no histórico como aviso (conteúdo nunca interpretado) e reabre a encerrada.
+            outcome = self._process_media(item, worker)
+            if outcome is not None:
+                return outcome
         if item.kind == InboundKind.UNSUPPORTED or item.conversation_id is None:
             # Tipos não suportados nunca são interpretados nem respondidos automaticamente.
             self.store.finish_inbound(item, worker, outcome="unsupported_type_ignored")
@@ -160,6 +167,39 @@ class InboundProcessor:
             self.store.finish_inbound(item, worker, outcome="rejected_by_core", failed=True)
             return "rejected_by_core"
         return outcomes[0]
+
+    def _process_media(self, item: ClaimedInbound, worker: str) -> str | None:
+        """Mídia na conversa (ver AgentService.handle_media). None = tratamento anterior (ignorada)."""
+        handle = getattr(self.agent, "handle_media", None)
+        if handle is None:
+            return None
+        conversation_id = str(item.conversation_id)
+        event_id = event_id_for(str(item.payload["provider_message_id"]))
+        outcomes: list[str] = []
+
+        def effects(result: AgentResult, session_id: str) -> None:
+            outcome = "duplicate" if result.duplicate else "media_recorded_without_reply"
+            outcomes[:] = [outcome]
+            self.store.stage_conversation_effects(
+                item, worker, outcome=outcome, reply=None, conversation_id=conversation_id,
+                session_id=session_id, state=result.state, event_id=event_id,
+            )
+
+        try:
+            result = handle(event_id, conversation_id, str(item.payload.get("type") or "unknown"),
+                            item.source_timestamp, effects=effects)
+        except LeaseLost:
+            raise
+        except (ConcurrentUpdate, StorageError):
+            retried = self.store.retry_inbound(
+                item, worker, outcome="storage_retry",
+                delay_seconds=self.policy.backoff(item.attempts), max_attempts=self.policy.inbox_max_attempts,
+            )
+            return "retry_scheduled" if retried else "failed_after_retries"
+        except SimulationError:
+            self.store.finish_inbound(item, worker, outcome="rejected_by_core", failed=True)
+            return "rejected_by_core"
+        return outcomes[0] if result is not None and outcomes else None
 
 
 class OutboxDispatcher:
